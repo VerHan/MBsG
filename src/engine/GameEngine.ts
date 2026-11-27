@@ -24,21 +24,13 @@ import { ParticleSystem } from './ParticleSystem';
 import {
   CHEST_SPRITE,
   ENEMY_PALETTES,
-  MANA_HUSK_SPRITE,
-  MANA_HUSK_WALK,
-  MC_ATTACK,
-  MC_FALL,
-  MC_IDLE,
-  MC_JUMP_UP,
-  MC_RUN_1,
-  MC_RUN_2,
-  MC_RUN_3,
-  MC_RUN_4,
-  MC_WALL_SLIDE,
   PYLON_SPRITE,
   PixelSpriteRenderer,
-  RIFT_DRONE_SPRITE,
+  drawBossSprite,
   drawWeaponInHand,
+  getEnemyMatrix,
+  getMCPoseMatrix,
+  type MCPoseName,
 } from './PixelSpriteRenderer';
 import { SoundManager } from './SoundManager';
 import {
@@ -115,6 +107,26 @@ interface ManaTurret {
   fireTimer: number;
 }
 
+interface GroundDrop {
+  id: string;
+  kind: 'energy_orb' | 'ammo_pack' | 'boss_relic';
+  x: number;
+  y: number;
+  vy: number;
+  label: string;
+  energyAmount?: number;
+  ammoPacks?: number;
+  shards?: number;
+  weaponId?: WeaponInstance['defId'];
+  weaponTier?: WeaponInstance['tier'];
+  secondaryWeaponId?: WeaponInstance['defId'];
+  secondaryWeaponTier?: WeaponInstance['tier'];
+  armorId?: ArmorId;
+  life: number;
+}
+
+const GEAR_STORAGE_KEY = 'riftbound_gear_save_v1';
+
 export interface HudSnapshot {
   mode: GameMode;
   stageNumber: 1 | 2 | 3;
@@ -127,6 +139,8 @@ export interface HudSnapshot {
   maxHp: number;
   energy: number;
   maxEnergy: number;
+  ammoPacks: number;
+  maxAmmoPacks: number;
   nanoVials: number;
   maxNanoVials: number;
   shards: number;
@@ -214,6 +228,9 @@ export class GameEngine {
   private _slashes: SlashVisual[] = [];
   private _floatingTexts: FloatingText[] = [];
   private _turrets: ManaTurret[] = [];
+  private _groundDrops: GroundDrop[] = [];
+  private _dropIdCounter = 0;
+  private _laserCooldown = 0;
   private _pendingSpawns: Array<{ enemyId: EnemyInstance['defId']; delay: number }> = [];
   private _pylonDamageCooldown = 0;
   private _lastStyleRank: StyleRank = 'D';
@@ -295,6 +312,8 @@ export class GameEngine {
     this._slashes = [];
     this._floatingTexts = [];
     this._turrets = [];
+    this._groundDrops = [];
+    this._laserCooldown = 0;
     this._pendingSpawns = [];
     this._manaShieldTimer = 0;
     this._kills = 0;
@@ -304,7 +323,8 @@ export class GameEngine {
     this._scaleY = 1;
 
     if (!keepGear) {
-      this.player = new Player();
+      const saved = this._loadSavedGear();
+      this.player = new Player(saved ?? undefined);
     }
 
     this.player.x = built.playerSpawn.x;
@@ -391,6 +411,7 @@ export class GameEngine {
     if (this._spikeIFrame > 0) this._spikeIFrame -= dt;
     if (this._dropThroughTimer > 0) this._dropThroughTimer -= dt;
     if (this._bounceCooldown > 0) this._bounceCooldown -= dt;
+    if (this._laserCooldown > 0) this._laserCooldown -= dt;
     if (this._pylonDamageCooldown > 0) this._pylonDamageCooldown -= dt;
     if (this._bossContactCooldown > 0) this._bossContactCooldown -= dt;
     if (this._bossFlashTimer > 0) this._bossFlashTimer -= dt;
@@ -401,10 +422,12 @@ export class GameEngine {
     this._scaleX += (1 - this._scaleX) * Math.min(1, dt * 14);
     this._scaleY += (1 - this._scaleY) * Math.min(1, dt * 14);
 
+    this._updateStageMechanisms(dt);
     this._handlePlayerInput(dt);
     this.player.update(dt);
     this.player.applyGravity(dt);
     this._moveAndCollidePlayer(dt);
+    this._updateGroundDrops(dt);
     this._updateScarf(dt);
     this._checkAreaTransition();
 
@@ -477,13 +500,13 @@ export class GameEngine {
   }
 
   // ── Player Input & Combat ───────────────────────────────
-  private _handlePlayerInput(_dt: number) {
+  private _handlePlayerInput(dt: number) {
     const p = this.player;
 
     let moveDir = 0;
     if (this.input.isHeld('move_left')) moveDir -= 1;
     if (this.input.isHeld('move_right')) moveDir += 1;
-    p.moveHorizontal(moveDir);
+    p.moveHorizontal(moveDir, dt);
 
     if (this.input.isJustPressed('drop_down') && p.onGround) {
       this._dropThroughTimer = 0.22;
@@ -520,6 +543,16 @@ export class GameEngine {
       if (p.heal()) {
         this.sound.play('player_heal');
         this._spawnFloatingText(p.x + 7, p.y - 8, '+35 HP', '#22C55E');
+      }
+    }
+
+    if (this.input.isJustPressed('use_ammo')) {
+      if (p.useAmmoPack()) {
+        this.sound.play('pylon_repair');
+        this._spawnFloatingText(p.x + 7, p.y - 10, '+60 AMMO!', '#00F0FF');
+        this.saveGear();
+      } else {
+        this.onToast?.('Energy penuh atau Ammo Pack habis!');
       }
     }
 
@@ -561,8 +594,8 @@ export class GameEngine {
     else if (weaponId === 'axe') this.sound.play('axe_hit');
     else this.sound.play('sword_slash');
 
-    const radius = weaponId === 'axe' ? 30 : 24;
-    const rangeW = weaponId === 'axe' ? 34 : 28;
+    const radius = weaponId === 'axe' ? 32 : weaponId === 'dagger' ? 18 : 25;
+    const rangeW = weaponId === 'axe' ? 36 : weaponId === 'dagger' ? 19 : weaponId === 'dual_sword' ? 26 : 29;
     const rangeH = isPogo ? 28 : 26;
     const hx = isPogo
       ? p.x - (rangeW - p.width) / 2
@@ -643,6 +676,15 @@ export class GameEngine {
           hitSomething = true;
           this.particles.emit('hit_spark', hx + rangeW / 2, sp.y);
           break;
+        }
+      }
+    }
+
+    if (this.level) {
+      for (const cry of this.level.crystals) {
+        if (!cry.exploded && _aabb(hx, hy, rangeW, rangeH, cry.x, cry.y, cry.w, cry.h)) {
+          hitSomething = true;
+          this._detonateCrystal(cry);
         }
       }
     }
@@ -755,7 +797,7 @@ export class GameEngine {
         if (
           this._dropThroughTimer <= 0 &&
           p.vy >= 0 &&
-          prevBottom <= plat.y + 4 &&
+          prevBottom <= plat.y + 5 &&
           _aabb(p.x, p.y, p.width, p.height, plat.x, plat.y, plat.w, plat.h)
         ) {
           p.y = plat.y - p.height;
@@ -773,6 +815,53 @@ export class GameEngine {
         } else if (p.vy < 0) {
           p.y = plat.y + plat.h;
           p.vy = 0;
+        }
+      }
+    }
+
+    // Moving Platforms (one-way top riding + inherits platform motion)
+    for (const mp of this.level.movingPlatforms) {
+      if (
+        this._dropThroughTimer <= 0 &&
+        p.vy >= 0 &&
+        prevBottom <= mp.y + 8 &&
+        _aabb(p.x, p.y, p.width, p.height, mp.x, mp.y, mp.w, mp.h)
+      ) {
+        p.y = mp.y - p.height;
+        p.vy = 0;
+        p.x += mp.vx * dt;
+        landed = true;
+      }
+    }
+
+    // Crumbling Platforms (shake -> collapse on step)
+    for (const cp of this.level.crumblingPlatforms) {
+      if (cp.state === 'broken') continue;
+      if (
+        this._dropThroughTimer <= 0 &&
+        p.vy >= 0 &&
+        prevBottom <= cp.y + 6 &&
+        _aabb(p.x, p.y, p.width, p.height, cp.x, cp.y, cp.w, cp.h)
+      ) {
+        p.y = cp.y - p.height;
+        p.vy = 0;
+        landed = true;
+        if (cp.state === 'solid') {
+          cp.state = 'shaking';
+          cp.timer = 0.65;
+        }
+      }
+    }
+
+    // Active Laser Hazards
+    if (this._laserCooldown <= 0 && this._manaShieldTimer <= 0 && !p.isInvincible) {
+      for (const lz of this.level.lasers) {
+        const phase = (this._animTime + lz.offset) % lz.period;
+        if (phase < lz.activeWindow && _aabb(p.x, p.y, p.width, p.height, lz.x, lz.y, lz.w, lz.h)) {
+          this._laserCooldown = 0.7;
+          p.vy = -180;
+          this._damagePlayer(lz.damage);
+          break;
         }
       }
     }
@@ -1069,18 +1158,202 @@ export class GameEngine {
 
   private _onBossDefeated() {
     if (!this.boss) return;
+    const b = this.boss;
     this.sound.play('boss_roar');
     this.triggerShake(6, 0.45);
-    this.particles.emit(
-      'explosion',
-      this.boss.x + this.boss.width / 2,
-      this.boss.y + this.boss.height / 2
-    );
+    this.particles.emit('explosion', b.x + b.width / 2, b.y + b.height / 2);
     this._kills += 5;
-    this.player.state.shards += 150;
-    this.onToast?.(
-      `${this.boss.def.name} DIKALAHKAN! +150 Shards! Masuk Exit Gate di kanan!`
-    );
+
+    const drops = b.def.drops;
+    if (drops) {
+      this._groundDrops.push({
+        id: `drop_${this._dropIdCounter++}`,
+        kind: 'boss_relic',
+        x: b.x + b.width / 2 - 8,
+        y: b.y + b.height - 20,
+        vy: -140,
+        label: 'BOSS RELIC DROP!',
+        shards: drops.shards,
+        ammoPacks: drops.ammoPacks,
+        weaponId: drops.weaponId,
+        weaponTier: drops.weaponTier,
+        secondaryWeaponId: drops.secondaryWeaponId,
+        secondaryWeaponTier: drops.secondaryWeaponTier,
+        armorId: drops.armorId,
+        life: 999,
+      });
+      this.onToast?.(`${b.def.name} KALAH! Ambil Boss Relic Drop yang jatuh lalu masuk Exit Gate!`);
+    } else {
+      this.player.state.shards += 150;
+      this.onToast?.(`${b.def.name} DIKALAHKAN! +150 Shards! Masuk Exit Gate di kanan!`);
+    }
+  }
+
+  private _updateStageMechanisms(dt: number) {
+    if (!this.level) return;
+
+    // Moving Platforms
+    for (const mp of this.level.movingPlatforms) {
+      const tx = mp.dir === 1 ? mp.endX : mp.startX;
+      const ty = mp.dir === 1 ? mp.endY : mp.startY;
+      const dx = tx - mp.x;
+      const dy = ty - mp.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < mp.speed * dt + 1) {
+        mp.x = tx;
+        mp.y = ty;
+        mp.vx = 0;
+        mp.vy = 0;
+        mp.dir = mp.dir === 1 ? -1 : 1;
+      } else {
+        mp.vx = (dx / dist) * mp.speed;
+        mp.vy = (dy / dist) * mp.speed;
+        mp.x += mp.vx * dt;
+        mp.y += mp.vy * dt;
+      }
+    }
+
+    // Crumbling Platforms
+    for (const cp of this.level.crumblingPlatforms) {
+      if (cp.state === 'shaking') {
+        cp.timer -= dt;
+        if (cp.timer <= 0) {
+          cp.state = 'broken';
+          cp.timer = 2.8;
+          this.particles.emit('enemy_death', cp.x + cp.w / 2, cp.y + 4);
+        }
+      } else if (cp.state === 'broken') {
+        cp.timer -= dt;
+        if (cp.timer <= 0) {
+          cp.state = 'solid';
+          this.particles.emit('mana_dust', cp.x + cp.w / 2, cp.y);
+        }
+      }
+    }
+  }
+
+  private _detonateCrystal(cry: BuiltLevel['crystals'][number]) {
+    if (cry.exploded) return;
+    cry.exploded = true;
+    this.sound.play('shotgun_blast');
+    this.triggerShake(5, 0.25);
+    const cx = cry.x + cry.w / 2;
+    const cy = cry.y + cry.h / 2;
+    this.particles.emit('explosion', cx, cy);
+    this._spawnFloatingText(cx, cy - 12, 'CRYSTAL BLAST!', '#A855F7');
+
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      if (Math.hypot(e.x + e.width / 2 - cx, e.y + e.height / 2 - cy) < 110) {
+        const killed = damageEnemy(e, 60, true);
+        this._spawnFloatingText(e.x + e.width / 2, e.y - 6, '60!', '#FACC15');
+        if (killed) this._onEnemyKilled(e);
+      }
+    }
+  }
+
+  private _updateGroundDrops(dt: number) {
+    if (!this.level) return;
+    const p = this.player;
+
+    for (let i = this._groundDrops.length - 1; i >= 0; i--) {
+      const d = this._groundDrops[i];
+      d.life -= dt;
+      if (d.life <= 0) {
+        this._groundDrops.splice(i, 1);
+        continue;
+      }
+
+      d.vy = Math.min(350, d.vy + 750 * dt);
+      d.y += d.vy * dt;
+      for (const plat of this.level.platforms) {
+        if (plat.kind === 'wall') continue;
+        if (_aabb(d.x, d.y, 14, 14, plat.x, plat.y, plat.w, plat.h) && d.vy > 0) {
+          d.y = plat.y - 14;
+          d.vy = 0;
+        }
+      }
+
+      if (_aabb(p.x, p.y, p.width, p.height, d.x - 4, d.y - 4, 22, 22)) {
+        if (d.kind === 'energy_orb') {
+          p.state.energy = Math.min(p.state.maxEnergy, p.state.energy + (d.energyAmount ?? 20));
+          this.sound.play('player_heal');
+          this._spawnFloatingText(p.x + 7, p.y - 8, `+${d.energyAmount ?? 20} EN`, '#00F0FF');
+        } else if (d.kind === 'ammo_pack') {
+          p.state.ammoPacks = Math.min(p.state.maxAmmoPacks, p.state.ammoPacks + 1);
+          this.sound.play('pylon_repair');
+          this._spawnFloatingText(p.x + 7, p.y - 10, '+1 AMMO PACK', '#FACC15');
+          this.saveGear();
+        } else if (d.kind === 'boss_relic') {
+          this.sound.play('chest_open');
+          this.particles.emit('chest_open', d.x + 7, d.y + 7);
+          const got: string[] = [];
+          if (d.shards) {
+            p.state.shards += d.shards;
+            got.push(`+${d.shards} Shards`);
+          }
+          if (d.ammoPacks) {
+            p.state.ammoPacks = Math.min(p.state.maxAmmoPacks, p.state.ammoPacks + d.ammoPacks);
+            got.push(`+${d.ammoPacks} Ammo Pack`);
+          }
+          if (d.weaponId) {
+            const inst: WeaponInstance = { defId: d.weaponId, tier: d.weaponTier ?? 'rare' };
+            p.addWeaponToInventory(inst);
+            p.equipWeapon(inst);
+            got.push(WEAPONS[d.weaponId]?.name ?? d.weaponId);
+          }
+          if (d.secondaryWeaponId) {
+            const inst2: WeaponInstance = {
+              defId: d.secondaryWeaponId,
+              tier: d.secondaryWeaponTier ?? 'rare',
+            };
+            p.addWeaponToInventory(inst2);
+            p.equipWeapon(inst2);
+            got.push(WEAPONS[d.secondaryWeaponId]?.name ?? d.secondaryWeaponId);
+          }
+          if (d.armorId) {
+            if (!p.state.armorInventory.includes(d.armorId)) {
+              p.state.armorInventory.push(d.armorId);
+            }
+            p.equipArmor(d.armorId);
+            got.push(ARMORS[d.armorId]?.name ?? d.armorId);
+          }
+          this.saveGear();
+          this.onToast?.(`BOSS RELIC: ${got.join(' · ')}`);
+        }
+        this._groundDrops.splice(i, 1);
+      }
+    }
+  }
+
+  public saveGear() {
+    try {
+      const s = this.player.state;
+      localStorage.setItem(
+        GEAR_STORAGE_KEY,
+        JSON.stringify({
+          ammoPacks: s.ammoPacks,
+          nanoVials: s.nanoVials,
+          shards: s.shards,
+          meleeWeapon: s.meleeWeapon,
+          rangedWeapon: s.rangedWeapon,
+          armorId: s.armorId,
+          weaponInventory: s.weaponInventory,
+          armorInventory: s.armorInventory,
+        })
+      );
+    } catch {
+      // ignore quota errors
+    }
+  }
+
+  private _loadSavedGear(): Partial<PlayerState> | null {
+    try {
+      const raw = localStorage.getItem(GEAR_STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as Partial<PlayerState>) : null;
+    } catch {
+      return null;
+    }
   }
 
   private _updateTurrets(dt: number) {
@@ -1173,6 +1446,15 @@ export class GameEngine {
             if (!proj.piercing) proj.alive = false;
           }
         }
+        if (proj.alive) {
+          for (const cry of this.level.crystals) {
+            if (!cry.exploded && _aabb(proj.x, proj.y, proj.width, proj.height, cry.x, cry.y, cry.w, cry.h)) {
+              this._detonateCrystal(cry);
+              if (!proj.piercing) proj.alive = false;
+              break;
+            }
+          }
+        }
       } else {
         const p = this.player;
         if (_aabb(proj.x, proj.y, proj.width, proj.height, p.x, p.y, p.width, p.height)) {
@@ -1203,6 +1485,32 @@ export class GameEngine {
     const earned = Math.round(baseShards * mult);
     this.player.state.shards += earned;
     this._spawnFloatingText(enemy.x + enemy.width / 2, enemy.y - 10, `+${earned} SHARDS`, '#00F0FF');
+
+    // Drop Energy / Reserve Ammo Packs from slain enemies
+    const roll = Math.random();
+    if (roll < 0.16) {
+      this._groundDrops.push({
+        id: `drop_${this._dropIdCounter++}`,
+        kind: 'ammo_pack',
+        x: enemy.x + enemy.width / 2 - 5,
+        y: enemy.y,
+        vy: -130,
+        label: 'AMMO',
+        ammoPacks: 1,
+        life: 16,
+      });
+    } else if (roll < 0.45) {
+      this._groundDrops.push({
+        id: `drop_${this._dropIdCounter++}`,
+        kind: 'energy_orb',
+        x: enemy.x + enemy.width / 2 - 4,
+        y: enemy.y,
+        vy: -120,
+        label: 'EN',
+        energyAmount: 20,
+        life: 12,
+      });
+    }
   }
 
   // ── Interactables ───────────────────────────────────────
@@ -1333,12 +1641,33 @@ export class GameEngine {
       this.player.state.shards += loot.shards;
       const unlockedNames: string[] = [`+${loot.shards} Shards`];
 
+      if (loot.energyRestore) {
+        this.player.state.energy = Math.min(
+          this.player.state.maxEnergy,
+          this.player.state.energy + loot.energyRestore
+        );
+        unlockedNames.push(`+${loot.energyRestore} Energy`);
+      }
+      if (loot.ammoPacks) {
+        this.player.state.ammoPacks = Math.min(
+          this.player.state.maxAmmoPacks,
+          this.player.state.ammoPacks + loot.ammoPacks
+        );
+        unlockedNames.push(`+${loot.ammoPacks} Ammo Pack`);
+      }
+      if (loot.nanoVials) {
+        this.player.state.nanoVials = Math.min(
+          this.player.state.maxNanoVials,
+          this.player.state.nanoVials + loot.nanoVials
+        );
+        unlockedNames.push(`+${loot.nanoVials} Nano-Vial`);
+      }
       if (loot.weaponId) {
         const inst: WeaponInstance = {
           defId: loot.weaponId,
           tier: loot.weaponTier ?? 'common',
         };
-        this.player.state.weaponInventory.push(inst);
+        this.player.addWeaponToInventory(inst);
         this.player.equipWeapon(inst);
         unlockedNames.push(WEAPONS[loot.weaponId]?.name ?? loot.weaponId);
       }
@@ -1350,7 +1679,8 @@ export class GameEngine {
         unlockedNames.push(ARMORS[loot.armorId]?.name ?? loot.armorId);
       }
 
-      this.onToast?.(`Chest Terbuka: ${unlockedNames.join(' & ')} (otomatis terpasang!)`);
+      this.saveGear();
+      this.onToast?.(`Chest Terbuka: ${unlockedNames.join(' · ')}`);
     }
 
     if (item.data.kind === 'generic' && item.data.subType === 'puzzle_shrine') {
@@ -1364,6 +1694,7 @@ export class GameEngine {
         this.player.state.armorInventory.push('aether_praetor');
       }
       this.player.equipArmor('aether_praetor');
+      this.saveGear();
       this.onToast?.('SHRINE CLEARED! +120 Shards, Full Vials & Aether-Forge Praetor Armor!');
     }
 
@@ -1466,10 +1797,14 @@ export class GameEngine {
     if (this.level) {
       this._renderTorches(ctx);
       this._renderPlatforms(ctx, this.level.platforms);
+      this._renderMovingAndCrumbling(ctx);
+      this._renderLasers(ctx);
+      this._renderCrystals(ctx);
       this._renderBouncePads(ctx);
       this._renderSpikes(ctx);
       this._renderPortals(ctx);
       this._renderInteractables(ctx);
+      this._renderGroundDrops(ctx);
       this._renderTurrets(ctx);
       this._renderEnemies(ctx);
       this._renderBoss(ctx);
@@ -1674,43 +2009,144 @@ export class GameEngine {
     }
   }
 
+  private _renderMovingAndCrumbling(ctx: CanvasRenderingContext2D) {
+    if (!this.level) return;
+
+    for (const mp of this.level.movingPlatforms) {
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(Math.round(mp.x), Math.round(mp.y), mp.w, mp.h);
+      ctx.fillStyle = '#00F0FF';
+      ctx.fillRect(Math.round(mp.x), Math.round(mp.y), mp.w, 2);
+      ctx.fillStyle = '#F97316';
+      ctx.fillRect(Math.round(mp.x + 4), Math.round(mp.y + 4), 4, 3);
+      ctx.fillRect(Math.round(mp.x + mp.w - 8), Math.round(mp.y + 4), 4, 3);
+    }
+
+    for (const cp of this.level.crumblingPlatforms) {
+      if (cp.state === 'broken') {
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.3)';
+        ctx.setLineDash([3, 3]);
+        ctx.strokeRect(cp.x, cp.y, cp.w, cp.h);
+        ctx.setLineDash([]);
+        continue;
+      }
+      const jitterX = cp.state === 'shaking' ? (Math.random() - 0.5) * 3 : 0;
+      ctx.fillStyle = cp.state === 'shaking' ? '#EF4444' : '#57534E';
+      ctx.fillRect(Math.round(cp.x + jitterX), cp.y, cp.w, cp.h);
+      ctx.fillStyle = '#0B0D14';
+      for (let cx = cp.x + 10; cx < cp.x + cp.w - 6; cx += 14) {
+        ctx.fillRect(Math.round(cx + jitterX), cp.y + 1, 2, 7);
+      }
+    }
+  }
+
+  private _renderLasers(ctx: CanvasRenderingContext2D) {
+    if (!this.level) return;
+    for (const lz of this.level.lasers) {
+      const phase = (this._animTime + lz.offset) % lz.period;
+      const active = phase < lz.activeWindow;
+      const telegraph = !active && phase > lz.period - 0.45;
+
+      // Emitter housing
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(lz.x - 2, lz.y - 4, lz.w + 4, 4);
+      ctx.fillRect(lz.x - 2, lz.y + lz.h, lz.w + 4, 4);
+
+      if (active) {
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.45)';
+        ctx.fillRect(lz.x - 2, lz.y, lz.w + 4, lz.h);
+        ctx.fillStyle = '#EF4444';
+        ctx.fillRect(lz.x + 1, lz.y, lz.w - 2, lz.h);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(lz.x + 3, lz.y, 2, lz.h);
+      } else if (telegraph) {
+        ctx.fillStyle = 'rgba(249, 115, 22, 0.45)';
+        ctx.fillRect(lz.x + 3, lz.y, 2, lz.h);
+      }
+    }
+  }
+
+  private _renderCrystals(ctx: CanvasRenderingContext2D) {
+    if (!this.level) return;
+    const pulse = 0.5 + 0.5 * Math.sin(this._animTime * 8);
+    for (const cry of this.level.crystals) {
+      if (cry.exploded) continue;
+      ctx.fillStyle = `rgba(168, 85, 247, ${0.2 + pulse * 0.25})`;
+      ctx.beginPath();
+      ctx.arc(cry.x + cry.w / 2, cry.y + cry.h / 2, 13 + pulse * 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#A855F7';
+      ctx.beginPath();
+      ctx.moveTo(cry.x + cry.w / 2, cry.y);
+      ctx.lineTo(cry.x + cry.w, cry.y + cry.h * 0.65);
+      ctx.lineTo(cry.x + cry.w / 2, cry.y + cry.h);
+      ctx.lineTo(cry.x, cry.y + cry.h * 0.65);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#00F0FF';
+      ctx.fillRect(cry.x + cry.w / 2 - 1, cry.y + 5, 2, 10);
+    }
+  }
+
+  private _renderGroundDrops(ctx: CanvasRenderingContext2D) {
+    const bob = Math.sin(this._animTime * 6) * 2;
+    for (const d of this._groundDrops) {
+      const y = Math.round(d.y + bob);
+      if (d.kind === 'boss_relic') {
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.28)';
+        ctx.beginPath();
+        ctx.arc(d.x + 7, y + 7, 15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#FACC15';
+        ctx.fillRect(Math.round(d.x), y, 14, 14);
+        ctx.fillStyle = '#00F0FF';
+        ctx.fillRect(Math.round(d.x + 4), y + 4, 6, 6);
+        ctx.font = 'bold 7px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#FACC15';
+        ctx.fillText('BOSS DROP', Math.round(d.x + 7), y - 5);
+      } else if (d.kind === 'ammo_pack') {
+        ctx.fillStyle = '#0B0D14';
+        ctx.fillRect(Math.round(d.x - 1), y - 1, 12, 10);
+        ctx.fillStyle = '#FACC15';
+        ctx.fillRect(Math.round(d.x), y, 10, 8);
+        ctx.fillStyle = '#00F0FF';
+        ctx.fillRect(Math.round(d.x + 2), y + 2, 6, 4);
+      } else {
+        ctx.fillStyle = '#00F0FF';
+        ctx.fillRect(Math.round(d.x), y, 6, 6);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(Math.round(d.x + 2), y + 2, 2, 2);
+      }
+    }
+  }
+
   private _renderEnemies(ctx: CanvasRenderingContext2D) {
     const walkToggle = Math.floor(this._animTime * 8) % 2 === 1;
     for (const e of this.enemies) {
       if (!e.alive) continue;
       const flash = e.hitFlashTimer > 0;
-      const scale = e.defId === 'rift_brute' ? 1.5 : 1;
+      const pal = ENEMY_PALETTES[e.defId] ?? ENEMY_PALETTES.mana_husk;
+      const moving = Math.abs(e.vx) > 5;
+      const mat = getEnemyMatrix(e.defId, moving && walkToggle);
+      const scale = e.defId === 'rift_brute' ? 1.45 : e.defId === 'corrupted_sentinel' ? 1.15 : 1;
 
-      if (e.defId === 'rift_drone') {
-        const frame = this.sprites.render(
-          'enemy_drone',
-          RIFT_DRONE_SPRITE,
-          ENEMY_PALETTES.rift_drone,
-          1,
-          flash
-        );
-        this.sprites.draw(ctx, frame, e.x + e.width / 2, e.y + e.height, !e.facingRight);
-      } else {
-        const pal = ENEMY_PALETTES[e.defId] ?? ENEMY_PALETTES.mana_husk;
-        const moving = Math.abs(e.vx) > 5;
-        const mat = moving && walkToggle ? MANA_HUSK_WALK : MANA_HUSK_SPRITE;
-        const frame = this.sprites.render(
-          `enemy_${e.defId}_${moving && walkToggle ? 'w' : 'i'}`,
-          mat,
-          pal,
-          1,
-          flash
-        );
-        this.sprites.draw(
-          ctx,
-          frame,
-          e.x + e.width / 2,
-          e.y + e.height,
-          !e.facingRight,
-          scale,
-          scale
-        );
-      }
+      const frame = this.sprites.render(
+        `enemy_${e.defId}_${moving && walkToggle ? 'w' : 'i'}`,
+        mat,
+        pal,
+        1,
+        flash
+      );
+      this.sprites.draw(
+        ctx,
+        frame,
+        e.x + e.width / 2,
+        e.y + e.height,
+        !e.facingRight,
+        scale,
+        scale
+      );
 
       if (e.shieldHp > 0) {
         ctx.fillStyle = '#F97316';
@@ -1739,47 +2175,36 @@ export class GameEngine {
     const isStunned = b.stunTimer > 0;
     const isTelegraph = b.attackState === 'telegraph';
 
-    ctx.save();
-    // Boss silhouette / armored colossus body
-    ctx.fillStyle = flash
-      ? '#FFFFFF'
-      : b.def.id === 'aetherion'
-        ? '#1E1B4B'
-        : b.def.id === 'forge_titan'
-          ? '#451A03'
-          : '#2B2F3A';
-    ctx.fillRect(Math.round(b.x), Math.round(b.y), b.width, b.height);
+    drawBossSprite(
+      ctx,
+      b.def.id,
+      b.x,
+      b.y,
+      b.width,
+      b.height,
+      b.facingRight,
+      flash,
+      isStunned,
+      isTelegraph,
+      this._animTime
+    );
 
-    // Armored rim & glowing core
-    ctx.strokeStyle = isTelegraph ? '#EF4444' : isStunned ? '#00F0FF' : '#A855F7';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(Math.round(b.x), Math.round(b.y), b.width, b.height);
-
-    // Visor eyes facing player
-    const eyeX = b.facingRight ? b.x + b.width - 14 : b.x + 4;
-    ctx.fillStyle = isStunned ? '#00F0FF' : '#F97316';
-    ctx.fillRect(Math.round(eyeX), Math.round(b.y + 8), 10, 4);
-
-    // Core
-    ctx.fillStyle = flash ? '#FFFFFF' : '#A855F7';
-    ctx.fillRect(Math.round(b.x + b.width / 2 - 6), Math.round(b.y + 18), 12, 12);
-
-    // Mana Shield bubble
     if (b.shieldActive) {
+      ctx.save();
       ctx.strokeStyle = '#00F0FF';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(b.x + b.width / 2, b.y + b.height / 2, b.width * 0.72, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.restore();
     }
 
     if (isStunned) {
       ctx.fillStyle = '#00F0FF';
       ctx.font = 'bold 8px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('STUNNED!', b.x + b.width / 2, b.y - 6);
+      ctx.fillText('STUNNED!', b.x + b.width / 2, b.y - 8);
     }
-    ctx.restore();
   }
 
   private _renderScarf(ctx: CanvasRenderingContext2D) {
@@ -1804,31 +2229,24 @@ export class GameEngine {
     const moving = Math.abs(p.vx) > 10 && p.onGround;
     const runPhase = Math.floor(this._animTime * 13) % 4;
 
-    let mat = MC_IDLE;
-    let poseKey = 'idle';
+    let poseKey: MCPoseName = 'idle';
     let sy = this._scaleY;
     let handBobY = 0;
 
     if (this._meleeAnimTimer > 0 && p.onGround) {
-      mat = MC_ATTACK;
       poseKey = 'attack';
       handBobY = 1;
     } else if (p.isWallSliding) {
-      mat = MC_WALL_SLIDE;
       poseKey = 'wall';
     } else if (!p.onGround) {
       if (p.vy < 20) {
-        mat = MC_JUMP_UP;
         poseKey = 'jump_up';
         handBobY = -1;
       } else {
-        mat = MC_FALL;
         poseKey = 'fall';
       }
     } else if (moving) {
-      const runFrames = [MC_RUN_1, MC_RUN_2, MC_RUN_3, MC_RUN_4];
-      mat = runFrames[runPhase];
-      poseKey = `run_${runPhase}`;
+      poseKey = `run_${runPhase}` as MCPoseName;
       handBobY = runPhase === 0 || runPhase === 2 ? 1 : 0;
       if ((runPhase === 0 || runPhase === 2) && this._lastRunStep !== runPhase) {
         this._lastRunStep = runPhase;
@@ -1839,6 +2257,8 @@ export class GameEngine {
       sy *= 1 + Math.sin(this._animTime * 4) * 0.025;
       handBobY = Math.sin(this._animTime * 4) > 0.5 ? 1 : 0;
     }
+
+    const mat = getMCPoseMatrix(armor.id, poseKey);
 
     if (p.isInvincible && !p.isDashing && Math.floor(this._animTime * 20) % 2 === 0) {
       ctx.globalAlpha = 0.45;
@@ -2043,6 +2463,8 @@ export class GameEngine {
       maxHp: this.player.state.maxHp,
       energy: Math.round(this.player.state.energy),
       maxEnergy: this.player.state.maxEnergy,
+      ammoPacks: this.player.state.ammoPacks,
+      maxAmmoPacks: this.player.state.maxAmmoPacks,
       nanoVials: this.player.state.nanoVials,
       maxNanoVials: this.player.state.maxNanoVials,
       shards: this.player.state.shards,

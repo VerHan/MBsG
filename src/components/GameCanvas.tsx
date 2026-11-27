@@ -176,6 +176,7 @@ export function GameCanvas({
     const engine = engineRef.current;
     if (!engine) return;
     engine.player.equipWeapon(w);
+    engine.saveGear();
     setPlayerSnapshot({ ...engine.player.state });
   };
 
@@ -183,6 +184,7 @@ export function GameCanvas({
     const engine = engineRef.current;
     if (!engine) return;
     engine.player.equipArmor(id);
+    engine.saveGear();
     setPlayerSnapshot({ ...engine.player.state });
   };
 
@@ -194,8 +196,9 @@ export function GameCanvas({
       tier: 'epic',
     }));
     engine.player.state.armorInventory = [...ARMOR_ORDER] as ArmorId[];
+    engine.saveGear();
     setPlayerSnapshot({ ...engine.player.state });
-    showToast('Sandbox aktif: Semua 7 Senjata (Epic) & 4 Armor dibuka!');
+    showToast('Sandbox aktif: Semua 8 Senjata (Epic) & 4 Armor dibuka!');
   };
 
   const nextStageInfo = NEXT_STAGE_MAP[modeKey];

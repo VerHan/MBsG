@@ -18,7 +18,7 @@ export type GameScreen =
 export type WeaponSlot = 'melee' | 'ranged';
 export type WeaponTier = 'common' | 'rare' | 'epic';
 
-export type MeleeWeaponId = 'sword' | 'dual_sword' | 'axe';
+export type MeleeWeaponId = 'dagger' | 'sword' | 'dual_sword' | 'axe';
 export type RangedWeaponId = 'pistol' | 'dual_pistol' | 'shotgun' | 'rifle';
 export type WeaponId = MeleeWeaponId | RangedWeaponId;
 
@@ -118,6 +118,15 @@ export interface BossDef {
   contactDamage: number;
   phases: BossPhase[];
   hasRunicPillar: boolean;
+  drops?: {
+    weaponId?: WeaponId;
+    weaponTier?: WeaponTier;
+    secondaryWeaponId?: WeaponId;
+    secondaryWeaponTier?: WeaponTier;
+    armorId?: ArmorId;
+    shards: number;
+    ammoPacks: number;
+  };
 }
 
 // ── PUZZLES ─────────────────────────────────────────────────
@@ -153,11 +162,14 @@ export type InteractableType =
 
 export interface ChestDef {
   tier: 'common' | 'rare' | 'epic';
-  questionsRequired: number; // 1 for common/rare, 2 for epic
+  questionsRequired: number; // 1 for standard supply, 2 for rare armory, 3 for epic relic
   loot: {
     weaponId?: WeaponId;
     weaponTier?: WeaponTier;
     armorId?: ArmorId;
+    energyRestore?: number;
+    ammoPacks?: number;
+    nanoVials?: number;
     shards: number;
   };
 }
@@ -218,6 +230,8 @@ export interface PlayerState {
   maxHp: number;
   energy: number;
   maxEnergy: number;
+  ammoPacks: number;
+  maxAmmoPacks: number;
   shards: number;
   nanoVials: number;
   maxNanoVials: number;

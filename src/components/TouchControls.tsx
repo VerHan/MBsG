@@ -90,6 +90,13 @@ export function TouchControls({
         >
           <Heart className="h-4 w-4" />
         </TouchBtn>
+        <TouchBtn
+          action="use_ammo"
+          onAction={onAction}
+          className="h-10 w-10 rounded-full border-loot-gold/70 bg-abyss-950/75 text-[10px] font-bold text-loot-gold active:bg-loot-gold/25"
+        >
+          AMMO
+        </TouchBtn>
         {canAdrenaline && (
           <TouchBtn
             action="adrenaline"

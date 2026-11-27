@@ -339,7 +339,7 @@ export function TitleScreen({
           <span className="font-bold text-slate-200">Kontrol:</span>{' '}
           <code>A/D</code> Gerak · <code>Space/W</code> Jump/2x · <code>Shift</code> Dash ·{' '}
           <code>J/LMB</code> Melee · <code>S+J</code> Pogo · <code>K/RMB</code> Ranged ·{' '}
-          <code>E</code> Chest/Shrine/Pillar · <code>Q</code> Heal · <code>I</code> Gear
+          <code>E</code> Chest/Shrine/Pillar · <code>Q</code> Heal · <code>R</code> Ammo · <code>I</code> Gear
         </div>
       </main>
     </div>

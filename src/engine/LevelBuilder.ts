@@ -1,10 +1,15 @@
 // ============================================================
 // RIFTBOUND: SLAYER CORPS — Multi-Stage Level Builder
-// Builds 3 full, expansive stages (4800x540 each, 4 areas each)
-// mapped to their own learning themes + standalone Survival/Defense:
-//   Stage 1 (Berpikir Komputasional) -> Mana Colossus
-//   Stage 2 (Gerbang Logika)         -> Forge Titan
-//   Stage 3 (Sistem Biner)           -> Aetherion
+// Rich mechanisms per Stage:
+//   - Moving Platforms (horizontal ferries + vertical lifts)
+//   - Crumbling Platforms (shake -> collapse -> reform)
+//   - Timed Laser Beams
+//   - Explosive Mana Crystals (shoot/slash to detonate AoE!)
+//   - Bounce Pads + Twin Wall-Jump Towers
+// Tiered Chests:
+//   - Common (1 soal): Energy Cell + Reserve Ammo Pack + Vial
+//   - Rare (2 soal beruntun): Upgraded Weapons (Sword/Axe/Shotgun/etc.)
+//   - Epic (3 soal beruntun): Endgame Armors & Dual Sword / Rifle
 // ============================================================
 
 import type { BossId, SegmentConfig } from '../types';
@@ -29,6 +34,52 @@ export interface Platform {
   h: number;
   oneWay?: boolean;
   kind?: 'stone' | 'metal' | 'wall';
+}
+
+export interface MovingPlatform {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  speed: number;
+  vx: number;
+  vy: number;
+  dir: 1 | -1;
+}
+
+export interface CrumblingPlatform {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  state: 'solid' | 'shaking' | 'broken';
+  timer: number;
+}
+
+export interface LaserHazard {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  period: number;
+  activeWindow: number;
+  offset: number;
+  damage: number;
+}
+
+export interface ExplosiveCrystal {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  exploded: boolean;
 }
 
 export interface SpikeHazard {
@@ -83,6 +134,10 @@ export interface BuiltLevel {
   worldHeight: number;
   playerSpawn: { x: number; y: number };
   platforms: Platform[];
+  movingPlatforms: MovingPlatform[];
+  crumblingPlatforms: CrumblingPlatform[];
+  lasers: LaserHazard[];
+  crystals: ExplosiveCrystal[];
   spikes: SpikeHazard[];
   bouncePads: BouncePad[];
   torches: TorchProp[];
@@ -168,6 +223,22 @@ export const DEMO_SEGMENTS: Record<'survival' | 'defense', SegmentConfig> = {
   },
 };
 
+function _mkMoving(
+  id: string,
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+  w: number,
+  speed: number
+): MovingPlatform {
+  return { id, x: startX, y: startY, w, h: 10, startX, startY, endX, endY, speed, vx: 0, vy: 0, dir: 1 };
+}
+
+function _mkCrumble(id: string, x: number, y: number, w: number): CrumblingPlatform {
+  return { id, x, y, w, h: 10, state: 'solid', timer: 0 };
+}
+
 export function buildPlayableLevel(modeKey: PlayableModeKey): BuiltLevel {
   if (modeKey === 'survival') return _buildSurvivalArena();
   if (modeKey === 'defense') return _buildDefenseArena();
@@ -185,10 +256,10 @@ function _buildStage1(): BuiltLevel {
   const meta = STAGE_METADATA[1];
 
   const areas: AreaZone[] = [
-    { id: 's1_a1', name: 'AREA 1: ASHFALL OUTSKIRTS', subtitle: `Tema: ${meta.themeTopic}`, startX: 0, endX: 1150 },
-    { id: 's1_a2', name: 'AREA 2: THE TWIN CHASM', subtitle: 'Wall-Jump Tower & Jurang Pogo', startX: 1150, endX: 2350 },
-    { id: 's1_a3', name: 'AREA 3: PERIMETER COURTYARD', subtitle: 'Ancient Puzzle Shrine & Terminal', startX: 2350, endX: 3650 },
-    { id: 's1_a4', name: 'AREA 4: COLOSSUS SANCTUM', subtitle: 'Boss Arena — Mana Colossus', startX: 3650, endX: worldW },
+    { id: 's1_a1', name: 'AREA 1: ASHFALL OUTSKIRTS', subtitle: `Tema: ${meta.themeTopic} · Mulai dengan Dagger!`, startX: 0, endX: 1150 },
+    { id: 's1_a2', name: 'AREA 2: THE TWIN CHASM', subtitle: 'Moving Ferry, Crumbling Bridge & Wall-Jump Tower', startX: 1150, endX: 2350 },
+    { id: 's1_a3', name: 'AREA 3: PERIMETER COURTYARD', subtitle: 'Crystal Traps, Armory Chest & Puzzle Shrine', startX: 2350, endX: 3650 },
+    { id: 's1_a4', name: 'AREA 4: COLOSSUS SANCTUM', subtitle: 'Boss Arena — Mana Colossus (Drop Sword & Armor!)', startX: 3650, endX: worldW },
   ];
 
   const platforms: Platform[] = [
@@ -197,7 +268,7 @@ function _buildStage1(): BuiltLevel {
 
     // Area 1
     { x: 0, y: 400, w: 500, h: 140, kind: 'stone' },
-    { x: 500, y: 400, w: 130, h: 10, oneWay: true, kind: 'metal' }, // drop to crypt
+    { x: 500, y: 400, w: 130, h: 10, oneWay: true, kind: 'metal' },
     { x: 460, y: 496, w: 460, h: 44, kind: 'stone' },
     { x: 630, y: 400, w: 520, h: 140, kind: 'stone' },
     { x: 200, y: 340, w: 105, h: 10, oneWay: true, kind: 'metal' },
@@ -205,25 +276,23 @@ function _buildStage1(): BuiltLevel {
     { x: 530, y: 235, w: 160, h: 12, kind: 'stone' },
     { x: 840, y: 315, w: 130, h: 10, oneWay: true, kind: 'metal' },
 
-    // Area 2
-    { x: 1150, y: 400, w: 180, h: 140, kind: 'stone' },
-    { x: 1330, y: 472, w: 280, h: 68, kind: 'stone' }, // spike chasm
-    { x: 1410, y: 375, w: 80, h: 10, oneWay: true, kind: 'metal' },
-    { x: 1610, y: 400, w: 740, h: 140, kind: 'stone' },
-    { x: 1700, y: 195, w: 22, h: 205, kind: 'wall' },
-    { x: 1805, y: 125, w: 22, h: 205, kind: 'wall' },
-    { x: 1827, y: 170, w: 250, h: 14, kind: 'metal' },
-    { x: 2120, y: 290, w: 150, h: 10, oneWay: true, kind: 'metal' },
+    // Area 2 — Chasm + Moving Ferry + Wall-Jump Tower
+    { x: 1150, y: 400, w: 160, h: 140, kind: 'stone' },
+    { x: 1310, y: 472, w: 320, h: 68, kind: 'stone' },
+    { x: 1630, y: 400, w: 720, h: 140, kind: 'stone' },
+    { x: 1710, y: 195, w: 22, h: 205, kind: 'wall' },
+    { x: 1815, y: 125, w: 22, h: 205, kind: 'wall' },
+    { x: 1837, y: 170, w: 250, h: 14, kind: 'metal' },
+    { x: 2130, y: 290, w: 150, h: 10, oneWay: true, kind: 'metal' },
 
-    // Area 3
-    { x: 2350, y: 410, w: 550, h: 130, kind: 'stone' },
-    { x: 2900, y: 465, w: 160, h: 75, kind: 'stone' },
-    { x: 3060, y: 410, w: 590, h: 130, kind: 'stone' },
+    // Area 3 — Crumbling bridges + Vertical Lift + Shrine
+    { x: 2350, y: 410, w: 450, h: 130, kind: 'stone' },
+    { x: 2800, y: 465, w: 280, h: 75, kind: 'stone' },
+    { x: 3080, y: 410, w: 570, h: 130, kind: 'stone' },
     { x: 2450, y: 330, w: 150, h: 10, oneWay: true, kind: 'metal' },
     { x: 2660, y: 265, w: 170, h: 10, oneWay: true, kind: 'metal' },
-    { x: 2890, y: 215, w: 210, h: 12, kind: 'stone' }, // Puzzle Shrine deck
-    { x: 3200, y: 310, w: 160, h: 10, oneWay: true, kind: 'metal' },
-    { x: 3400, y: 245, w: 150, h: 10, oneWay: true, kind: 'metal' },
+    { x: 2900, y: 215, w: 210, h: 12, kind: 'stone' },
+    { x: 3390, y: 245, w: 160, h: 10, oneWay: true, kind: 'metal' },
 
     // Area 4 — Boss Arena
     { x: 3650, y: 400, w: 1150, h: 140, kind: 'stone' },
@@ -232,9 +301,25 @@ function _buildStage1(): BuiltLevel {
     { x: 4050, y: 245, w: 150, h: 10, oneWay: true, kind: 'metal' },
   ];
 
+  const movingPlatforms: MovingPlatform[] = [
+    _mkMoving('s1_mp1', 1340, 360, 1540, 360, 72, 65), // Horizontal ferry over chasm
+    _mkMoving('s1_mp2', 3220, 360, 3220, 240, 68, 55), // Vertical lift in Area 3
+  ];
+
+  const crumblingPlatforms: CrumblingPlatform[] = [
+    _mkCrumble('s1_cp1', 2840, 390, 64),
+    _mkCrumble('s1_cp2', 2945, 375, 64),
+  ];
+
+  const crystals: ExplosiveCrystal[] = [
+    { id: 's1_c1', x: 760, y: 376, w: 14, h: 24, exploded: false },
+    { id: 's1_c2', x: 2560, y: 386, w: 14, h: 24, exploded: false },
+    { id: 's1_c3', x: 3310, y: 386, w: 14, h: 24, exploded: false },
+  ];
+
   const spikes: SpikeHazard[] = [
-    { x: 1340, y: 460, w: 260, h: 12, damage: 15 },
-    { x: 2910, y: 453, w: 140, h: 12, damage: 15 },
+    { x: 1325, y: 460, w: 290, h: 12, damage: 15 },
+    { x: 2815, y: 453, w: 250, h: 12, damage: 15 },
   ];
 
   const bouncePads: BouncePad[] = [
@@ -246,8 +331,8 @@ function _buildStage1(): BuiltLevel {
   const torches: TorchProp[] = [
     { x: 90, y: 376, color: '#F97316' },
     { x: 750, y: 472, color: '#A855F7' },
-    { x: 1860, y: 146, color: '#00F0FF' },
-    { x: 2980, y: 191, color: '#A855F7' },
+    { x: 1870, y: 146, color: '#00F0FF' },
+    { x: 2990, y: 191, color: '#A855F7' },
     { x: 3760, y: 376, color: '#EF4444' },
     { x: 4660, y: 376, color: '#FACC15' },
   ];
@@ -256,37 +341,40 @@ function _buildStage1(): BuiltLevel {
     createEnemy('mana_husk', 290, 380, { patrolLeft: 180, patrolRight: 460, targetingPylon: false }),
     createEnemy('mana_husk', 690, 476, { patrolLeft: 490, patrolRight: 880, targetingPylon: false }),
     createEnemy('rift_drone', 580, 180, { targetingPylon: false }),
-    createEnemy('mana_husk', 900, 380, { patrolLeft: 760, patrolRight: 1080, targetingPylon: false }),
-    createEnemy('rift_drone', 1460, 290, { targetingPylon: false }),
+    createEnemy('mana_husk', 890, 380, { patrolLeft: 740, patrolRight: 1080, targetingPylon: false }),
+    createEnemy('rift_drone', 1460, 260, { targetingPylon: false }),
     createEnemy('mana_stalker', 1940, 382, { patrolLeft: 1860, patrolRight: 2150, targetingPylon: false }),
-    createEnemy('mana_husk', 2550, 390, { patrolLeft: 2400, patrolRight: 2820, targetingPylon: false }),
-    createEnemy('rift_drone', 2840, 175, { targetingPylon: false }),
-    createEnemy('mana_stalker', 3260, 392, { patrolLeft: 3120, patrolRight: 3550, targetingPylon: false }),
+    createEnemy('mana_husk', 2530, 390, { patrolLeft: 2400, patrolRight: 2770, targetingPylon: false }),
+    createEnemy('rift_drone', 2860, 175, { targetingPylon: false }),
+    createEnemy('mana_stalker', 3280, 392, { patrolLeft: 3120, patrolRight: 3550, targetingPylon: false }),
   ];
 
   const interactables: InteractableInstance[] = [
-    // 4 Encrypted Chests across Areas 1-3
+    // Standard Supply Chest (1 soal -> Energy + Ammo Pack + Vial + Shards)
     createChest(790, 472, {
       tier: 'common',
       questionsRequired: 1,
-      loot: { weaponId: 'dual_sword', weaponTier: 'common', shards: 25 },
+      loot: { energyRestore: 65, ammoPacks: 1, nanoVials: 1, shards: 25 },
     }),
-    createChest(1930, 146, {
+    // Standard Supply Chest (1 soal -> Energy + Ammo Pack + Shards)
+    createChest(2180, 266, {
       tier: 'common',
       questionsRequired: 1,
-      loot: { weaponId: 'pistol', weaponTier: 'rare', shards: 30 },
+      loot: { energyRestore: 70, ammoPacks: 1, shards: 30 },
     }),
-    createChest(2180, 266, {
+    // Rare Armory Chest (2 soal beruntun -> Sword + Dual Pistol + Ammo)
+    createChest(1940, 146, {
       tier: 'rare',
-      questionsRequired: 1,
-      loot: { armorId: 'vanguard', shards: 40 },
+      questionsRequired: 2,
+      loot: { weaponId: 'sword', weaponTier: 'rare', ammoPacks: 1, shards: 50 },
     }),
+    // Epic Relic Chest (3 soal beruntun -> Dual Pistol + Vanguard Armor!)
     createChest(3460, 221, {
-      tier: 'rare',
-      questionsRequired: 1,
-      loot: { weaponId: 'dual_pistol', weaponTier: 'rare', shards: 45 },
+      tier: 'epic',
+      questionsRequired: 3,
+      loot: { weaponId: 'dual_pistol', weaponTier: 'rare', armorId: 'vanguard', ammoPacks: 2, shards: 90 },
     }),
-    createPuzzleShrine(2980, 175),
+    createPuzzleShrine(2990, 175),
     createTerminal(2490, 306, 'emergency'),
     createRunicPillar(3730, 360),
     createExitGate(4710, 352),
@@ -301,6 +389,10 @@ function _buildStage1(): BuiltLevel {
     worldHeight: worldH,
     playerSpawn: { x: 48, y: 360 },
     platforms,
+    movingPlatforms,
+    crumblingPlatforms,
+    lasers: [],
+    crystals,
     spikes,
     bouncePads,
     torches,
@@ -321,10 +413,10 @@ function _buildStage2(): BuiltLevel {
   const meta = STAGE_METADATA[2];
 
   const areas: AreaZone[] = [
-    { id: 's2_a1', name: 'AREA 1: FOUNDRY ENTRY', subtitle: `Tema: ${meta.themeTopic}`, startX: 0, endX: 1150 },
-    { id: 's2_a2', name: 'AREA 2: SMELTER SHAFTS', subtitle: 'Sentinel Guard & Crystal Bridges', startX: 1150, endX: 2350 },
-    { id: 's2_a3', name: 'AREA 3: RELAY CONDUIT', subtitle: 'Logic Gate Barrier & Puzzle Shrine', startX: 2350, endX: 3650 },
-    { id: 's2_a4', name: 'AREA 4: TITAN CRUCIBLE', subtitle: 'Boss Arena — Forge Titan', startX: 3650, endX: worldW },
+    { id: 's2_a1', name: 'AREA 1: FOUNDRY ENTRY', subtitle: `Tema: ${meta.themeTopic} · Laser & Moving Lift`, startX: 0, endX: 1150 },
+    { id: 's2_a2', name: 'AREA 2: SMELTER SHAFTS', subtitle: 'Sentinel Guard, Crumbling Catwalks & Crystal Traps', startX: 1150, endX: 2350 },
+    { id: 's2_a3', name: 'AREA 3: RELAY CONDUIT', subtitle: 'Logic Gate Barrier & Ancient Shrine', startX: 2350, endX: 3650 },
+    { id: 's2_a4', name: 'AREA 4: TITAN CRUCIBLE', subtitle: 'Boss Arena — Forge Titan (Drop Epic Axe & Shotgun!)', startX: 3650, endX: worldW },
   ];
 
   const platforms: Platform[] = [
@@ -336,7 +428,6 @@ function _buildStage2(): BuiltLevel {
     { x: 620, y: 465, w: 200, h: 75, kind: 'stone' },
     { x: 820, y: 410, w: 330, h: 130, kind: 'stone' },
     { x: 240, y: 330, w: 130, h: 10, oneWay: true, kind: 'metal' },
-    { x: 430, y: 260, w: 150, h: 10, oneWay: true, kind: 'metal' },
     { x: 640, y: 215, w: 160, h: 12, kind: 'stone' },
     { x: 880, y: 295, w: 150, h: 10, oneWay: true, kind: 'metal' },
 
@@ -347,13 +438,11 @@ function _buildStage2(): BuiltLevel {
     { x: 1260, y: 170, w: 22, h: 190, kind: 'wall' },
     { x: 1365, y: 120, w: 22, h: 200, kind: 'wall' },
     { x: 1387, y: 165, w: 230, h: 14, kind: 'metal' },
-    { x: 1920, y: 315, w: 140, h: 10, oneWay: true, kind: 'metal' },
     { x: 2080, y: 245, w: 160, h: 12, kind: 'stone' },
 
-    // Area 3 (Quick-Decrypt Logic Barrier + Shrine)
+    // Area 3
     { x: 2350, y: 410, w: 1300, h: 130, kind: 'stone' },
     { x: 2560, y: 325, w: 160, h: 10, oneWay: true, kind: 'metal' },
-    { x: 2770, y: 255, w: 160, h: 10, oneWay: true, kind: 'metal' },
     { x: 2990, y: 200, w: 220, h: 12, kind: 'stone' },
     { x: 3320, y: 295, w: 180, h: 10, oneWay: true, kind: 'metal' },
 
@@ -362,6 +451,28 @@ function _buildStage2(): BuiltLevel {
     { x: 3820, y: 310, w: 140, h: 10, oneWay: true, kind: 'metal' },
     { x: 4070, y: 245, w: 150, h: 10, oneWay: true, kind: 'metal' },
     { x: 4310, y: 310, w: 140, h: 10, oneWay: true, kind: 'metal' },
+  ];
+
+  const movingPlatforms: MovingPlatform[] = [
+    _mkMoving('s2_mp1', 420, 315, 420, 215, 70, 60),
+    _mkMoving('s2_mp2', 1860, 315, 2020, 315, 76, 75),
+  ];
+
+  const crumblingPlatforms: CrumblingPlatform[] = [
+    _mkCrumble('s2_cp1', 2765, 260, 72),
+    _mkCrumble('s2_cp2', 2875, 240, 72),
+  ];
+
+  const lasers: LaserHazard[] = [
+    { x: 970, y: 325, w: 8, h: 85, period: 3.2, activeWindow: 1.4, offset: 0, damage: 16 },
+    { x: 2020, y: 330, w: 8, h: 80, period: 3.0, activeWindow: 1.3, offset: 1.2, damage: 18 },
+    { x: 3230, y: 320, w: 8, h: 90, period: 2.8, activeWindow: 1.3, offset: 0.6, damage: 18 },
+  ];
+
+  const crystals: ExplosiveCrystal[] = [
+    { id: 's2_c1', x: 410, y: 386, w: 14, h: 24, exploded: false },
+    { id: 's2_c2', x: 1960, y: 386, w: 14, h: 24, exploded: false },
+    { id: 's2_c3', x: 3200, y: 386, w: 14, h: 24, exploded: false },
   ];
 
   const spikes: SpikeHazard[] = [
@@ -390,31 +501,35 @@ function _buildStage2(): BuiltLevel {
     createEnemy('mana_stalker', 940, 392, { patrolLeft: 840, patrolRight: 1120, targetingPylon: false }),
     createEnemy('void_spitter', 1710, 346, { targetingPylon: false }),
     createEnemy('corrupted_sentinel', 1940, 388, { patrolLeft: 1830, patrolRight: 2240, targetingPylon: false }),
-    createEnemy('mana_stalker', 2520, 392, { patrolLeft: 2390, patrolRight: 2770, targetingPylon: false }),
+    createEnemy('mana_stalker', 2520, 392, { patrolLeft: 2390, patrolRight: 2600, targetingPylon: false }),
     createEnemy('rift_drone', 2920, 195, { targetingPylon: false }),
     createEnemy('corrupted_sentinel', 3250, 388, { patrolLeft: 3020, patrolRight: 3520, targetingPylon: false }),
   ];
 
   const interactables: InteractableInstance[] = [
+    // Supply Chest (1 soal -> Energy + Ammo)
     createChest(710, 191, {
       tier: 'common',
       questionsRequired: 1,
-      loot: { weaponId: 'axe', weaponTier: 'rare', shards: 35 },
+      loot: { energyRestore: 75, ammoPacks: 1, nanoVials: 1, shards: 35 },
     }),
+    // Rare Armory Chest (2 soal -> Axe + Ammo)
     createChest(1480, 141, {
       tier: 'rare',
-      questionsRequired: 1,
-      loot: { weaponId: 'shotgun', weaponTier: 'rare', shards: 45 },
+      questionsRequired: 2,
+      loot: { weaponId: 'axe', weaponTier: 'rare', ammoPacks: 1, shards: 60 },
     }),
+    // Rare Armory Chest (2 soal -> Shotgun + Ammo)
     createChest(2140, 221, {
       tier: 'rare',
-      questionsRequired: 1,
-      loot: { armorId: 'rift_stalker', shards: 50 },
+      questionsRequired: 2,
+      loot: { weaponId: 'shotgun', weaponTier: 'rare', ammoPacks: 1, shards: 65 },
     }),
+    // Epic Relic Chest (3 soal -> Rift-Stalker Armor + Epic Dual Pistol)
     createChest(3380, 271, {
       tier: 'epic',
-      questionsRequired: 2,
-      loot: { weaponId: 'dual_pistol', weaponTier: 'epic', shards: 65 },
+      questionsRequired: 3,
+      loot: { weaponId: 'dual_pistol', weaponTier: 'epic', armorId: 'rift_stalker', ammoPacks: 2, shards: 120 },
     }),
     createQuickDecryptGate(2630, 362),
     createPuzzleShrine(3080, 160),
@@ -432,6 +547,10 @@ function _buildStage2(): BuiltLevel {
     worldHeight: worldH,
     playerSpawn: { x: 48, y: 370 },
     platforms,
+    movingPlatforms,
+    crumblingPlatforms,
+    lasers,
+    crystals,
     spikes,
     bouncePads,
     torches,
@@ -452,45 +571,64 @@ function _buildStage3(): BuiltLevel {
   const meta = STAGE_METADATA[3];
 
   const areas: AreaZone[] = [
-    { id: 's3_a1', name: 'AREA 1: SHATTERED EXPANSE', subtitle: `Tema: ${meta.themeTopic}`, startX: 0, endX: 1150 },
-    { id: 's3_a2', name: 'AREA 2: ZERO-POINT GAUNTLET', subtitle: 'Obsidian Bridges & Brute Guard', startX: 1150, endX: 2400 },
-    { id: 's3_a3', name: 'AREA 3: ANTECHAMBER OF SEALS', subtitle: 'Endgame Praetor Armor & Shrine', startX: 2400, endX: 3650 },
-    { id: 's3_a4', name: 'AREA 4: THE RIFT HEART', subtitle: 'Final Boss — Aetherion', startX: 3650, endX: worldW },
+    { id: 's3_a1', name: 'AREA 1: SHATTERED EXPANSE', subtitle: `Tema: ${meta.themeTopic} · Floating Bridges`, startX: 0, endX: 1150 },
+    { id: 's3_a2', name: 'AREA 2: ZERO-POINT GAUNTLET', subtitle: 'Rift Lasers, Moving Sky-Ferries & Brute Guard', startX: 1150, endX: 2400 },
+    { id: 's3_a3', name: 'AREA 3: ANTECHAMBER OF SEALS', subtitle: 'Endgame Relic Chest & Shrine', startX: 2400, endX: 3650 },
+    { id: 's3_a4', name: 'AREA 4: THE RIFT HEART', subtitle: 'Final Boss — Aetherion (Drop Dual Sword & Praetor!)', startX: 3650, endX: worldW },
   ];
 
   const platforms: Platform[] = [
     { x: -16, y: 0, w: 16, h: worldH, kind: 'wall' },
     { x: worldW, y: 0, w: 16, h: worldH, kind: 'wall' },
 
-    // Area 1 — Floating Ruins
+    // Area 1
     { x: 0, y: 400, w: 380, h: 140, kind: 'stone' },
-    { x: 430, y: 360, w: 130, h: 16, kind: 'stone' },
-    { x: 615, y: 310, w: 140, h: 16, kind: 'stone' },
     { x: 800, y: 245, w: 160, h: 12, oneWay: true, kind: 'metal' },
     { x: 840, y: 400, w: 310, h: 140, kind: 'stone' },
 
-    // Area 2 — Zero-Point Chasm
+    // Area 2
     { x: 1150, y: 400, w: 320, h: 140, kind: 'stone' },
     { x: 1470, y: 470, w: 280, h: 70, kind: 'stone' },
-    { x: 1550, y: 350, w: 120, h: 10, oneWay: true, kind: 'metal' },
     { x: 1750, y: 400, w: 650, h: 140, kind: 'stone' },
     { x: 1860, y: 180, w: 22, h: 190, kind: 'wall' },
     { x: 1965, y: 125, w: 22, h: 195, kind: 'wall' },
     { x: 1987, y: 170, w: 230, h: 14, kind: 'metal' },
     { x: 2150, y: 300, w: 160, h: 10, oneWay: true, kind: 'metal' },
 
-    // Area 3 — Antechamber of Seals
+    // Area 3
     { x: 2400, y: 400, w: 1250, h: 140, kind: 'stone' },
     { x: 2560, y: 320, w: 150, h: 10, oneWay: true, kind: 'metal' },
-    { x: 2770, y: 250, w: 170, h: 10, oneWay: true, kind: 'metal' },
     { x: 3000, y: 195, w: 220, h: 12, kind: 'stone' },
     { x: 3310, y: 280, w: 210, h: 14, kind: 'metal' },
 
-    // Area 4 — Final Boss Arena
+    // Area 4
     { x: 3650, y: 400, w: 1150, h: 140, kind: 'stone' },
     { x: 3820, y: 310, w: 140, h: 10, oneWay: true, kind: 'metal' },
     { x: 4065, y: 240, w: 160, h: 10, oneWay: true, kind: 'metal' },
     { x: 4320, y: 310, w: 140, h: 10, oneWay: true, kind: 'metal' },
+  ];
+
+  const movingPlatforms: MovingPlatform[] = [
+    _mkMoving('s3_mp1', 420, 360, 620, 310, 76, 80),
+    _mkMoving('s3_mp2', 1490, 345, 1660, 345, 76, 85),
+    _mkMoving('s3_mp3', 2800, 290, 2800, 200, 72, 65),
+  ];
+
+  const crumblingPlatforms: CrumblingPlatform[] = [
+    _mkCrumble('s3_cp1', 670, 295, 75),
+    _mkCrumble('s3_cp2', 2740, 250, 64),
+  ];
+
+  const lasers: LaserHazard[] = [
+    { x: 1020, y: 310, w: 8, h: 90, period: 2.6, activeWindow: 1.2, offset: 0, damage: 20 },
+    { x: 2280, y: 310, w: 8, h: 90, period: 2.6, activeWindow: 1.2, offset: 1.1, damage: 20 },
+    { x: 3250, y: 310, w: 8, h: 90, period: 2.4, activeWindow: 1.2, offset: 0.4, damage: 22 },
+  ];
+
+  const crystals: ExplosiveCrystal[] = [
+    { id: 's3_c1', x: 1320, y: 376, w: 14, h: 24, exploded: false },
+    { id: 's3_c2', x: 2820, y: 376, w: 14, h: 24, exploded: false },
+    { id: 's3_c3', x: 3200, y: 376, w: 14, h: 24, exploded: false },
   ];
 
   const spikes: SpikeHazard[] = [
@@ -524,25 +662,29 @@ function _buildStage3(): BuiltLevel {
   ];
 
   const interactables: InteractableInstance[] = [
+    // Supply Chest (1 soal -> Energy + Ammo)
     createChest(860, 221, {
-      tier: 'rare',
+      tier: 'common',
       questionsRequired: 1,
-      loot: { weaponId: 'rifle', weaponTier: 'rare', shards: 50 },
+      loot: { energyRestore: 80, ammoPacks: 1, nanoVials: 1, shards: 45 },
     }),
+    // Rare Armory Chest (2 soal -> Rifle + Ammo)
     createChest(2080, 146, {
       tier: 'rare',
-      questionsRequired: 1,
-      loot: { weaponId: 'shotgun', weaponTier: 'epic', shards: 65 },
+      questionsRequired: 2,
+      loot: { weaponId: 'rifle', weaponTier: 'rare', ammoPacks: 2, shards: 75 },
     }),
+    // Supply Chest (1 soal -> Energy + Ammo)
     createChest(2210, 276, {
-      tier: 'rare',
+      tier: 'common',
       questionsRequired: 1,
-      loot: { weaponId: 'axe', weaponTier: 'epic', shards: 65 },
+      loot: { energyRestore: 90, ammoPacks: 2, shards: 50 },
     }),
+    // Epic Relic Chest (3 soal -> Dual Sword Epic + Aether-Forge Praetor!)
     createChest(3400, 256, {
       tier: 'epic',
-      questionsRequired: 2,
-      loot: { weaponId: 'rifle', weaponTier: 'epic', armorId: 'aether_praetor', shards: 120 },
+      questionsRequired: 3,
+      loot: { weaponId: 'dual_sword', weaponTier: 'epic', armorId: 'aether_praetor', ammoPacks: 2, shards: 150 },
     }),
     createQuickDecryptGate(2640, 352),
     createPuzzleShrine(3090, 155),
@@ -560,6 +702,10 @@ function _buildStage3(): BuiltLevel {
     worldHeight: worldH,
     playerSpawn: { x: 48, y: 360 },
     platforms,
+    movingPlatforms,
+    crumblingPlatforms,
+    lasers,
+    crystals,
     spikes,
     bouncePads,
     torches,
@@ -571,7 +717,7 @@ function _buildStage3(): BuiltLevel {
   };
 }
 
-// ── STANDALONE SURVIVAL COURTYARD (1100 x 360) ──────────────
+// ── STANDALONE SURVIVAL COURTYARD ───────────────────────────
 function _buildSurvivalArena(): BuiltLevel {
   const seg = DEMO_SEGMENTS.survival;
   const worldW = 1100;
@@ -597,6 +743,13 @@ function _buildSurvivalArena(): BuiltLevel {
       { x: 420, y: 160, w: 16, h: 90, kind: 'wall' },
       { x: 664, y: 160, w: 16, h: 90, kind: 'wall' },
     ],
+    movingPlatforms: [],
+    crumblingPlatforms: [],
+    lasers: [],
+    crystals: [
+      { id: 'surv_c1', x: 260, y: 292, w: 14, h: 24, exploded: false },
+      { id: 'surv_c2', x: 830, y: 292, w: 14, h: 24, exploded: false },
+    ],
     spikes: [],
     bouncePads: [
       { x: 205, y: 308, w: 28, h: 8, boostVy: -380 },
@@ -611,7 +764,7 @@ function _buildSurvivalArena(): BuiltLevel {
       {
         id: 'survival_arena',
         name: 'SURVIVAL COURTYARD',
-        subtitle: 'Bertahan 45s & aktifkan Emergency Shield!',
+        subtitle: 'Bertahan 45s & gunakan Explosive Crystal + Terminal!',
         startX: 0,
         endX: worldW,
       },
@@ -629,7 +782,7 @@ function _buildSurvivalArena(): BuiltLevel {
   };
 }
 
-// ── STANDALONE HOLD THE FORT ARENA (1160 x 360) ─────────────
+// ── STANDALONE HOLD THE FORT ARENA ──────────────────────────
 function _buildDefenseArena(): BuiltLevel {
   const seg = DEMO_SEGMENTS.defense;
   const worldW = 1160;
@@ -652,6 +805,13 @@ function _buildDefenseArena(): BuiltLevel {
       { x: 170, y: 240, w: 180, h: 10, oneWay: true, kind: 'metal' },
       { x: 810, y: 240, w: 180, h: 10, oneWay: true, kind: 'metal' },
       { x: 430, y: 205, w: 300, h: 10, oneWay: true, kind: 'metal' },
+    ],
+    movingPlatforms: [],
+    crumblingPlatforms: [],
+    lasers: [],
+    crystals: [
+      { id: 'def_c1', x: 240, y: 292, w: 14, h: 24, exploded: false },
+      { id: 'def_c2', x: 910, y: 292, w: 14, h: 24, exploded: false },
     ],
     spikes: [],
     bouncePads: [

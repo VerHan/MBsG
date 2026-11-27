@@ -100,16 +100,19 @@ export function HUD({
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-[10px]">
+          <div className="flex items-center justify-between gap-2 text-[10px]">
             <span className="text-loot-green font-semibold">
               [Q] Vial: {hud.nanoVials}/{hud.maxNanoVials}
             </span>
-            {hud.manaShieldTimer > 0 && (
-              <span className="text-mana-cyan font-bold animate-pulse">
-                SHIELD {hud.manaShieldTimer.toFixed(1)}s
-              </span>
-            )}
+            <span className="text-loot-gold font-semibold">
+              [R] Ammo: {hud.ammoPacks}/{hud.maxAmmoPacks}
+            </span>
           </div>
+          {hud.manaShieldTimer > 0 && (
+            <div className="mt-0.5 text-[10px] text-mana-cyan font-bold animate-pulse">
+              SHIELD {hud.manaShieldTimer.toFixed(1)}s
+            </div>
+          )}
         </div>
 
         {/* Top-Center: Area / Mode Objective / Timer / Pylon HP / Boss HP */}

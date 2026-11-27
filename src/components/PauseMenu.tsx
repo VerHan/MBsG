@@ -91,6 +91,7 @@ export function PauseMenu({
             <div><span className="text-white">K / Klik Kanan</span> : Ranged Weapon</div>
             <div><span className="text-white">E</span> : Chest / Shrine / Pillar</div>
             <div><span className="text-white">Q</span> : Nano-Vial Heal</div>
+            <div><span className="text-white">R</span> : Pakai Ammo Pack (+60 EN)</div>
             <div><span className="text-white">F / I</span> : Adrenaline / Inventory</div>
           </div>
         </div>

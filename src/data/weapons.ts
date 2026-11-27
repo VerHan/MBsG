@@ -1,54 +1,70 @@
 // ============================================================
-// RIFTBOUND: SLAYER CORPS — Weapon Definitions (7 Weapons)
+// RIFTBOUND: SLAYER CORPS — Weapon Definitions (8 Weapons)
+// Melee Progression: Dagger -> Sword -> Axe -> Dual Sword
+// Ranged: Pistol, Dual Pistol, Shotgun, Rifle
 // ============================================================
 
 import type { WeaponDef } from '../types';
 
 export const WEAPONS: Record<string, WeaponDef> = {
   // ── MELEE WEAPONS (Slot 1) ────────────────────────────────
+  dagger: {
+    id: 'dagger',
+    name: 'Slayer Combat Dagger',
+    slot: 'melee',
+    baseDamage: 14,
+    hitsPerAttack: 1,
+    attackSpeed: 'very_fast',
+    attackCooldown: 11, // 0.18s super snappy starter
+    energyCost: 0,
+    specialTrait: 'Jarak dekat sangat cepat. Setiap hit memulihkan +11 Energy Ammo.',
+    description:
+      'Belati standar rekrutan Slayer Corps. Jangkauan pendek, tetapi sangat lincah untuk mengisi Energy Cell.',
+  },
+
   sword: {
     id: 'sword',
     name: 'Rift Cleaver',
     slot: 'melee',
-    baseDamage: 20,
+    baseDamage: 22,
     hitsPerAttack: 1,
     attackSpeed: 'fast',
-    attackCooldown: 18, // frames @ 60fps = 0.3s
+    attackCooldown: 17,
     energyCost: 0,
-    specialTrait: 'Pogo-slash friendly. Melee hit restores +8 Energy.',
+    specialTrait: 'Jangkauan seimbang 3-hit combo, nyaman untuk Pogo-Slash. +10 Energy/hit.',
     description:
-      'Standard-issue Slayer blade. Balanced 3-hit combo with good pogo-slash reach.',
+      'Pedang tempur Slayer jarak menengah dengan tebasan seimbang.',
+  },
+
+  axe: {
+    id: 'axe',
+    name: 'Ruinbreaker Axe',
+    slot: 'melee',
+    baseDamage: 44,
+    hitsPerAttack: 1,
+    attackSpeed: 'slow',
+    attackCooldown: 34,
+    energyCost: 0,
+    specialTrait: 'Armor Break (hancurkan perisai musuh 1 hit) + knockback besar. +14 Energy/hit.',
+    description:
+      'Kapak berat peninggalan pabrik kuno — menghancurkan perisai Sentinel seketika.',
   },
 
   dual_sword: {
     id: 'dual_sword',
     name: 'Phantom Fangs',
     slot: 'melee',
-    baseDamage: 12,
+    baseDamage: 15,
     hitsPerAttack: 2,
     attackSpeed: 'very_fast',
-    attackCooldown: 10, // frames @ 60fps = 0.17s
+    attackCooldown: 10,
     energyCost: 0,
-    specialTrait: '+15% Crit Chance. Dash cooldown reduced by 20%. Melee hit restores +5 Energy per blade.',
+    specialTrait: 'Tier Tertinggi: 2x tebasan kilat, +20% Crit Chance, +8 Energy/hit.',
     description:
-      'Twin blades for those who prefer speed over power. Flurry slash unleashes a storm of cuts.',
+      'Pedang kembar puncak arsenal Slayer — badai tebasan beruntun berkecepatan tinggi.',
   },
 
-  axe: {
-    id: 'axe',
-    name: 'Ruinbreaker',
-    slot: 'melee',
-    baseDamage: 42,
-    hitsPerAttack: 1,
-    attackSpeed: 'slow',
-    attackCooldown: 36, // frames @ 60fps = 0.6s
-    energyCost: 0,
-    specialTrait: 'Armor Break (destroys enemy shields in 1 hit). Heavy knockback. Melee hit restores +12 Energy.',
-    description:
-      'Massive salvaged axe. Slow but devastating — cracks Sentinel shields like glass.',
-  },
-
-  // ── RANGED WEAPONS (Slot 2) ───────────────────────────────
+  // ── RANGED WEAPONS (Slot 2 — Energy Cell & Ammo Packs) ────
   pistol: {
     id: 'pistol',
     name: 'Void Repeater',
@@ -56,60 +72,54 @@ export const WEAPONS: Record<string, WeaponDef> = {
     baseDamage: 18,
     hitsPerAttack: 1,
     attackSpeed: 'fast',
-    attackCooldown: 15, // frames
-    energyCost: 8,
-    specialTrait: 'Instant reload. Stable long-range precision.',
-    description:
-      'Reliable sidearm. No reload downtime — just point and fire.',
+    attackCooldown: 15,
+    energyCost: 7,
+    specialTrait: 'Tembakan presisi jarak jauh hemat Energy.',
+    description: 'Pistol energi ringan untuk menembak musuh terbang.',
   },
 
   dual_pistol: {
     id: 'dual_pistol',
     name: 'Storm Heralds',
     slot: 'ranged',
-    baseDamage: 11,
+    baseDamage: 12,
     hitsPerAttack: 2,
     attackSpeed: 'very_fast',
-    attackCooldown: 12, // frames
-    energyCost: 6, // per shot (fires 2)
-    specialTrait: 'Air-hover: MC floats briefly while firing in mid-air. Rapid burst fire.',
-    description:
-      'Dual energy pistols. Firing mid-air suspends you momentarily — perfect for aerial crowd control.',
+    attackCooldown: 12,
+    energyCost: 6,
+    specialTrait: 'Air-hover sebentar saat menembak di udara.',
+    description: 'Sepasang pistol energi dengan tembakan ganda beruntun.',
   },
 
   shotgun: {
     id: 'shotgun',
     name: 'Mana Breacher',
     slot: 'ranged',
-    baseDamage: 12,
-    hitsPerAttack: 5, // 5 pellets spread
+    baseDamage: 13,
+    hitsPerAttack: 5,
     attackSpeed: 'slow',
-    attackCooldown: 40, // frames
-    energyCost: 25,
-    specialTrait: 'Massive close-range damage (5 spread pellets). Strong knockback on enemies. Screen shake on fire.',
-    description:
-      'Point-blank devastation. 5 Mana pellets fan out — lethal up close, useless at range.',
+    attackCooldown: 38,
+    energyCost: 22,
+    specialTrait: '5 proyektil menyebar jarak dekat + knockback & screen shake.',
+    description: 'Senjata jarak dekat penghancur kerumunan musuh.',
   },
 
   rifle: {
     id: 'rifle',
     name: 'Aether Lance',
     slot: 'ranged',
-    baseDamage: 35,
+    baseDamage: 38,
     hitsPerAttack: 1,
     attackSpeed: 'normal',
-    attackCooldown: 30, // frames
-    energyCost: 18,
-    specialTrait: 'Piercing beam — passes through all enemies in a straight line.',
-    description:
-      'Concentrated Mana beam that punches through every target in its path. Line them up.',
+    attackCooldown: 28,
+    energyCost: 16,
+    specialTrait: 'Sinar piercing menembus seluruh musuh dalam satu garis.',
+    description: 'Senapan energi Ancient Tech berdaya tembus tinggi.',
   },
 };
 
-/** Convenience arrays for each slot */
-export const MELEE_WEAPON_IDS = ['sword', 'dual_sword', 'axe'] as const;
+export const MELEE_WEAPON_IDS = ['dagger', 'sword', 'axe', 'dual_sword'] as const;
 export const RANGED_WEAPON_IDS = ['pistol', 'dual_pistol', 'shotgun', 'rifle'] as const;
 
-/** Starter loadout */
-export const DEFAULT_MELEE = 'sword';
+export const DEFAULT_MELEE = 'dagger';
 export const DEFAULT_RANGED = 'pistol';

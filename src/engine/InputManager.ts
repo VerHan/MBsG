@@ -13,6 +13,7 @@ export type InputAction =
   | 'ranged'
   | 'interact'
   | 'heal'
+  | 'use_ammo'
   | 'inventory'
   | 'pause'
   | 'adrenaline';
@@ -33,6 +34,7 @@ const DEFAULT_BINDINGS: KeyBinding[] = [
   { action: 'ranged',     keys: ['KeyK'], mouse: 2 },
   { action: 'interact',   keys: ['KeyE'] },
   { action: 'heal',       keys: ['KeyQ'] },
+  { action: 'use_ammo',   keys: ['KeyR'] },
   { action: 'inventory',  keys: ['KeyI', 'Tab'] },
   { action: 'pause',      keys: ['Escape', 'KeyP'] },
   { action: 'adrenaline', keys: ['KeyF'] },
