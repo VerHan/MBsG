@@ -41,8 +41,20 @@ import {
   drawWeaponInHand,
 } from './PixelSpriteRenderer';
 import { SoundManager } from './SoundManager';
-import { buildDemoLevel, type BuiltLevel, type Platform } from './LevelBuilder';
+import {
+  buildPlayableLevel,
+  type BuiltLevel,
+  type Platform,
+  type PlayableModeKey,
+} from './LevelBuilder';
 import { Player } from '../entities/Player';
+import {
+  breakShieldViaRunicPillar,
+  createBoss,
+  damageBoss,
+  updateBoss,
+  type BossInstance,
+} from '../entities/Boss';
 import { createEnemy, damageEnemy, updateEnemyAI, type EnemyInstance } from '../entities/Enemy';
 import {
   createDualPistolBurst,
@@ -105,6 +117,8 @@ interface ManaTurret {
 
 export interface HudSnapshot {
   mode: GameMode;
+  stageNumber: 1 | 2 | 3;
+  themeTopic: string;
   segmentName: string;
   areaName: string;
   areaSubtitle: string;
@@ -133,6 +147,16 @@ export interface HudSnapshot {
   interactPrompt: string | null;
   manaShieldTimer: number;
   turretTimer: number;
+  boss?: {
+    name: string;
+    title: string;
+    hp: number;
+    maxHp: number;
+    shieldActive: boolean;
+    shieldHp: number;
+    shieldMaxHp: number;
+    stunned: boolean;
+  };
 }
 
 export interface PuzzleRequest {
@@ -156,6 +180,7 @@ export class GameEngine {
   public player: Player;
   public level: BuiltLevel | null = null;
   public enemies: EnemyInstance[] = [];
+  public boss: BossInstance | null = null;
   public projectiles: ProjectileInstance[] = [];
   public interactables: InteractableInstance[] = [];
   public paused = false;
@@ -171,6 +196,9 @@ export class GameEngine {
   private _manaShieldTimer = 0;
   private _spikeIFrame = 0;
   private _bounceCooldown = 0;
+  private _bossTriggered = false;
+  private _bossContactCooldown = 0;
+  private _bossFlashTimer = 0;
   private _kills = 0;
   private _hudSyncCounter = 0;
 
@@ -253,11 +281,15 @@ export class GameEngine {
     }
   }
 
-  loadDemoMode(modeKey: 'traverse' | 'survival' | 'defense') {
-    const built = buildDemoLevel(modeKey);
+  loadPlayableMode(modeKey: PlayableModeKey, keepGear = false) {
+    const built = buildPlayableLevel(modeKey);
     this.level = built;
     this.currentMode = built.segment.mode;
     this.enemies = built.enemies;
+    this.boss = null;
+    this._bossTriggered = false;
+    this._bossContactCooldown = 0;
+    this._bossFlashTimer = 0;
     this.interactables = built.interactables;
     this.projectiles = [];
     this._slashes = [];
@@ -270,6 +302,10 @@ export class GameEngine {
     this._lastStyleRank = 'D';
     this._scaleX = 1;
     this._scaleY = 1;
+
+    if (!keepGear) {
+      this.player = new Player();
+    }
 
     this.player.x = built.playerSpawn.x;
     this.player.y = built.playerSpawn.y;
@@ -285,12 +321,7 @@ export class GameEngine {
       y: this.player.y + 10,
     }));
 
-    const themeMap = {
-      traverse: 'ruins',
-      survival: 'foundry',
-      defense: 'rift_scar',
-    } as const;
-    this.parallax.setTheme(themeMap[modeKey]);
+    this.parallax.setTheme(built.parallaxTheme);
     this.particles.clear();
     this.mode.enter(built.segment);
     this._checkAreaTransition();
@@ -361,6 +392,8 @@ export class GameEngine {
     if (this._dropThroughTimer > 0) this._dropThroughTimer -= dt;
     if (this._bounceCooldown > 0) this._bounceCooldown -= dt;
     if (this._pylonDamageCooldown > 0) this._pylonDamageCooldown -= dt;
+    if (this._bossContactCooldown > 0) this._bossContactCooldown -= dt;
+    if (this._bossFlashTimer > 0) this._bossFlashTimer -= dt;
     if (this._meleeAnimTimer > 0) this._meleeAnimTimer = Math.max(0, this._meleeAnimTimer - dt);
     if (this._rangedAnimTimer > 0) this._rangedAnimTimer = Math.max(0, this._rangedAnimTimer - dt);
 
@@ -390,6 +423,7 @@ export class GameEngine {
     }
 
     this._updateEnemies(dt);
+    this._updateBoss(dt);
     this._updateTurrets(dt);
     this._updateProjectiles(dt);
     this._updateInteractables(dt);
@@ -584,6 +618,25 @@ export class GameEngine {
       }
     }
 
+    if (this.boss && this.boss.hp > 0) {
+      const b = this.boss;
+      if (_aabb(hx, hy, rangeW, rangeH, b.x, b.y, b.width, b.height)) {
+        hitSomething = true;
+        this._bossFlashTimer = 0.09;
+        const killed = damageBoss(b, finalDmg);
+        p.onMeleeHit();
+        this.particles.emit('hit_spark', b.x + b.width / 2, b.y + b.height / 2);
+        this._spawnFloatingText(
+          b.x + b.width / 2,
+          b.y - 8,
+          b.shieldActive ? `SHIELD -${finalDmg}` : `${finalDmg}`,
+          b.shieldActive ? '#00F0FF' : '#FACC15'
+        );
+        if (killed) this._onBossDefeated();
+        else this.sound.play('enemy_hit');
+      }
+    }
+
     if (isPogo && this.level) {
       for (const sp of this.level.spikes) {
         if (_aabb(hx, hy, rangeW, rangeH, sp.x, sp.y, sp.w, sp.h)) {
@@ -669,6 +722,25 @@ export class GameEngine {
           p.x = plat.x + plat.w;
           if (plat.kind === 'wall') p.onTouchWall(-1);
         }
+        p.vx = 0;
+      }
+    }
+
+    // Closed Quick-Decrypt Gate blocks passage until unlocked
+    for (const item of this.interactables) {
+      if (item.data.kind === 'gate' && item.data.gateType === 'quick_decrypt' && !item.data.isOpen) {
+        if (_aabb(p.x, p.y, p.width, p.height, item.x, item.y, item.width, item.height)) {
+          if (p.vx > 0) p.x = item.x - p.width;
+          else if (p.vx < 0) p.x = item.x + item.width;
+          p.vx = 0;
+        }
+      }
+    }
+
+    // Lock player inside Boss Arena during active Boss fight
+    if (this.boss && this.boss.hp > 0 && this.level.bossSpawn) {
+      if (p.x < this.level.bossSpawn.arenaMinX) {
+        p.x = this.level.bossSpawn.arenaMinX;
         p.vx = 0;
       }
     }
@@ -878,6 +950,139 @@ export class GameEngine {
     }
   }
 
+  private _updateBoss(dt: number) {
+    if (!this.level?.bossSpawn) return;
+    const bs = this.level.bossSpawn;
+    const p = this.player;
+
+    if (!this._bossTriggered && p.x >= bs.triggerX) {
+      this._bossTriggered = true;
+      this.boss = createBoss(bs.id, bs.x, bs.y);
+      this.sound.play('boss_roar');
+      this.triggerShake(5, 0.4);
+      this.onToast?.(`BOSS BANGKIT: ${this.boss.def.name} (${this.boss.def.title})!`);
+    }
+
+    if (!this.boss || this.boss.hp <= 0) return;
+
+    const b = this.boss;
+    updateBoss(
+      b,
+      dt,
+      p.x + p.width / 2,
+      p.y + p.height / 2,
+      (attack) => this._executeBossAttack(b, attack),
+      (enemyId, count) => {
+        for (let i = 0; i < count; i++) {
+          const sx = bs.arenaMinX + 80 + i * 280;
+          this.enemies.push(createEnemy(enemyId, sx, 360, { targetingPylon: false }));
+          this.particles.emit('mana_dust', sx, 360);
+        }
+      }
+    );
+
+    // Apply horizontal dash lunge velocity & keep inside arena
+    b.x += b.vx * dt;
+    b.vx *= Math.pow(0.05, dt);
+    b.x = Math.max(bs.arenaMinX + 20, Math.min(this.level.worldWidth - b.width - 50, b.x));
+
+    // Contact damage
+    if (
+      this._bossContactCooldown <= 0 &&
+      !p.isInvincible &&
+      this._manaShieldTimer <= 0 &&
+      _aabb(b.x, b.y, b.width, b.height, p.x, p.y, p.width, p.height)
+    ) {
+      this._bossContactCooldown = 0.85;
+      this._damagePlayer(b.def.contactDamage);
+    }
+  }
+
+  private _executeBossAttack(b: BossInstance, attack: string) {
+    const p = this.player;
+    const cx = b.x + b.width / 2;
+    const cy = b.y + b.height / 2;
+    const angle = Math.atan2(p.y + p.height / 2 - cy, p.x + p.width / 2 - cx);
+
+    if (attack === 'dash_cleave' || attack === 'teleport_slash') {
+      if (attack === 'teleport_slash') {
+        b.x = Math.max(
+          (this.level?.bossSpawn?.arenaMinX ?? 3650) + 30,
+          p.x + (p.facingRight ? -75 : 55)
+        );
+        this.particles.emit('enemy_death', b.x + b.width / 2, cy);
+      }
+      b.vx = (p.x > b.x ? 1 : -1) * 320;
+      this.sound.play('axe_hit');
+    } else if (
+      attack === 'slam_attack' ||
+      attack === 'ground_pound' ||
+      attack === 'piston_slam' ||
+      attack === 'rift_shockwave'
+    ) {
+      this.triggerShake(4, 0.25);
+      this.sound.play('boss_roar');
+      const floorY = b.y + b.height - 6;
+      this.projectiles.push(
+        createProjectile('boss', cx - 10, floorY, Math.PI, 210, 16, {
+          color: '#EF4444',
+          trailColor: '#F97316',
+          life: 2.5,
+          size: 6,
+        }),
+        createProjectile('boss', cx + 10, floorY, 0, 210, 16, {
+          color: '#EF4444',
+          trailColor: '#F97316',
+          life: 2.5,
+          size: 6,
+        })
+      );
+    } else if (attack === 'mana_rain') {
+      for (let i = 0; i < 5; i++) {
+        const rx = (this.level?.bossSpawn?.arenaMinX ?? 3650) + 80 + Math.random() * 880;
+        this.projectiles.push(
+          createProjectile('boss', rx, 110, Math.PI / 2, 165, 14, {
+            color: '#A855F7',
+            trailColor: '#00F0FF',
+            life: 2.6,
+            size: 5,
+          })
+        );
+      }
+    } else {
+      // boulder_throw / mana_orb_barrage / flame_sweep / mana_beam_tracking
+      const count = attack === 'mana_orb_barrage' ? 5 : 3;
+      const spread = 0.55;
+      for (let i = 0; i < count; i++) {
+        const a = angle - spread / 2 + (spread / Math.max(1, count - 1)) * i;
+        this.projectiles.push(
+          createProjectile('boss', cx, cy, a, 165, 14, {
+            color: '#A855F7',
+            trailColor: '#00F0FF',
+            life: 3.2,
+            size: 5,
+          })
+        );
+      }
+    }
+  }
+
+  private _onBossDefeated() {
+    if (!this.boss) return;
+    this.sound.play('boss_roar');
+    this.triggerShake(6, 0.45);
+    this.particles.emit(
+      'explosion',
+      this.boss.x + this.boss.width / 2,
+      this.boss.y + this.boss.height / 2
+    );
+    this._kills += 5;
+    this.player.state.shards += 150;
+    this.onToast?.(
+      `${this.boss.def.name} DIKALAHKAN! +150 Shards! Masuk Exit Gate di kanan!`
+    );
+  }
+
   private _updateTurrets(dt: number) {
     for (let i = this._turrets.length - 1; i >= 0; i--) {
       const t = this._turrets[i];
@@ -953,6 +1158,19 @@ export class GameEngine {
               proj.alive = false;
               break;
             }
+          }
+        }
+        if (proj.alive && this.boss && this.boss.hp > 0 && !proj.hitTargets.has('boss')) {
+          const b = this.boss;
+          if (_aabb(proj.x, proj.y, proj.width, proj.height, b.x, b.y, b.width, b.height)) {
+            proj.hitTargets.add('boss');
+            this._bossFlashTimer = 0.08;
+            const killed = damageBoss(b, proj.damage);
+            this.particles.emit('hit_spark', proj.x, proj.y);
+            this._spawnFloatingText(b.x + b.width / 2, b.y - 8, `${proj.damage}`, '#FACC15');
+            if (killed) this._onBossDefeated();
+            else this.sound.play('enemy_hit');
+            if (!proj.piercing) proj.alive = false;
           }
         }
       } else {
@@ -1047,7 +1265,37 @@ export class GameEngine {
         return;
       }
 
+      if (item.data.kind === 'generic' && item.data.subType === 'runic_pillar') {
+        if (this.boss && this.boss.shieldActive) {
+          this.pauseForModal();
+          this.onPuzzleTrigger?.({
+            trigger: 'pillar',
+            questionsRequired: 1,
+            title: 'RUNIC PILLAR — SHATTER BOSS SHIELD',
+            interactableId: item.id,
+          });
+        } else {
+          this.onToast?.('Runic Pillar aktif saat Boss menyalakan Perisai Mana.');
+        }
+        return;
+      }
+
+      if (item.data.kind === 'gate' && item.data.gateType === 'quick_decrypt' && !item.data.isOpen) {
+        this.pauseForModal();
+        this.onPuzzleTrigger?.({
+          trigger: 'gate',
+          questionsRequired: 1,
+          title: 'ENCRYPTED LOGIC BARRIER GATE',
+          interactableId: item.id,
+        });
+        return;
+      }
+
       if (item.data.kind === 'gate' && item.data.gateType === 'exit') {
+        if (this.boss && this.boss.hp > 0) {
+          this.onToast?.(`Kalahkan ${this.boss.def.name} terlebih dahulu!`);
+          return;
+        }
         this.mode.completeTraverse();
         return;
       }
@@ -1117,6 +1365,25 @@ export class GameEngine {
       }
       this.player.equipArmor('aether_praetor');
       this.onToast?.('SHRINE CLEARED! +120 Shards, Full Vials & Aether-Forge Praetor Armor!');
+    }
+
+    if (item.data.kind === 'generic' && item.data.subType === 'runic_pillar') {
+      if (this.boss) {
+        breakShieldViaRunicPillar(this.boss);
+        this.sound.play('boss_stun');
+        this.triggerShake(5, 0.3);
+        this.particles.emit('explosion', this.boss.x + this.boss.width / 2, this.boss.y + 20);
+        this.onToast?.(`PERISAI ${this.boss.def.name} HANCUR! Boss Stun 4 detik!`);
+      }
+    }
+
+    if (item.data.kind === 'gate' && item.data.gateType === 'quick_decrypt') {
+      item.data.isOpen = true;
+      item.used = true;
+      this.sound.play('gate_open');
+      this.player.state.shards += 30;
+      this.particles.emit('chest_open', item.x + 4, item.y + 24);
+      this.onToast?.('Gerbang Dekripsi terbuka! +30 Shards!');
     }
 
     if (item.data.kind === 'terminal') {
@@ -1205,6 +1472,7 @@ export class GameEngine {
       this._renderInteractables(ctx);
       this._renderTurrets(ctx);
       this._renderEnemies(ctx);
+      this._renderBoss(ctx);
       this._renderScarf(ctx);
       this._renderPlayer(ctx);
       this._renderSlashes(ctx);
@@ -1353,6 +1621,26 @@ export class GameEngine {
           ctx.fillStyle = 'rgba(0, 240, 255, 0.25)';
           ctx.fillRect(item.x - 10, item.y - 12, item.width + 20, item.height + 12);
         }
+      } else if (item.data.kind === 'generic' && item.data.subType === 'runic_pillar') {
+        const active = Boolean(this.boss && this.boss.shieldActive);
+        ctx.fillStyle = '#2B2F3A';
+        ctx.fillRect(item.x + 2, item.y + 4, 12, 36);
+        ctx.fillStyle = active ? '#00F0FF' : '#475569';
+        ctx.fillRect(item.x + 5, item.y + 8 + bob, 6, 18);
+        if (active) {
+          ctx.strokeStyle = '#FACC15';
+          ctx.strokeRect(item.x, item.y + 2, 16, 38);
+        }
+      } else if (item.data.kind === 'gate' && item.data.gateType === 'quick_decrypt') {
+        if (!item.data.isOpen) {
+          ctx.fillStyle = 'rgba(0, 240, 255, 0.25)';
+          ctx.fillRect(item.x, item.y, item.width, item.height);
+          ctx.strokeStyle = '#00F0FF';
+          ctx.strokeRect(item.x, item.y, item.width, item.height);
+        } else {
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.35)';
+          ctx.fillRect(item.x, item.y, item.width, 6);
+        }
       } else if (item.data.kind === 'gate' && item.data.gateType === 'exit') {
         ctx.fillStyle = '#161B29';
         ctx.fillRect(item.x, item.y, item.width, item.height);
@@ -1442,6 +1730,56 @@ export class GameEngine {
         );
       }
     }
+  }
+
+  private _renderBoss(ctx: CanvasRenderingContext2D) {
+    if (!this.boss || this.boss.hp <= 0) return;
+    const b = this.boss;
+    const flash = this._bossFlashTimer > 0;
+    const isStunned = b.stunTimer > 0;
+    const isTelegraph = b.attackState === 'telegraph';
+
+    ctx.save();
+    // Boss silhouette / armored colossus body
+    ctx.fillStyle = flash
+      ? '#FFFFFF'
+      : b.def.id === 'aetherion'
+        ? '#1E1B4B'
+        : b.def.id === 'forge_titan'
+          ? '#451A03'
+          : '#2B2F3A';
+    ctx.fillRect(Math.round(b.x), Math.round(b.y), b.width, b.height);
+
+    // Armored rim & glowing core
+    ctx.strokeStyle = isTelegraph ? '#EF4444' : isStunned ? '#00F0FF' : '#A855F7';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(Math.round(b.x), Math.round(b.y), b.width, b.height);
+
+    // Visor eyes facing player
+    const eyeX = b.facingRight ? b.x + b.width - 14 : b.x + 4;
+    ctx.fillStyle = isStunned ? '#00F0FF' : '#F97316';
+    ctx.fillRect(Math.round(eyeX), Math.round(b.y + 8), 10, 4);
+
+    // Core
+    ctx.fillStyle = flash ? '#FFFFFF' : '#A855F7';
+    ctx.fillRect(Math.round(b.x + b.width / 2 - 6), Math.round(b.y + 18), 12, 12);
+
+    // Mana Shield bubble
+    if (b.shieldActive) {
+      ctx.strokeStyle = '#00F0FF';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(b.x + b.width / 2, b.y + b.height / 2, b.width * 0.72, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    if (isStunned) {
+      ctx.fillStyle = '#00F0FF';
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('STUNNED!', b.x + b.width / 2, b.y - 6);
+    }
+    ctx.restore();
   }
 
   private _renderScarf(ctx: CanvasRenderingContext2D) {
@@ -1657,6 +1995,14 @@ export class GameEngine {
       if (item.data.kind === 'generic' && item.data.subType === 'puzzle_shrine') {
         return '[E] Tantang Ancient Puzzle Shrine (3 Soal)';
       }
+      if (item.data.kind === 'generic' && item.data.subType === 'runic_pillar') {
+        return this.boss?.shieldActive
+          ? '[E] Runic Pillar — Hancurkan Perisai Boss!'
+          : 'Runic Pillar (Aktif saat Perisai Boss menyala)';
+      }
+      if (item.data.kind === 'gate' && item.data.gateType === 'quick_decrypt') {
+        return '[E] Dekripsi Gerbang Penghalang (Puzzle)';
+      }
       if (item.data.kind === 'terminal') {
         if (item.data.cooldownTimer > 0) {
           return `Terminal Cooldown (${Math.ceil(item.data.cooldownTimer)}s)`;
@@ -1671,7 +2017,9 @@ export class GameEngine {
         return '[E] Aktifkan Barricade Node';
       }
       if (item.data.kind === 'gate' && item.data.gateType === 'exit') {
-        return '[E] Masuk Checkpoint Gate (Selesai Stage)';
+        return this.boss && this.boss.hp > 0
+          ? `Terkunci — Kalahkan ${this.boss.def.name} dulu!`
+          : '[E] Masuk Checkpoint Gate (Selesai Stage)';
       }
     }
     return null;
@@ -1685,6 +2033,8 @@ export class GameEngine {
 
     this.onHudUpdate?.({
       mode: this.mode.state.mode,
+      stageNumber: this.level?.stageNumber ?? 1,
+      themeTopic: this.level?.themeTopic ?? 'Berpikir Komputasional',
       segmentName: this.mode.state.segment.name,
       areaName: area?.name ?? this.mode.state.segment.name,
       areaSubtitle: area?.subtitle ?? '',
@@ -1713,6 +2063,19 @@ export class GameEngine {
       interactPrompt: this._getInteractPrompt(),
       manaShieldTimer: this._manaShieldTimer,
       turretTimer: this._turrets[0]?.life ?? 0,
+      boss:
+        this.boss && this.boss.hp > 0
+          ? {
+              name: this.boss.def.name,
+              title: this.boss.def.title,
+              hp: this.boss.hp,
+              maxHp: this.boss.maxHp,
+              shieldActive: this.boss.shieldActive,
+              shieldHp: this.boss.shieldHp,
+              shieldMaxHp: this.boss.shieldMaxHp,
+              stunned: this.boss.stunTimer > 0,
+            }
+          : undefined,
     });
   }
 

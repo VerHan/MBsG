@@ -126,6 +126,7 @@ export type PuzzleTrigger = 'chest' | 'shrine' | 'terminal' | 'gate' | 'pillar' 
 
 export interface PuzzleQuestion {
   id: string;
+  stage: 1 | 2 | 3;
   difficulty: PuzzleDifficulty;
   category: string;
   question: string;

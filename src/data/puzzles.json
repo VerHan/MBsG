@@ -1,120 +1,164 @@
 {
-  "_README": "=== RIFTBOUND: SLAYER CORPS — BANK SOAL MODULAR (24 SOAL) ===",
-  "_INSTRUCTIONS": [
-    "Guru dapat menambah, mengedit, atau mengganti materi di sini tanpa menyentuh kode game.",
-    "usedIn menentukan tempat soal muncul: chest, shrine, terminal, gate, pillar, merchant."
-  ],
+  "_README": "=== RIFTBOUND: SLAYER CORPS — BANK SOAL PER STAGE (27 SOAL) ===",
+  "_THEMES": {
+    "stage_1": "Berpikir Komputasional (s1_01 - s1_09)",
+    "stage_2": "Gerbang Logika (s2_01 - s2_09)",
+    "stage_3": "Sistem Biner (s3_01 - s3_09)"
+  },
   "questions": [
     {
-      "id": "q_001",
-      "difficulty": "easy",
-      "category": "Sistem Biner",
-      "question": "Dekripsi kode peti: Berapakah nilai desimal dari bilangan biner 1010?",
-      "options": ["8", "10", "12", "14"],
-      "correctIndex": 1,
-      "explanation": "1010 dalam biner dihitung sebagai (1x8) + (0x4) + (1x2) + (0x1) = 10.",
-      "usedIn": ["chest", "shrine", "terminal", "merchant"]
-    },
-    {
-      "id": "q_002",
-      "difficulty": "easy",
-      "category": "Gerbang Logika",
-      "question": "Pada sirkuit gerbang logika AND, jika input A = 1 dan input B = 0, maka outputnya adalah...",
-      "options": ["0", "1", "2", "Error"],
-      "correctIndex": 0,
-      "explanation": "Gerbang AND hanya menghasilkan output 1 jika seluruh inputnya bernilai 1.",
-      "usedIn": ["chest", "shrine", "terminal", "merchant"]
-    },
-    {
-      "id": "q_003",
-      "difficulty": "easy",
-      "category": "Gerbang Logika",
-      "question": "Gerbang logika OR akan membuka kunci (output = 1) apabila...",
-      "options": [
-        "Semua input harus bernilai 0",
-        "Minimal satu input bernilai 1",
-        "Semua input harus bernilai berbeda",
-        "Hanya saat kedua input bernilai 0"
-      ],
-      "correctIndex": 1,
-      "explanation": "Gerbang OR menghasilkan nilai 1 selama ada minimal satu input yang bernilai 1.",
-      "usedIn": ["chest", "shrine", "terminal", "merchant"]
-    },
-    {
-      "id": "q_004",
-      "difficulty": "easy",
-      "category": "Flowchart",
-      "question": "Simbol Belah Ketupat (Diamond) pada flowchart digunakan untuk menyatakan...",
-      "options": [
-        "Proses perhitungan data",
-        "Input dan Output data",
-        "Keputusan atau percabangan kondisi",
-        "Awal atau akhir program"
-      ],
-      "correctIndex": 2,
-      "explanation": "Simbol belah ketupat (Decision) dipakai untuk menguji kondisi Ya/Tidak (True/False).",
-      "usedIn": ["chest", "shrine", "terminal", "merchant"]
-    },
-    {
-      "id": "q_005",
+      "id": "s1_01",
+      "stage": 1,
       "difficulty": "easy",
       "category": "Berpikir Komputasional",
       "question": "Memecah masalah besar yang kompleks menjadi bagian-bagian kecil agar mudah diselesaikan disebut...",
-      "options": ["Abstraksi", "Pengenalan Pola", "Algoritma", "Dekomposisi"],
+      "options": ["Abstraksi", "Algoritma", "Pengenalan Pola", "Dekomposisi"],
       "correctIndex": 3,
       "explanation": "Dekomposisi adalah teknik memecah persoalan rumit menjadi sub-masalah yang lebih sederhana.",
       "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
-      "id": "q_006",
+      "id": "s1_02",
+      "stage": 1,
       "difficulty": "easy",
-      "category": "Sistem Biner",
-      "question": "Satu Byte pada modul memori Ancient Tech terdiri dari berapa Bit?",
-      "options": ["4 bit", "8 bit", "16 bit", "32 bit"],
+      "category": "Berpikir Komputasional",
+      "question": "Menyaring informasi penting dan mengabaikan detail yang tidak relevan saat merancang solusi disebut...",
+      "options": ["Dekomposisi", "Abstraksi", "Iterasi", "Pengenalan Pola"],
       "correctIndex": 1,
-      "explanation": "Standar komputasi menetapkan 1 Byte sama dengan 8 Bit.",
+      "explanation": "Abstraksi berfokus pada inti masalah dengan menyembunyikan detail yang tidak diperlukan.",
       "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
-      "id": "q_007",
+      "id": "s1_03",
+      "stage": 1,
       "difficulty": "easy",
-      "category": "Flowchart",
-      "question": "Simbol Jajar Genjang (Parallelogram) pada diagram alir berfungsi untuk...",
+      "category": "Berpikir Komputasional",
+      "question": "Mengamati kesamaan pola serangan musuh agar bisa memprediksi gerakan berikutnya merupakan penerapan...",
+      "options": ["Dekomposisi", "Abstraksi", "Pengenalan Pola", "Debugging"],
+      "correctIndex": 2,
+      "explanation": "Pengenalan Pola (Pattern Recognition) mencari kesamaan atau tren untuk mempermudah penyelesaian masalah.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_04",
+      "stage": 1,
+      "difficulty": "easy",
+      "category": "Berpikir Komputasional",
+      "question": "Urutan langkah-langkah logis dan sistematis yang disusun untuk menyelesaikan suatu masalah disebut...",
+      "options": ["Algoritma", "Variabel", "Kompilasi", "Abstraksi"],
+      "correctIndex": 0,
+      "explanation": "Algoritma adalah rangkaian instruksi terurut dan logis untuk mencapai hasil tertentu.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_05",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Pada diagram alir (flowchart), simbol Belah Ketupat (Diamond) digunakan untuk menyatakan...",
+      "options": [
+        "Proses perhitungan data",
+        "Input dan Output data",
+        "Keputusan atau percabangan kondisi",
+        "Awal dan akhir program"
+      ],
+      "correctIndex": 2,
+      "explanation": "Simbol belah ketupat (Decision) dipakai untuk menguji kondisi Ya/Tidak (True/False).",
+      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+    },
+    {
+      "id": "s1_06",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Simbol Jajar Genjang (Parallelogram) pada flowchart berfungsi untuk menunjukkan proses...",
       "options": [
         "Input atau Output data",
-        "Proses pengolahan variabel",
+        "Pengolahan nilai variabel",
         "Mulai dan Selesai (Terminator)",
         "Penghubung antar halaman"
       ],
       "correctIndex": 0,
       "explanation": "Jajar genjang merepresentasikan aktivitas memasukkan data (input) atau menampilkan hasil (output).",
+      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+    },
+    {
+      "id": "s1_07",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Perhatikan pseudocode: hp = 40; IF hp < 50 THEN status = \"KRITIS\" ELSE status = \"AMAN\". Apa nilai akhir status?",
+      "options": ["AMAN", "KRITIS", "40", "Error"],
+      "correctIndex": 1,
+      "explanation": "Karena kondisi 40 < 50 bernilai benar (True), program menjalankan blok THEN sehingga status = \"KRITIS\".",
+      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+    },
+    {
+      "id": "s1_08",
+      "stage": 1,
+      "difficulty": "hard",
+      "category": "Berpikir Komputasional",
+      "question": "Algoritma: total = 0; ulangi untuk i = 1 sampai 4: total = total + i. Berapa nilai akhir variabel total?",
+      "options": ["4", "6", "10", "14"],
+      "correctIndex": 2,
+      "explanation": "Nilai total mengakumulasi 1 + 2 + 3 + 4 secara berurutan sehingga hasil akhirnya adalah 10.",
+      "usedIn": ["chest", "shrine", "gate", "pillar"]
+    },
+    {
+      "id": "s1_09",
+      "stage": 1,
+      "difficulty": "hard",
+      "category": "Berpikir Komputasional",
+      "question": "Pada Bubble Sort (urutan naik) untuk daftar [25, 10, 30, 5], bagaimana susunannya setelah tepat 1 pass selesai?",
+      "options": [
+        "[5, 10, 25, 30]",
+        "[10, 25, 5, 30]",
+        "[10, 25, 30, 5]",
+        "[10, 5, 25, 30]"
+      ],
+      "correctIndex": 1,
+      "explanation": "Pass pertama menukar (25,10) -> [10,25,30,5], lalu (25,30) tetap, lalu menukar (30,5) -> [10,25,5,30].",
+      "usedIn": ["chest", "shrine", "gate", "pillar"]
+    },
+    {
+      "id": "s2_01",
+      "stage": 2,
+      "difficulty": "easy",
+      "category": "Gerbang Logika",
+      "question": "Pada sirkuit gerbang logika AND, jika input A = 1 dan input B = 0, maka outputnya adalah...",
+      "options": ["0", "1", "2", "Error"],
+      "correctIndex": 0,
+      "explanation": "Gerbang AND hanya menghasilkan output 1 apabila seluruh inputnya bernilai 1.",
       "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
-      "id": "q_008",
+      "id": "s2_02",
+      "stage": 2,
       "difficulty": "easy",
       "category": "Gerbang Logika",
-      "question": "Jika sinyal 1 dialirkan ke gerbang logika NOT (Inverter), hasil keluarannya adalah...",
-      "options": ["1", "0", "Tidak berubah", "11"],
+      "question": "Pada sirkuit gerbang logika OR, jika input A = 0 dan input B = 1, maka outputnya adalah...",
+      "options": ["0", "1", "Tidak aktif", "Error"],
       "correctIndex": 1,
+      "explanation": "Gerbang OR menghasilkan output 1 selama minimal ada satu input yang bernilai 1.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_03",
+      "stage": 2,
+      "difficulty": "easy",
+      "category": "Gerbang Logika",
+      "question": "Jika sinyal 1 dialirkan melewati gerbang logika NOT (Inverter), hasil keluarannya adalah...",
+      "options": ["0", "1", "Tetap 1", "10"],
+      "correctIndex": 0,
       "explanation": "Gerbang NOT selalu membalikkan nilai logika input: 1 menjadi 0, dan 0 menjadi 1.",
       "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
-      "id": "q_009",
-      "difficulty": "medium",
-      "category": "Sistem Biner",
-      "question": "Konversikan angka desimal 25 ke dalam bentuk bilangan biner untuk membuka segel:",
-      "options": ["11001", "10101", "11010", "10011"],
-      "correctIndex": 0,
-      "explanation": "25 = 16 + 8 + 1, sehingga representasi binernya adalah 11001.",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
-    },
-    {
-      "id": "q_010",
+      "id": "s2_04",
+      "stage": 2,
       "difficulty": "medium",
       "category": "Gerbang Logika",
-      "question": "Gerbang logika XOR (Exclusive OR) akan menghasilkan output 1 jika...",
+      "question": "Gerbang logika XOR (Exclusive OR) akan membuka kunci (output = 1) hanya apabila...",
       "options": [
         "Kedua input bernilai 1",
         "Kedua input bernilai 0",
@@ -126,57 +170,117 @@
       "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
     },
     {
-      "id": "q_011",
-      "difficulty": "medium",
-      "category": "Berpikir Komputasional",
-      "question": "Menyaring informasi penting dan mengabaikan detail yang tidak relevan saat merancang solusi disebut...",
-      "options": ["Dekomposisi", "Abstraksi", "Iterasi", "Rekursi"],
-      "correctIndex": 1,
-      "explanation": "Abstraksi berfokus pada inti masalah dengan menyembunyikan detail yang tidak diperlukan.",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
-    },
-    {
-      "id": "q_012",
-      "difficulty": "medium",
-      "category": "Algoritma & Pemrograman",
-      "question": "Perhatikan pseudocode berikut: x = 10; IF x > 15 THEN y = 1 ELSE y = 2. Berapa nilai akhir y?",
-      "options": ["10", "15", "1", "2"],
-      "correctIndex": 3,
-      "explanation": "Karena kondisi 10 > 15 bernilai salah (False), program menjalankan blok ELSE sehingga y = 2.",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
-    },
-    {
-      "id": "q_013",
-      "difficulty": "medium",
-      "category": "Struktur Data",
-      "question": "Pada array data = [10, 20, 30, 40] dengan indeks dimulai dari 0, nilai dari data[2] adalah...",
-      "options": ["10", "20", "30", "40"],
-      "correctIndex": 2,
-      "explanation": "Indeks 0 berisi 10, indeks 1 berisi 20, dan indeks 2 berisi 30.",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
-    },
-    {
-      "id": "q_014",
+      "id": "s2_05",
+      "stage": 2,
       "difficulty": "medium",
       "category": "Gerbang Logika",
-      "question": "Berapakah output dari gerbang NAND jika input A = 1 dan input B = 1?",
+      "question": "Berapakah output dari gerbang NAND apabila input A = 1 dan input B = 1?",
       "options": ["0", "1", "2", "Undefined"],
       "correctIndex": 0,
-      "explanation": "NAND adalah kebalikan dari AND; karena 1 AND 1 = 1, maka hasil NAND-nya adalah 0.",
+      "explanation": "NAND adalah kebalikan dari AND; karena 1 AND 1 = 1, hasil akhirnya dibalik menjadi 0.",
       "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
     },
     {
-      "id": "q_015",
+      "id": "s2_06",
+      "stage": 2,
       "difficulty": "medium",
-      "category": "Algoritma & Pemrograman",
-      "question": "Berapa kali teks \"SLASH\" dicetak oleh kode Python: for i in range(1, 5): print(\"SLASH\")?",
-      "options": ["3 kali", "4 kali", "5 kali", "6 kali"],
-      "correctIndex": 1,
-      "explanation": "range(1, 5) menghasilkan urutan angka 1, 2, 3, dan 4 (batas akhir 5 tidak ikut), jadi total 4 kali.",
+      "category": "Gerbang Logika",
+      "question": "Gerbang logika NOR akan menghasilkan output 1 HANYA apabila...",
+      "options": [
+        "Semua input bernilai 1",
+        "Salah satu input bernilai 1",
+        "Kedua input berbeda nilai",
+        "Semua input bernilai 0"
+      ],
+      "correctIndex": 3,
+      "explanation": "NOR adalah kebalikan dari OR; output 1 hanya muncul saat 0 OR 0 = 0 lalu dibalik menjadi 1.",
       "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
     },
     {
-      "id": "q_016",
+      "id": "s2_07",
+      "stage": 2,
+      "difficulty": "medium",
+      "category": "Gerbang Logika",
+      "question": "Berapakah output dari gerbang XNOR (kebalikan XOR) jika input A = 0 dan input B = 0?",
+      "options": ["0", "1", "Null", "Error"],
+      "correctIndex": 1,
+      "explanation": "0 XOR 0 menghasilkan 0, sehingga gerbang XNOR membaliknya menjadi 1 (output 1 saat kedua input sama).",
+      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+    },
+    {
+      "id": "s2_08",
+      "stage": 2,
+      "difficulty": "hard",
+      "category": "Gerbang Logika",
+      "question": "Jika A = 1, B = 0, dan C = 1, berapakah hasil ekspresi (A AND B) OR (NOT B AND C)?",
+      "options": ["0", "1", "Null", "Error"],
+      "correctIndex": 1,
+      "explanation": "(1 AND 0) = 0, sementara (NOT 0 AND 1) = (1 AND 1) = 1. Hasil akhir 0 OR 1 = 1.",
+      "usedIn": ["chest", "shrine", "gate", "pillar"]
+    },
+    {
+      "id": "s2_09",
+      "stage": 2,
+      "difficulty": "hard",
+      "category": "Gerbang Logika",
+      "question": "Menurut Hukum De Morgan, rangkaian logika NOT (A OR B) ekuivalen dengan...",
+      "options": [
+        "(NOT A) OR (NOT B)",
+        "A AND B",
+        "(NOT A) AND (NOT B)",
+        "NOT (A AND B)"
+      ],
+      "correctIndex": 2,
+      "explanation": "Hukum De Morgan menyatakan negasi dari OR berubah menjadi AND dari masing-masing negasinya.",
+      "usedIn": ["chest", "shrine", "gate", "pillar"]
+    },
+    {
+      "id": "s3_01",
+      "stage": 3,
+      "difficulty": "easy",
+      "category": "Sistem Biner",
+      "question": "Satu Byte pada modul penyimpanan Ancient Tech terdiri dari berapa Bit?",
+      "options": ["4 bit", "8 bit", "16 bit", "32 bit"],
+      "correctIndex": 1,
+      "explanation": "Standar arsitektur komputer menetapkan 1 Byte sama dengan 8 Bit.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_02",
+      "stage": 3,
+      "difficulty": "easy",
+      "category": "Sistem Biner",
+      "question": "Dekripsi kode peti: Berapakah nilai desimal dari bilangan biner 1010?",
+      "options": ["8", "9", "10", "12"],
+      "correctIndex": 2,
+      "explanation": "1010 dalam biner dihitung sebagai (1x8) + (0x4) + (1x2) + (0x1) = 10.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_03",
+      "stage": 3,
+      "difficulty": "medium",
+      "category": "Sistem Biner",
+      "question": "Konversikan angka desimal 25 ke dalam bentuk bilangan biner untuk membuka segel:",
+      "options": ["11001", "10101", "11010", "10011"],
+      "correctIndex": 0,
+      "explanation": "25 = 16 + 8 + 1, sehingga representasi binernya adalah 11001.",
+      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+    },
+    {
+      "id": "s3_04",
+      "stage": 3,
+      "difficulty": "medium",
+      "category": "Sistem Biner",
+      "question": "Berapakah nilai desimal maksimum dari bilangan biner 4-bit 1111?",
+      "options": ["12", "14", "16", "15"],
+      "correctIndex": 3,
+      "explanation": "1111 dalam biner bernilai 8 + 4 + 2 + 1 = 15.",
+      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+    },
+    {
+      "id": "s3_05",
+      "stage": 3,
       "difficulty": "medium",
       "category": "Sistem Biner",
       "question": "Berapakah hasil penjumlahan bilangan biner 0101 + 0011?",
@@ -186,103 +290,47 @@
       "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
     },
     {
-      "id": "q_017",
-      "difficulty": "hard",
-      "category": "Aljabar Boolean",
-      "question": "Jika A = 1, B = 0, dan C = 1, berapakah hasil ekspresi logika (A AND B) OR (NOT B AND C)?",
-      "options": ["0", "1", "Null", "Error"],
-      "correctIndex": 1,
-      "explanation": "(1 AND 0) = 0, sedangkan (NOT 0 AND 1) = (1 AND 1) = 1. Hasil akhirnya 0 OR 1 = 1.",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "pillar"]
-    },
-    {
-      "id": "q_018",
-      "difficulty": "hard",
-      "category": "Algoritma Sorting",
-      "question": "Pada Bubble Sort (urutan naik) untuk array [30, 15, 25, 10], bagaimana susunan array setelah 1 pass selesai?",
-      "options": [
-        "[10, 15, 25, 30]",
-        "[15, 25, 10, 30]",
-        "[15, 30, 25, 10]",
-        "[15, 10, 25, 30]"
-      ],
-      "correctIndex": 1,
-      "explanation": "Pada pass pertama, elemen terbesar (30) bergeser bertahap ke ujung kanan: [15, 30, 25, 10] -> [15, 25, 30, 10] -> [15, 25, 10, 30].",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
-    },
-    {
-      "id": "q_019",
-      "difficulty": "hard",
-      "category": "Sistem Biner & ASCII",
-      "question": "Jika kode ASCII desimal untuk huruf 'A' adalah 65, maka kode biner 8-bit untuk huruf 'C' (desimal 67) adalah...",
-      "options": ["01000001", "01000010", "01000011", "01000100"],
-      "correctIndex": 2,
-      "explanation": "67 = 64 + 2 + 1, sehingga dalam format biner 8-bit ditulis 01000011.",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
-    },
-    {
-      "id": "q_020",
-      "difficulty": "hard",
-      "category": "Algoritma & Debugging",
-      "question": "Sebuah loop berjalan selama n <= 7 dengan nilai awal n = 1 dan tiap iterasi n = n + 2. Berapa kali loop dieksekusi?",
-      "options": ["3 kali", "4 kali", "5 kali", "7 kali"],
-      "correctIndex": 1,
-      "explanation": "Loop berjalan saat n bernilai 1, 3, 5, dan 7 (berhenti saat n menjadi 9), total 4 kali eksekusi.",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
-    },
-    {
-      "id": "q_021",
-      "difficulty": "hard",
-      "category": "Jaringan Komputer",
-      "question": "Alamat IPv4 192.168.1.10/24 memiliki Subnet Mask standar berupa...",
-      "options": [
-        "255.0.0.0",
-        "255.255.0.0",
-        "255.255.255.0",
-        "255.255.255.128"
-      ],
-      "correctIndex": 2,
-      "explanation": "Prefix /24 berarti 24 bit pertama bernilai 1 (tiga oktet penuh 255), yaitu 255.255.255.0.",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
-    },
-    {
-      "id": "q_022",
-      "difficulty": "hard",
-      "category": "Gerbang Logika",
-      "question": "Gerbang logika NOR akan menghasilkan output 1 HANYA apabila...",
-      "options": [
-        "Semua input bernilai 0",
-        "Semua input bernilai 1",
-        "Salah satu input bernilai 1",
-        "Kedua input berbeda nilai"
-      ],
-      "correctIndex": 0,
-      "explanation": "NOR adalah kebalikan dari OR; output 1 hanya terjadi saat 0 OR 0 = 0 lalu dibalik menjadi 1.",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
-    },
-    {
-      "id": "q_023",
+      "id": "s3_06",
+      "stage": 3,
       "difficulty": "hard",
       "category": "Sistem Biner",
-      "question": "Berapakah nilai desimal dari kode biner 101101?",
+      "question": "Berapakah nilai desimal dari kode segel biner 101101?",
       "options": ["43", "45", "47", "53"],
       "correctIndex": 1,
       "explanation": "101101 = (1x32) + (0x16) + (1x8) + (1x4) + (0x2) + (1x1) = 45.",
       "usedIn": ["chest", "shrine", "gate", "pillar"]
     },
     {
-      "id": "q_024",
+      "id": "s3_07",
+      "stage": 3,
       "difficulty": "hard",
-      "category": "Aljabar Boolean",
-      "question": "Menurut Hukum De Morgan, ekspresi logika NOT (A OR B) ekuivalen dengan...",
-      "options": [
-        "(NOT A) OR (NOT B)",
-        "(NOT A) AND (NOT B)",
-        "A AND B",
-        "NOT (A AND B)"
-      ],
-      "correctIndex": 1,
-      "explanation": "Hukum De Morgan menyatakan negasi dari OR berubah menjadi AND dari masing-masing negasinya.",
+      "category": "Sistem Biner",
+      "question": "Hitung hasil penjumlahan biner berikut untuk meruntuhkan perisai Boss: 1011 + 0110 =",
+      "options": ["10000", "11001", "10001", "10011"],
+      "correctIndex": 2,
+      "explanation": "1011 (11) + 0110 (6) = 17, yang dalam biner adalah 16 + 1 = 10001.",
+      "usedIn": ["chest", "shrine", "gate", "pillar"]
+    },
+    {
+      "id": "s3_08",
+      "stage": 3,
+      "difficulty": "hard",
+      "category": "Sistem Biner",
+      "question": "Konversikan angka desimal 52 ke dalam bentuk bilangan biner:",
+      "options": ["110100", "110010", "101100", "111000"],
+      "correctIndex": 0,
+      "explanation": "52 = 32 + 16 + 4, sehingga representasi binernya adalah 110100.",
+      "usedIn": ["chest", "shrine", "gate", "pillar"]
+    },
+    {
+      "id": "s3_09",
+      "stage": 3,
+      "difficulty": "hard",
+      "category": "Sistem Biner",
+      "question": "Jika kode ASCII desimal huruf 'A' adalah 65, maka kode biner 8-bit untuk huruf 'C' (desimal 67) adalah...",
+      "options": ["01000001", "01000010", "01000011", "01000100"],
+      "correctIndex": 2,
+      "explanation": "67 = 64 + 2 + 1, sehingga dalam format biner 8-bit ditulis 01000011.",
       "usedIn": ["chest", "shrine", "gate", "pillar"]
     }
   ]
