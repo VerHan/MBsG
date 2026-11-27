@@ -545,7 +545,7 @@ export function TitleScreen({
         </div>
 
         <div className="border border-ancient-stone bg-abyss-950/80 p-3 text-[11px] text-slate-400">
-          <span className="font-bold text-slate-200">Kontrol Mobile:</span> Arrow Pad Kiri (◄ ► Gerak · ▲ Jump · ▼ Turun) ·
+          <span className="font-bold text-slate-200">Kontrol Mobile:</span> Analog 6-Fungsi Kiri (◄ ► Gerak · ▲ Jump · ↖ ↗ Jump Arah · ▼ Turun) ·
           Kanan: ATK / THRUST / JUMP 2x / DASH / VIAL / RELOAD.{' '}
           <span className="hidden sm:inline">
             <span className="font-bold text-slate-200">Desktop:</span> <code>A/D</code> Gerak ·{' '}

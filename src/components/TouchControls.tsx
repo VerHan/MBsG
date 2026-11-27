@@ -7,10 +7,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
   ArrowUp,
+  ArrowUpLeft,
+  ArrowUpRight,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Crosshair,
   Heart,
   RotateCw,
@@ -21,7 +23,7 @@ import {
 } from 'lucide-react';
 import type { InputAction } from '../engine/InputManager';
 import type { RightClickSkillKind } from '../engine/combatRules';
-import { computeArrowPadState, type ArrowPadSample } from '../engine/locomotion';
+import { computeAnalogStickVector, type AnalogStickSample } from '../engine/locomotion';
 
 export interface TouchControlsProps {
   onAction: (action: InputAction, down: boolean, sourceId?: string) => void;
@@ -118,20 +120,23 @@ function TouchBtn({
   );
 }
 
-const NEUTRAL_PAD: ArrowPadSample = {
-  left: false,
-  right: false,
-  up: false,
-  down: false,
+const NEUTRAL_STICK: AnalogStickSample = {
   x: 0,
+  y: 0,
+  knobX: 0,
+  knobY: 0,
+  magnitude: 0,
   direction: 'neutral',
+  zone: 'neutral',
+  jump: false,
+  dropDown: false,
   active: false,
 };
 
-function ArrowPad({
+function VirtualAnalogStick({
   onAction,
   onAnalogChange,
-  size = 136,
+  size = 150,
   showLabel = true,
 }: {
   onAction: (action: InputAction, down: boolean, sourceId?: string) => void;
@@ -139,37 +144,37 @@ function ArrowPad({
   size?: number;
   showLabel?: boolean;
 }) {
-  const padRef = useRef<HTMLDivElement | null>(null);
+  const baseRef = useRef<HTMLDivElement | null>(null);
   const pointerIdRef = useRef<number | null>(null);
   const centerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const prevUpRef = useRef<boolean>(false);
-  const [pad, setPad] = useState<ArrowPadSample>(NEUTRAL_PAD);
+  const prevJumpRef = useRef<boolean>(false);
+  const [stick, setStick] = useState<AnalogStickSample>(NEUTRAL_STICK);
 
-  const radius = size / 2;
+  const maxRadius = Math.round(size * 0.36);
 
-  const applyPadSample = useCallback(
-    (sample: ArrowPadSample) => {
-      setPad(sample);
-      onAnalogChange(sample.x, sample.up ? -1 : sample.down ? 1 : 0, sample.down);
-      if (sample.up !== prevUpRef.current) {
-        prevUpRef.current = sample.up;
-        onAction('jump', sample.up, 'dpad');
+  const applySample = useCallback(
+    (sample: AnalogStickSample) => {
+      setStick(sample);
+      onAnalogChange(sample.x, sample.y, sample.dropDown);
+      if (sample.jump !== prevJumpRef.current) {
+        prevJumpRef.current = sample.jump;
+        onAction('jump', sample.jump, 'analog');
       }
     },
     [onAction, onAnalogChange]
   );
 
-  const releasePad = useCallback(() => {
+  const releaseStick = useCallback(() => {
     pointerIdRef.current = null;
-    applyPadSample(NEUTRAL_PAD);
-  }, [applyPadSample]);
+    applySample(NEUTRAL_STICK);
+  }, [applySample]);
 
   useEffect(() => {
     return () => {
       onAnalogChange(0, 0, false);
-      if (prevUpRef.current) {
-        prevUpRef.current = false;
-        onAction('jump', false, 'dpad');
+      if (prevJumpRef.current) {
+        prevJumpRef.current = false;
+        onAction('jump', false, 'analog');
       }
     };
   }, [onAction, onAnalogChange]);
@@ -178,17 +183,17 @@ function ArrowPad({
     (clientX: number, clientY: number) => {
       const dx = clientX - centerRef.current.x;
       const dy = clientY - centerRef.current.y;
-      const sample = computeArrowPadState(dx, dy, radius);
-      applyPadSample(sample);
+      const sample = computeAnalogStickVector(dx, dy, maxRadius, 0.16);
+      applySample(sample);
     },
-    [radius, applyPadSample]
+    [maxRadius, applySample]
   );
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (pointerIdRef.current !== null) return;
     e.preventDefault();
     e.stopPropagation();
-    const el = padRef.current;
+    const el = baseRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     centerRef.current = {
@@ -213,134 +218,184 @@ function ArrowPad({
   const handlePointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
     if (pointerIdRef.current !== e.pointerId) return;
     e.preventDefault();
-    releasePad();
+    releaseStick();
   };
 
-  const directionReadout =
-    pad.direction === 'up-left'
-      ? '↖ JUMP KIRI'
-      : pad.direction === 'up-right'
+  const isJumpUp = stick.zone === 'jump_up';
+  const isJumpLeft = stick.zone === 'jump_left';
+  const isJumpRight = stick.zone === 'jump_right';
+  const isAnyJump = stick.jump;
+  const isLeft = stick.zone === 'left' || isJumpLeft;
+  const isRight = stick.zone === 'right' || isJumpRight;
+  const isDown = stick.zone === 'down';
+
+  const zoneLabel =
+    isJumpUp
+      ? '▲ JUMP LURUS'
+      : isJumpRight
         ? '↗ JUMP KANAN'
-        : pad.direction === 'up'
-          ? '▲ JUMP'
-          : pad.direction === 'left'
+        : isJumpLeft
+          ? '↖ JUMP KIRI'
+          : stick.zone === 'left'
             ? '◄ KIRI'
-            : pad.direction === 'right'
+            : stick.zone === 'right'
               ? 'KANAN ►'
-              : pad.direction === 'down'
+              : isDown
                 ? '▼ TURUN'
-                : 'ARROW PAD';
+                : 'ANALOG 6-ARAH';
 
   return (
-    <div className="flex flex-col items-center gap-1.5">
+    <div className="flex flex-col items-center gap-1">
       <div
-        ref={padRef}
-        role="group"
-        aria-label="Kontrol Arah Panah Kiri Kanan Atas Jump Bawah"
-        data-testid="mobile-arrow-pad"
-        data-direction={pad.direction}
+        ref={baseRef}
+        role="slider"
+        aria-label="Analog 6-Fungsi Gerak dan Jump"
+        aria-valuemin={-100}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(stick.x * 100)}
+        data-testid="mobile-analog-stick"
+        data-direction={stick.direction}
+        data-zone={stick.zone}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerEnd}
         onPointerCancel={handlePointerEnd}
-        onLostPointerCapture={releasePad}
+        onLostPointerCapture={releaseStick}
         onContextMenu={(e) => e.preventDefault()}
         style={{ width: size, height: size }}
-        className="relative grid grid-cols-3 grid-rows-3 gap-1 rounded-2xl border border-slate-700/60 bg-abyss-950/65 p-1.5 shadow-[inset_0_0_20px_rgba(0,0,0,0.75)] touch-none select-none"
+        className={`relative touch-none select-none rounded-full border-2 bg-abyss-950/75 shadow-[inset_0_0_24px_rgba(0,0,0,0.8)] transition-colors ${
+          isAnyJump
+            ? 'border-loot-gold/90'
+            : stick.active
+              ? 'border-mana-cyan/85'
+              : 'border-slate-600/80'
+        }`}
       >
-        {/* Top-Left Corner (Diagonal visual hint when up-left) */}
+        {/* Subtle 6-Sector Radial Ring Overlay (Highlights Top 3 Jump Arcs) */}
+        <svg
+          viewBox="0 0 100 100"
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          aria-hidden="true"
+        >
+          {/* Upper Jump Arc Guide (from -156° to -24°) */}
+          <path
+            d="M 10.6 32.5 A 43 43 0 0 1 89.4 32.5"
+            fill="none"
+            stroke={isAnyJump ? 'rgba(250, 204, 21, 0.72)' : 'rgba(250, 204, 21, 0.28)'}
+            strokeWidth={isAnyJump ? '4' : '2.5'}
+            strokeLinecap="round"
+          />
+          {/* Inner Track Ring */}
+          <circle
+            cx="50"
+            cy="50"
+            r="34"
+            fill="none"
+            stroke="rgba(100, 116, 139, 0.35)"
+            strokeWidth="1"
+          />
+          {/* Subtle Sector Tick Marks separating Straight Jump vs Diagonal Jumps */}
+          <line x1="36" y1="15" x2="39" y2="23" stroke="rgba(250,204,21,0.35)" strokeWidth="1.2" />
+          <line x1="64" y1="15" x2="61" y2="23" stroke="rgba(250,204,21,0.35)" strokeWidth="1.2" />
+        </svg>
+
+        {/* Active Outer Glow Accents */}
+        {isLeft && !isAnyJump && (
+          <div className="pointer-events-none absolute inset-0 rounded-full border-l-4 border-l-mana-cyan" />
+        )}
+        {isRight && !isAnyJump && (
+          <div className="pointer-events-none absolute inset-0 rounded-full border-r-4 border-r-mana-cyan" />
+        )}
+        {isDown && (
+          <div className="pointer-events-none absolute inset-0 rounded-full border-b-4 border-b-mana-purple" />
+        )}
+
+        {/* 1. Symmetric Top JUMP Indicator */}
         <div
-          className={`pointer-events-none rounded-tl-xl transition-colors ${
-            pad.up && pad.left ? 'bg-mana-cyan/15' : ''
+          className={`pointer-events-none absolute left-1/2 top-1.5 flex -translate-x-1/2 flex-col items-center transition-all ${
+            isJumpUp ? 'scale-115 text-loot-gold' : 'text-loot-gold/75'
+          }`}
+        >
+          <ArrowUp className="h-3.5 w-3.5 stroke-[2.75]" />
+          <span className="-mt-0.5 text-[6px] font-extrabold tracking-tight leading-none">JMP</span>
+        </div>
+
+        {/* 2. Top-Left Diagonal Forward-Left Jump Indicator */}
+        <ArrowUpLeft
+          className={`pointer-events-none absolute left-[17%] top-[17%] h-3.5 w-3.5 transition-all ${
+            isJumpLeft ? 'scale-125 text-loot-gold drop-shadow-[0_0_6px_rgba(250,204,21,0.9)]' : 'text-loot-gold/45'
           }`}
         />
 
-        {/* UP ARROW — JUMP */}
-        <div
-          data-testid="mobile-arrow-up"
-          data-active={pad.up ? 'true' : 'false'}
-          className={`pointer-events-none flex flex-col items-center justify-center rounded-t-xl border-2 transition-all duration-75 ${
-            pad.up
-              ? 'scale-95 border-loot-gold bg-loot-gold/30 text-loot-gold shadow-[0_0_14px_rgba(250,204,21,0.4)]'
-              : 'border-loot-gold/55 bg-abyss-900/90 text-loot-gold/90'
-          }`}
-        >
-          <ArrowUp className="h-4 w-4 stroke-[2.75]" />
-          <span className="text-[7px] font-extrabold tracking-tight leading-none">JMP</span>
-        </div>
-
-        {/* Top-Right Corner (Diagonal visual hint when up-right) */}
-        <div
-          className={`pointer-events-none rounded-tr-xl transition-colors ${
-            pad.up && pad.right ? 'bg-mana-cyan/15' : ''
+        {/* 3. Top-Right Diagonal Forward-Right Jump Indicator */}
+        <ArrowUpRight
+          className={`pointer-events-none absolute right-[17%] top-[17%] h-3.5 w-3.5 transition-all ${
+            isJumpRight ? 'scale-125 text-loot-gold drop-shadow-[0_0_6px_rgba(250,204,21,0.9)]' : 'text-loot-gold/45'
           }`}
         />
 
-        {/* LEFT ARROW */}
+        {/* 4. Left Run Indicator */}
+        <ChevronLeft
+          className={`pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 transition-all ${
+            stick.zone === 'left' ? 'scale-115 text-mana-cyan' : 'text-slate-400/75'
+          }`}
+        />
+
+        {/* 5. Right Run Indicator */}
+        <ChevronRight
+          className={`pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 transition-all ${
+            stick.zone === 'right' ? 'scale-115 text-mana-cyan' : 'text-slate-400/75'
+          }`}
+        />
+
+        {/* 6. Down Platform Drop Indicator */}
+        <ChevronDown
+          className={`pointer-events-none absolute bottom-1.5 left-1/2 h-4 w-4 -translate-x-1/2 transition-all ${
+            isDown ? 'scale-115 text-mana-purple' : 'text-slate-500/75'
+          }`}
+        />
+
+        {/* Center Pivot Dot */}
+        <div className="pointer-events-none absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-600/80" />
+
+        {/* Large Smooth Floating Thumb Knob (compositor-only translate3d) */}
         <div
-          data-testid="mobile-arrow-left"
-          data-active={pad.left ? 'true' : 'false'}
-          className={`pointer-events-none flex items-center justify-center rounded-l-xl border-2 transition-all duration-75 ${
-            pad.left
-              ? 'scale-95 border-mana-cyan bg-mana-cyan/30 text-mana-cyan shadow-[0_0_14px_rgba(0,240,255,0.4)]'
-              : 'border-slate-500/80 bg-abyss-900/90 text-slate-200'
+          data-testid="mobile-analog-knob"
+          style={{
+            transform: `translate3d(calc(-50% + ${stick.knobX}px), calc(-50% + ${stick.knobY}px), 0)`,
+          }}
+          className={`pointer-events-none absolute left-1/2 top-1/2 flex h-14 w-14 items-center justify-center rounded-full border-2 shadow-lg transition-colors ${
+            isAnyJump
+              ? 'border-loot-gold bg-loot-gold/30 shadow-[0_0_18px_rgba(250,204,21,0.45)]'
+              : isDown
+                ? 'border-mana-purple bg-mana-purple/30 shadow-[0_0_16px_rgba(168,85,247,0.4)]'
+                : stick.active
+                  ? 'border-mana-cyan bg-mana-cyan/30 shadow-[0_0_18px_rgba(0,240,255,0.45)]'
+                  : 'border-slate-400/85 bg-slate-800/90'
           }`}
         >
-          <ArrowLeft className="h-5 w-5 stroke-[2.75]" />
-        </div>
-
-        {/* Center Pivot Hub */}
-        <div className="pointer-events-none flex items-center justify-center rounded-md border border-slate-700/70 bg-abyss-950/90">
           <div
-            className={`h-2.5 w-2.5 rounded-full transition-colors ${
-              pad.up
-                ? 'bg-loot-gold shadow-[0_0_8px_rgba(250,204,21,0.8)]'
-                : pad.left || pad.right
-                  ? 'bg-mana-cyan shadow-[0_0_8px_rgba(0,240,255,0.8)]'
-                  : pad.down
-                    ? 'bg-mana-purple shadow-[0_0_8px_rgba(168,85,247,0.8)]'
-                    : 'bg-slate-600'
+            className={`h-6 w-6 rounded-full border ${
+              isAnyJump
+                ? 'border-white/90 bg-loot-gold/70'
+                : isDown
+                  ? 'border-white/80 bg-mana-purple/65'
+                  : stick.active
+                    ? 'border-white/85 bg-mana-cyan/65'
+                    : 'border-slate-500/85 bg-slate-700/90'
             }`}
           />
         </div>
-
-        {/* RIGHT ARROW */}
-        <div
-          data-testid="mobile-arrow-right"
-          data-active={pad.right ? 'true' : 'false'}
-          className={`pointer-events-none flex items-center justify-center rounded-r-xl border-2 transition-all duration-75 ${
-            pad.right
-              ? 'scale-95 border-mana-cyan bg-mana-cyan/30 text-mana-cyan shadow-[0_0_14px_rgba(0,240,255,0.4)]'
-              : 'border-slate-500/80 bg-abyss-900/90 text-slate-200'
-          }`}
-        >
-          <ArrowRight className="h-5 w-5 stroke-[2.75]" />
-        </div>
-
-        {/* Bottom-Left Empty */}
-        <div className="pointer-events-none" />
-
-        {/* DOWN ARROW — DROP PLATFORM */}
-        <div
-          data-testid="mobile-arrow-down"
-          data-active={pad.down ? 'true' : 'false'}
-          className={`pointer-events-none flex items-center justify-center rounded-b-xl border-2 transition-all duration-75 ${
-            pad.down
-              ? 'scale-95 border-mana-purple bg-mana-purple/30 text-mana-purple shadow-[0_0_14px_rgba(168,85,247,0.4)]'
-              : 'border-slate-600/80 bg-abyss-900/90 text-slate-400'
-          }`}
-        >
-          <ArrowDown className="h-5 w-5 stroke-[2.75]" />
-        </div>
-
-        {/* Bottom-Right Empty */}
-        <div className="pointer-events-none" />
       </div>
 
-      {/* Subtle Direction Readout below pad in Deck mode */}
+      {/* Subtle Direction Readout below stick in Deck mode */}
       {showLabel && (
-        <span className="text-[10px] font-bold tracking-wider text-slate-400 tabular-nums">
-          {directionReadout}
+        <span
+          className={`text-[10px] font-bold tracking-wider tabular-nums ${
+            isAnyJump ? 'text-loot-gold' : stick.active ? 'text-mana-cyan' : 'text-slate-400'
+          }`}
+        >
+          {zoneLabel}
         </span>
       )}
     </div>
@@ -614,33 +669,33 @@ export function TouchControls({
           </div>
         </div>
 
-        {/* Main Ergonomic Thumb Zone: Left = 4-Way Arrow Pad (with ▲ Jump), Right = All Actions (including 2nd Jump) */}
+        {/* Main Ergonomic Thumb Zone: Left = Larger 6-Function Analog Stick, Right = All Actions (including 2nd Jump) */}
         <div className="mt-auto mb-2 flex items-end justify-between gap-2 pt-3">
-          <div className="pb-1">
-            <ArrowPad onAction={onAction} onAnalogChange={onAnalogChange} size={136} showLabel />
+          <div className="pb-0.5">
+            <VirtualAnalogStick onAction={onAction} onAnalogChange={onAnalogChange} size={150} showLabel />
           </div>
           {renderActionCluster()}
         </div>
 
         {/* Clean Single-Line Tactile Hint */}
         <div className="text-center text-[10px] text-slate-500">
-          Kiri: Panah ◄ ► ▲ Jump ▼ · Kanan: ATK / Thrust / Jump 2x / Dash / Vial / Reload
+          Kiri: Analog 6-Arah (◄ ► · ▲ Jump · ↖ ↗ Jump Maju · ▼) · Kanan: Semua Aksi &amp; Jump 2x
         </div>
       </section>
     );
   }
 
   // ── LANDSCAPE / TABLET FULL-VIEWPORT OVERLAY MODE ──
-  // Pure Left Controller (4-Way Arrow Pad with ▲ Jump) + Pure Right Action Zone (Vial, Reload, Burst, Thrust, Dash, ATK, Jump)
+  // Pure Left Controller (Larger 6-Function Analog Stick) + Pure Right Action Zone (Vial, Reload, Burst, Thrust, Dash, ATK, Jump)
   return (
     <div
       aria-label="Kontrol Sentuh Mobile Overlay"
       data-testid="mobile-control-overlay"
       className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex items-end justify-between px-[max(0.65rem,env(safe-area-inset-left))] pr-[max(0.65rem,env(safe-area-inset-right))] pb-[max(0.5rem,env(safe-area-inset-bottom))]"
     >
-      {/* Left Side: 4-Way Arrow Controller (◄ ► ▲ Jump ▼) */}
+      {/* Left Side: Larger 6-Function Virtual Analog Controller */}
       <div className="pointer-events-auto">
-        <ArrowPad onAction={onAction} onAnalogChange={onAnalogChange} size={122} showLabel={false} />
+        <VirtualAnalogStick onAction={onAction} onAnalogChange={onAnalogChange} size={134} showLabel={false} />
       </div>
 
       {/* Right Side: All Action Buttons Grouped Together */}

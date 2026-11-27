@@ -2,28 +2,57 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { computeAnalogStickVector, computeArrowPadState, sampleWalkGait } from './locomotion';
 
-test('Virtual analog stick applies deadzone, clamps radius, and resolves left/right/down directions', () => {
-  const neutral = computeAnalogStickVector(4, 3, 44, 0.16);
+test('6-function Virtual Analog Stick resolves Left, Right, Down, Up Jump, Up-Right Jump, and Up-Left Jump', () => {
+  const neutral = computeAnalogStickVector(4, 3, 52, 0.16);
   assert.equal(neutral.active, false);
   assert.equal(neutral.x, 0);
   assert.equal(neutral.direction, 'neutral');
+  assert.equal(neutral.zone, 'neutral');
+  assert.equal(neutral.jump, false);
 
-  const right = computeAnalogStickVector(60, 0, 44, 0.16);
+  const right = computeAnalogStickVector(60, 0, 52, 0.16);
   assert.equal(right.active, true);
   assert.equal(right.direction, 'right');
+  assert.equal(right.zone, 'right');
   assert.equal(right.x, 1);
-  assert.equal(Math.round(right.knobX), 44);
+  assert.equal(Math.round(right.knobX), 52);
+  assert.equal(right.jump, false);
   assert.equal(right.dropDown, false);
 
-  const leftHalf = computeAnalogStickVector(-26, 2, 44, 0.16);
+  const leftHalf = computeAnalogStickVector(-30, 2, 52, 0.16);
   assert.equal(leftHalf.active, true);
   assert.equal(leftHalf.direction, 'left');
+  assert.equal(leftHalf.zone, 'left');
+  assert.equal(leftHalf.jump, false);
   assert.ok(leftHalf.x < -0.3 && leftHalf.x > -0.8, `Expected partial analog left speed, got ${leftHalf.x}`);
 
-  const down = computeAnalogStickVector(3, 42, 44, 0.16);
+  const down = computeAnalogStickVector(3, 46, 52, 0.16);
   assert.equal(down.active, true);
+  assert.equal(down.zone, 'down');
   assert.equal(down.dropDown, true);
+  assert.equal(down.jump, false);
   assert.equal(down.direction, 'neutral');
+
+  // Symmetric Straight Up -> Pure vertical jump (x = 0)
+  const jumpUp = computeAnalogStickVector(3, -48, 52, 0.16);
+  assert.equal(jumpUp.zone, 'jump_up');
+  assert.equal(jumpUp.jump, true);
+  assert.equal(jumpUp.x, 0);
+  assert.equal(jumpUp.direction, 'neutral');
+
+  // Up-Right Diagonal -> Forward jump right with strong forward speed
+  const jumpRight = computeAnalogStickVector(34, -36, 52, 0.16);
+  assert.equal(jumpRight.zone, 'jump_right');
+  assert.equal(jumpRight.jump, true);
+  assert.equal(jumpRight.direction, 'right');
+  assert.ok(jumpRight.x >= 0.78, `Expected strong forward jump right speed, got ${jumpRight.x}`);
+
+  // Up-Left Diagonal -> Forward jump left with strong left speed
+  const jumpLeft = computeAnalogStickVector(-34, -36, 52, 0.16);
+  assert.equal(jumpLeft.zone, 'jump_left');
+  assert.equal(jumpLeft.jump, true);
+  assert.equal(jumpLeft.direction, 'left');
+  assert.ok(jumpLeft.x <= -0.78, `Expected strong forward jump left speed, got ${jumpLeft.x}`);
 });
 
 test('4-way Arrow D-Pad resolves Left, Right, Up (Jump), Down (Drop), and Up-Left/Up-Right diagonals cleanly', () => {

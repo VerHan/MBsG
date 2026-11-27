@@ -5,6 +5,15 @@
 // circular mobile virtual analog joystick vector solver.
 // ============================================================
 
+export type AnalogZone =
+  | 'neutral'
+  | 'left'
+  | 'right'
+  | 'down'
+  | 'jump_up'
+  | 'jump_left'
+  | 'jump_right';
+
 export interface AnalogStickSample {
   /** Normalized horizontal axis [-1..1] after deadzone rescaling */
   x: number;
@@ -18,6 +27,10 @@ export interface AnalogStickSample {
   magnitude: number;
   /** Discrete horizontal facing intent */
   direction: 'left' | 'right' | 'neutral';
+  /** Active 6-way functional zone on the circular analog stick */
+  zone: AnalogZone;
+  /** True when pushing stick into top jump arc (Up, Up-Left, or Up-Right) */
+  jump: boolean;
   /** True when pulling stick cleanly downward to drop through thin platforms */
   dropDown: boolean;
   /** True when stick is outside deadzone */
@@ -25,8 +38,14 @@ export interface AnalogStickSample {
 }
 
 /**
- * Compute normalized analog stick output and clamped visual knob coordinates
- * from pointer displacement (dx, dy) relative to stick center.
+ * Compute 6-function virtual analog stick output and clamped visual knob coordinates
+ * from pointer displacement (dx, dy) relative to stick center:
+ *   1. Left (◄)
+ *   2. Right (►)
+ *   3. Down (▼ Drop Platform)
+ *   4. Symmetric Up (▲ Vertical Jump in place)
+ *   5. Up-Right Diagonal (↗ Forward Jump Right)
+ *   6. Up-Left Diagonal (↖ Forward Jump Left)
  */
 export function computeAnalogStickVector(
   dx: number,
@@ -45,6 +64,8 @@ export function computeAnalogStickVector(
       knobY: 0,
       magnitude: 0,
       direction: 'neutral',
+      zone: 'neutral',
+      jump: false,
       dropDown: false,
       active: false,
     };
@@ -65,28 +86,69 @@ export function computeAnalogStickVector(
       knobY,
       magnitude: 0,
       direction: 'neutral',
+      zone: 'neutral',
+      jump: false,
       dropDown: false,
       active: false,
     };
   }
 
   const scaledMag = Math.min(1, (rawNorm - deadzone) / Math.max(0.01, 1 - deadzone));
-  const x = Math.max(-1, Math.min(1, nx * scaledMag));
+  const rawX = Math.max(-1, Math.min(1, nx * scaledMag));
   const y = Math.max(-1, Math.min(1, ny * scaledMag));
+
+  // Polar angle in degrees: 0 = right, -90 = straight up, ±180 = left, +90 = straight down
+  const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const jumpCommitted = scaledMag >= 0.3;
+
+  let zone: AnalogZone = 'neutral';
+  let jump = false;
+  let dropDown = false;
+  let outX = rawX;
+
+  if (deg >= -112 && deg <= -68) {
+    // 4. Symmetric Straight Up -> Clean Vertical Jump (no unintended horizontal drift)
+    zone = jumpCommitted ? 'jump_up' : 'neutral';
+    jump = jumpCommitted;
+    outX = 0;
+  } else if (deg > -68 && deg <= -24) {
+    // 5. Up-Right Diagonal -> Jump + Follow Forward Right
+    zone = jumpCommitted ? 'jump_right' : 'right';
+    jump = jumpCommitted;
+    outX = Math.min(1, Math.max(rawX, 0.88 * scaledMag));
+  } else if (deg >= -156 && deg < -112) {
+    // 6. Up-Left Diagonal -> Jump + Follow Forward Left
+    zone = jumpCommitted ? 'jump_left' : 'left';
+    jump = jumpCommitted;
+    outX = Math.max(-1, Math.min(rawX, -0.88 * scaledMag));
+  } else if (deg >= 50 && deg <= 130) {
+    // 3. Down -> Drop through thin platform
+    dropDown = scaledMag >= 0.45;
+    zone = dropDown ? 'down' : 'neutral';
+    outX = 0;
+  } else if (deg > -24 && deg < 50) {
+    // 2. Pure Right Run
+    zone = 'right';
+    outX = Math.max(0, rawX);
+  } else {
+    // 1. Pure Left Run
+    zone = 'left';
+    outX = Math.min(0, rawX);
+  }
 
   const horizThreshold = 0.14;
   const direction: 'left' | 'right' | 'neutral' =
-    x > horizThreshold ? 'right' : x < -horizThreshold ? 'left' : 'neutral';
-
-  const dropDown = y > 0.62 && Math.abs(y) > Math.abs(x) * 0.85;
+    outX > horizThreshold ? 'right' : outX < -horizThreshold ? 'left' : 'neutral';
 
   return {
-    x: direction === 'neutral' ? 0 : x,
+    x: direction === 'neutral' ? 0 : outX,
     y,
     knobX,
     knobY,
     magnitude: scaledMag,
     direction,
+    zone,
+    jump,
     dropDown,
     active: true,
   };
