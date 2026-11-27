@@ -208,14 +208,14 @@ export function TitleScreen({
   const fbConfigured = isFirebaseConfigured();
 
   return (
-    <div className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-y-auto bg-abyss-950 px-5 py-6 text-slate-100 scanlines">
+    <div className="relative flex min-h-[100dvh] w-full flex-col items-center justify-start sm:justify-center overflow-y-auto bg-abyss-950 px-3 py-4 sm:px-5 sm:py-6 text-slate-100 scanlines">
       <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-mana-purple/15 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 right-1/4 h-80 w-80 rounded-full bg-mana-cyan/10 blur-3xl" />
 
-      <main className="relative z-10 w-full max-w-4xl border-2 border-ancient-stone bg-abyss-900/95 p-6 shadow-2xl md:p-8">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-ancient-stone pb-3 text-[11px]">
-          <span className="font-bold tracking-widest text-mana-cyan">
-            RIFTBOUND PWA // 3 STAGE BERURUTAN (27 SOAL)
+      <main className="relative z-10 w-full max-w-4xl border-2 border-ancient-stone bg-abyss-900/95 p-4 shadow-2xl sm:p-6 md:p-8">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-ancient-stone pb-3 text-[11px]">
+          <span className="font-bold tracking-wider text-mana-cyan">
+            RIFTBOUND PWA · 3 STAGE (27 SOAL)
           </span>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -395,29 +395,29 @@ export function TitleScreen({
           <div className="grid gap-2.5 sm:grid-cols-12">
             <input
               type="text"
-              placeholder="Masukkan Username Siswa (cth: Budi_10) *"
+              placeholder="Username Siswa (cth: Budi_10) *"
               value={usernameInput}
               onChange={(e) => setUsernameInput(e.target.value)}
-              className="sm:col-span-5 border border-ancient-stone bg-abyss-900 px-3 py-2 text-xs text-white outline-none focus:border-mana-cyan"
+              className="min-h-[44px] sm:col-span-5 border border-ancient-stone bg-abyss-900 px-3 py-2 text-sm sm:text-xs text-white outline-none focus:border-mana-cyan"
             />
             <input
               type="text"
               placeholder="Kelas (opsional, cth: X RPL 1)"
               value={classInput}
               onChange={(e) => setClassInput(e.target.value)}
-              className="sm:col-span-4 border border-ancient-stone bg-abyss-900 px-3 py-2 text-xs text-white outline-none focus:border-mana-cyan"
+              className="min-h-[44px] sm:col-span-4 border border-ancient-stone bg-abyss-900 px-3 py-2 text-sm sm:text-xs text-white outline-none focus:border-mana-cyan"
             />
             <button
               type="submit"
               disabled={saving}
-              className="sm:col-span-3 border border-loot-green bg-loot-green/15 px-3 py-2 text-xs font-bold text-loot-green hover:bg-loot-green/25 disabled:opacity-50"
+              className="min-h-[44px] sm:col-span-3 border border-loot-green bg-loot-green/15 px-3 py-2 text-xs font-bold text-loot-green hover:bg-loot-green/25 disabled:opacity-50"
             >
               {saving ? 'Menyinkronkan...' : student ? 'Ganti / Sync Profil' : 'Buat & Muat Profil'}
             </button>
           </div>
 
           {student && (
-            <div className="mt-2.5 flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
+            <div className="mt-2.5 flex flex-wrap items-center gap-3 text-[11px] text-slate-300 tabular-nums">
               <span>
                 Aktif: <strong className="text-white">{student.username}</strong>
                 {student.className ? ` (${student.className})` : ''}
@@ -436,20 +436,21 @@ export function TitleScreen({
         </form>
 
         {/* Primary Play Actions */}
-        <div className="mb-4 flex flex-wrap gap-3">
+        <div className="mb-4 grid gap-2.5 sm:flex sm:flex-wrap sm:gap-3">
           <button
             type="button"
+            data-start="true"
             onClick={() => ensureStudentThenRun(onStartWithLore)}
-            className="inline-flex items-center gap-2 border-2 border-slayer-orange bg-slayer-orange/20 px-5 py-3 font-pixel text-xs text-white transition hover:bg-slayer-orange/35"
+            className="min-h-[48px] inline-flex items-center justify-center gap-2 border-2 border-slayer-orange bg-slayer-orange/20 px-5 py-3 font-pixel text-[11px] sm:text-xs text-white transition hover:bg-slayer-orange/35"
           >
-            <Play className="h-4 w-4 text-loot-gold" /> MULAI DARI STAGE 1 (+ LORE)
+            <Play className="h-4 w-4 shrink-0 text-loot-gold" /> MULAI STAGE 1 (+ LORE)
           </button>
           <button
             type="button"
             onClick={() => ensureStudentThenRun(() => onStartMode('stage_1'))}
-            className="inline-flex items-center gap-2 border border-mana-cyan/70 bg-mana-cyan/10 px-4 py-3 text-xs font-bold text-mana-cyan transition hover:bg-mana-cyan/20"
+            className="min-h-[48px] inline-flex items-center justify-center gap-2 border border-mana-cyan/70 bg-mana-cyan/10 px-4 py-3 text-xs font-bold text-mana-cyan transition hover:bg-mana-cyan/20"
           >
-            <BookOpen className="h-4 w-4" /> Langsung Main Stage 1 (Skip Lore)
+            <BookOpen className="h-4 w-4 shrink-0" /> Langsung Main Stage 1 (Skip Lore)
           </button>
         </div>
 
@@ -544,12 +545,13 @@ export function TitleScreen({
         </div>
 
         <div className="border border-ancient-stone bg-abyss-950/80 p-3 text-[11px] text-slate-400">
-          <span className="font-bold text-slate-200">Kontrol:</span>{' '}
-          <code>A/D</code> Gerak · <code>Space/W</code> Jump/2x · <code>Shift</code> Dash ·{' '}
-          <code>Tap J/LMB</code> 3-Hit Combo (Hit 2 Spin!) ·{' '}
-          <code>Hold J/LMB</code> Block &amp; Parry · <code>S+J</code> Pogo ·{' '}
-          <code>K/RMB</code> Ranged · <code>E</code> Interaksi · <code>Q</code> Heal ·{' '}
-          <code>R</code> Ammo · <code>I</code> Gear
+          <span className="font-bold text-slate-200">Kontrol Mobile:</span> Analog Kiri (Gerak &amp; Turun) ·
+          Tombol ATK (Tap 3x Combo / Hold Blok) · SKILL/GUN · JUMP · DASH.{' '}
+          <span className="hidden sm:inline">
+            <span className="font-bold text-slate-200">Desktop:</span> <code>A/D</code> Gerak ·{' '}
+            <code>Space/W</code> Jump · <code>Shift</code> Dash · <code>J/LMB</code> Serang/Blok ·{' '}
+            <code>K/RMB</code> Skill/Range · <code>E</code> Aksi · <code>I</code> Gear
+          </span>
         </div>
       </main>
     </div>

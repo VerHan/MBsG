@@ -17,6 +17,7 @@ import {
   solveTwoBoneElbow,
   type CombatMoveType,
 } from './combatRules';
+import { sampleWalkGait } from './locomotion';
 
 export interface SpriteFrame {
   canvas: OffscreenCanvas;
@@ -420,17 +421,27 @@ function drawArmoredLeg(
   footY: number,
   thighCol: string,
   shinCol: string,
-  kneeCol: string
+  kneeCol: string,
+  footPitch = 0
 ) {
   drawLimbSegment(ctx, hipX, hipY, kneeX, kneeY, 3, '#0B0D14', thighCol);
   drawLimbSegment(ctx, kneeX, kneeY, footX, footY, 3, '#0B0D14', shinCol);
-  // Boot & knee pad highlights
+  // Forward-aligned knee pad highlight
   ctx.fillStyle = kneeCol;
-  ctx.fillRect(Math.round(kneeX - 1), Math.round(kneeY - 1), 2, 2);
+  ctx.fillRect(Math.round(kneeX - 0.5), Math.round(kneeY - 1), 2, 2);
+
+  // Directional armored boot with distinct heel (back) and pointed armored toe cap (+X forward)
+  ctx.save();
+  ctx.translate(footX, footY);
+  if (footPitch !== 0) ctx.rotate(footPitch);
   ctx.fillStyle = '#0B0D14';
-  ctx.fillRect(Math.round(footX - 2), Math.round(footY - 1), 6, 3);
+  ctx.fillRect(-2, -1.5, 7, 3.5);
   ctx.fillStyle = shinCol;
-  ctx.fillRect(Math.round(footX - 1), Math.round(footY), 4, 2);
+  ctx.fillRect(-1, -0.5, 5, 2);
+  // Bright forward toe-cap highlight so foot facing direction is unmistakable
+  ctx.fillStyle = kneeCol;
+  ctx.fillRect(3, -0.5, 1.5, 1.5);
+  ctx.restore();
 }
 
 /**
@@ -616,6 +627,12 @@ export function drawComplexSlayerAvatar(
     }
   }
 
+  // Precompute forward-aligned walking gait (no moonwalk inversion!)
+  const walkGait =
+    moving && !activePose && !s.isDashing && !s.isBlocking && !s.isWallSliding
+      ? sampleWalkGait(s.walkPhase, s.vx, s.facingRight, -11, 165)
+      : null;
+
   let bodyTilt = 0;
   let headTilt = 0;
   let crouchY = 0;
@@ -638,18 +655,18 @@ export function drawComplexSlayerAvatar(
   } else if (!s.onGround) {
     bodyTilt = s.vy < 0 ? 0.12 : -0.1;
     headTilt = s.vy < 0 ? -0.14 : 0.12;
-  } else if (moving) {
-    bodyTilt = 0.18 * speedRatio;
-    headTilt = -0.05 * speedRatio;
-    crouchY = runBob;
+  } else if (walkGait) {
+    bodyTilt = walkGait.bodyTilt;
+    headTilt = walkGait.isSkidding ? 0.08 : -0.05 * speedRatio;
+    crouchY = walkGait.runBob;
   } else {
     crouchY = idleBob > 0.35 ? 0.6 : 0;
   }
 
   // Leg joint targets relative to ankle ground anchor (0, 0 = feet level, torso at y=-11)
   const hipY = -11 + crouchY;
-  let bKneeX = -1, bKneeY = hipY + 5, bFootX = -3, bFootY = -1;
-  let fKneeX = 2, fKneeY = hipY + 5, fFootX = 3, fFootY = -1;
+  let bKneeX = -1, bKneeY = hipY + 5, bFootX = -3, bFootY = -1, bFootPitch = 0;
+  let fKneeX = 2, fKneeY = hipY + 5, fFootX = 3, fFootY = -1, fFootPitch = 0;
   let offArmAngle = 0.25;
 
   if (activePose) {
@@ -662,8 +679,8 @@ export function drawComplexSlayerAvatar(
     bFootX = activePose.backFoot.x;
     bFootY = activePose.backFoot.y;
   } else if (s.isDashing) {
-    bKneeX = -7; bKneeY = hipY + 3; bFootX = -11; bFootY = -4;
-    fKneeX = 4; fKneeY = hipY + 2; fFootX = 1; fFootY = -2;
+    bKneeX = -7; bKneeY = hipY + 3; bFootX = -11; bFootY = -4; bFootPitch = 0.35;
+    fKneeX = 4; fKneeY = hipY + 2; fFootX = 1; fFootY = -2; fFootPitch = -0.15;
     offArmAngle = -0.9;
   } else if (s.isWallSliding) {
     bKneeX = 4; bKneeY = hipY + 4; bFootX = 5; bFootY = -2;
@@ -671,38 +688,33 @@ export function drawComplexSlayerAvatar(
     offArmAngle = -1.2;
   } else if (!s.onGround) {
     if (s.vy < 0) {
-      fKneeX = 5; fKneeY = hipY + 3; fFootX = 3; fFootY = hipY + 8;
-      bKneeX = -4; bKneeY = hipY + 5; bFootX = -6; bFootY = hipY + 10;
+      fKneeX = 5; fKneeY = hipY + 3; fFootX = 3; fFootY = hipY + 8; fFootPitch = 0.2;
+      bKneeX = -4; bKneeY = hipY + 5; bFootX = -6; bFootY = hipY + 10; bFootPitch = 0.25;
       offArmAngle = -0.65;
     } else {
-      fKneeX = 4; fKneeY = hipY + 5; fFootX = 5; fFootY = hipY + 10;
-      bKneeX = -3; bKneeY = hipY + 4; bFootX = -5; bFootY = hipY + 9;
+      fKneeX = 4; fKneeY = hipY + 5; fFootX = 5; fFootY = hipY + 10; fFootPitch = -0.15;
+      bKneeX = -3; bKneeY = hipY + 4; bFootX = -5; bFootY = hipY + 9; bFootPitch = 0.15;
       offArmAngle = -0.95;
     }
   } else if (s.isBlocking) {
     fKneeX = 5; fKneeY = hipY + 4; fFootX = 6; fFootY = -1;
     bKneeX = -4; bKneeY = hipY + 5; bFootX = -6; bFootY = -1;
     offArmAngle = -0.15;
-  } else if (moving) {
-    const sF = Math.sin(s.walkPhase);
-    const cF = Math.cos(s.walkPhase);
-    const sB = Math.sin(s.walkPhase + Math.PI);
-    const cB = Math.cos(s.walkPhase + Math.PI);
-    const amp = 5.5 * speedRatio;
-    const liftF = Math.max(0, -cF) * 3.5 * speedRatio;
-    const liftB = Math.max(0, -cB) * 3.5 * speedRatio;
+  } else if (walkGait) {
+    const liveGait = sampleWalkGait(s.walkPhase, s.vx, s.facingRight, hipY, 165);
+    fKneeX = liveGait.frontLeg.kneeX;
+    fKneeY = liveGait.frontLeg.kneeY;
+    fFootX = liveGait.frontLeg.footX;
+    fFootY = liveGait.frontLeg.footY;
+    fFootPitch = liveGait.frontLeg.footPitch;
 
-    fFootX = sF * amp;
-    fFootY = -1 - liftF;
-    fKneeX = fFootX * 0.5 + 2.2;
-    fKneeY = (hipY + fFootY) * 0.5 - liftF * 0.35;
+    bKneeX = liveGait.backLeg.kneeX;
+    bKneeY = liveGait.backLeg.kneeY;
+    bFootX = liveGait.backLeg.footX;
+    bFootY = liveGait.backLeg.footY;
+    bFootPitch = liveGait.backLeg.footPitch;
 
-    bFootX = sB * amp;
-    bFootY = -1 - liftB;
-    bKneeX = bFootX * 0.5 + 2.0;
-    bKneeY = (hipY + bFootY) * 0.5 - liftB * 0.35;
-
-    offArmAngle = -sF * 0.85 * speedRatio;
+    offArmAngle = liveGait.offArmAngle;
   } else {
     fKneeX = 3; fKneeY = hipY + 5; fFootX = 3; fFootY = -1;
     bKneeX = -2; bKneeY = hipY + 5; bFootX = -3; bFootY = -1;
@@ -809,7 +821,19 @@ export function drawComplexSlayerAvatar(
   }
 
   // ── 3. Back Articulated Leg ─────────────────────────────
-  drawArmoredLeg(ctx, -1, hipY, bKneeX, bKneeY, bFootX, bFootY, pal.secondary, pal.secondary, pal.glow);
+  drawArmoredLeg(
+    ctx,
+    -1,
+    hipY,
+    bKneeX,
+    bKneeY,
+    bFootX,
+    bFootY,
+    pal.secondary,
+    pal.secondary,
+    pal.glow,
+    bFootPitch
+  );
 
   // ── 4. Back-Slung Ranged Weapon (during Quick-Draw Dagger) / Hip Sheath / Off-Hand Arm ─
   if (displayWeapon.showHolsteredRangedOnBack && s.rangedWeaponId) {
@@ -1023,7 +1047,19 @@ export function drawComplexSlayerAvatar(
   ctx.restore(); // end torso
 
   // ── 7. Front Articulated Leg ────────────────────────────
-  drawArmoredLeg(ctx, 1, hipY, fKneeX, fKneeY, fFootX, fFootY, pal.primary, pal.secondary, pal.glow);
+  drawArmoredLeg(
+    ctx,
+    1,
+    hipY,
+    fKneeX,
+    fKneeY,
+    fFootX,
+    fFootY,
+    pal.primary,
+    pal.secondary,
+    pal.glow,
+    fFootPitch
+  );
 
   // ── 8. Front Right Arm + Active Weapon (Ranged Primary OR Realistic Melee Grip) ──
   const isKatanaSheathed =

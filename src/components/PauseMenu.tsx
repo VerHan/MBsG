@@ -43,22 +43,22 @@ export function PauseMenu({
   onExitToTitle,
 }: PauseMenuProps) {
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-abyss-950/85 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto border-2 border-ancient-stone bg-abyss-900 p-6 shadow-2xl">
-        <h2 className="mb-4 font-pixel text-base text-mana-cyan">GAME PAUSED</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-abyss-950/85 p-3 sm:p-4">
+      <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto border-2 border-ancient-stone bg-abyss-900 p-4 sm:p-6 shadow-2xl">
+        <h2 className="mb-4 font-pixel text-sm sm:text-base text-mana-cyan">GAME PAUSED</h2>
 
         <div className="mb-4 grid gap-2 sm:grid-cols-2">
           <button
             type="button"
             onClick={onResume}
-            className="flex items-center justify-center gap-2 border border-loot-green bg-loot-green/15 px-3 py-2 text-xs font-bold text-loot-green hover:bg-loot-green/25"
+            className="min-h-[44px] flex items-center justify-center gap-2 border border-loot-green bg-loot-green/15 px-3 py-2 text-xs font-bold text-loot-green hover:bg-loot-green/25"
           >
             <Play className="h-4 w-4" /> Lanjutkan [ESC]
           </button>
           <button
             type="button"
             onClick={onRestart}
-            className="flex items-center justify-center gap-2 border border-slayer-orange bg-slayer-orange/15 px-3 py-2 text-xs font-bold text-slayer-orange hover:bg-slayer-orange/25"
+            className="min-h-[44px] flex items-center justify-center gap-2 border border-slayer-orange bg-slayer-orange/15 px-3 py-2 text-xs font-bold text-slayer-orange hover:bg-slayer-orange/25"
           >
             <RotateCcw className="h-4 w-4" /> Ulangi Stage/Mode Ini
           </button>
@@ -82,7 +82,7 @@ export function PauseMenu({
                   disabled={!unlocked}
                   title={!unlocked ? 'Selesaikan & Save stage sebelumnya dulu' : opt.label}
                   onClick={() => unlocked && onSwitchMode(opt.key)}
-                  className={`flex items-center justify-center gap-1.5 border p-2 ${
+                  className={`min-h-[44px] flex items-center justify-center gap-1.5 border p-2 ${
                     !unlocked
                       ? 'cursor-not-allowed border-ancient-stone/40 text-slate-600'
                       : currentMode === opt.key
@@ -109,26 +109,23 @@ export function PauseMenu({
         </div>
 
         <div className="mb-4 border border-ancient-stone bg-abyss-950/80 p-3 text-[11px]">
-          <div className="mb-2 font-bold text-slate-300">KONTROL SLAYER CORPS</div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-400">
-            <div><span className="text-white">A / D</span> atau ← / → : Gerak</div>
-            <div><span className="text-white">Space / W</span> : Jump &amp; Double Jump Flip</div>
-            <div><span className="text-white">Shift</span> : Dash (i-frame)</div>
-            <div><span className="text-white">S</span> (di platform tipis) : Turun</div>
-            <div><span className="text-white">Tap J / Klik Kiri</span> : 3-Hit Combo (Hit 2 Spin!)</div>
-            <div><span className="text-white">Hold J / Klik Kiri</span> : Block &amp; Perfect Parry</div>
-            <div><span className="text-white">S + J</span> (di udara) : Pogo-Slash</div>
-            <div><span className="text-white">K / Klik Kanan</span> : Ranged Weapon</div>
-            <div><span className="text-white">E</span> : Chest / Shrine / Pillar</div>
-            <div><span className="text-white">Q / R</span> : Heal / Ammo Pack (+60 EN)</div>
-            <div><span className="text-white">F / I</span> : Adrenaline / Inventory</div>
+          <div className="mb-2 font-bold text-slate-300">KONTROL MOBILE &amp; DESKTOP</div>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-1 text-slate-400 sm:grid-cols-2">
+            <div><span className="text-white">Analog / A-D</span> : Gerak Kiri &amp; Kanan</div>
+            <div><span className="text-white">Tarik Bawah / S</span> : Turun Platform</div>
+            <div><span className="text-white">JUMP / Space</span> : Jump &amp; Double Flip</div>
+            <div><span className="text-white">DASH / Shift</span> : Dash (i-frame)</div>
+            <div><span className="text-white">Tap ATK / J</span> : 3-Hit Combo &amp; Air Spin</div>
+            <div><span className="text-white">Hold ATK / J</span> : Block &amp; Air Slam</div>
+            <div><span className="text-white">SKILL / K</span> : Gun / Thrust / Ground Slam / Dual X</div>
+            <div><span className="text-white">HEAL / EN+</span> : Nano Vial &amp; Isi Energi</div>
           </div>
         </div>
 
         <button
           type="button"
           onClick={onExitToTitle}
-          className="flex w-full items-center justify-center gap-2 border border-ancient-stone py-2 text-xs text-slate-300 hover:border-slayer-red hover:text-slayer-red"
+          className="min-h-[44px] flex w-full items-center justify-center gap-2 border border-ancient-stone py-2 text-xs text-slate-300 hover:border-slayer-red hover:text-slayer-red"
         >
           <Home className="h-4 w-4" /> Kembali ke Menu Utama
         </button>

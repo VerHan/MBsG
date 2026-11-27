@@ -111,24 +111,24 @@ export function PuzzleModal({
   if (!current) return null;
 
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-abyss-950/80 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto border-2 border-mana-cyan bg-abyss-900 p-5 shadow-2xl scanlines">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-ancient-stone pb-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-abyss-950/85 p-3 sm:p-4">
+      <div className="max-h-[92dvh] w-full max-w-xl overflow-y-auto border-2 border-mana-cyan bg-abyss-900 p-4 sm:p-5 shadow-2xl scanlines">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-ancient-stone pb-2.5">
           <div className="flex items-center gap-2 text-xs font-bold text-mana-cyan">
-            <Cpu className="h-4 w-4" />
-            <span>SLAYER HELM DECRYPTION // {request.title}</span>
+            <Cpu className="h-4 w-4 shrink-0" />
+            <span>SLAYER HELM · {request.title}</span>
           </div>
           <div className="flex items-center gap-2 text-[10px]">
             <span className="border border-mana-purple/60 bg-mana-purple/10 px-2 py-0.5 uppercase text-mana-purple">
               {current.category} · {current.difficulty}
             </span>
-            <span className="text-slate-400">
+            <span className="text-slate-400 tabular-nums">
               Soal {stepIndex + 1}/{questions.length}
             </span>
           </div>
         </div>
 
-        <p className="mb-4 text-sm font-semibold leading-relaxed text-white">
+        <p className="mb-3.5 text-sm font-semibold leading-relaxed text-white">
           {current.question}
         </p>
 
@@ -152,13 +152,13 @@ export function PuzzleModal({
                 type="button"
                 disabled={answered}
                 onClick={() => handleSelect(idx)}
-                className={`flex w-full items-center gap-3 border px-3.5 py-2.5 text-left text-xs transition ${style}`}
+                className={`min-h-[44px] flex w-full items-center gap-3 border px-3.5 py-2.5 text-left text-xs transition ${style}`}
               >
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center border border-current font-bold">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center border border-current font-bold">
                   {label}
                 </span>
                 <span className="flex-1">{opt}</span>
-                <span className="text-[10px] opacity-50">[{idx + 1}]</span>
+                <span className="hidden sm:inline text-[10px] opacity-50">[{idx + 1}]</span>
               </button>
             );
           })}

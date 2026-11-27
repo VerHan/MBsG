@@ -52,6 +52,8 @@ export class InputManager {
 
   private _bindings: KeyBinding[];
   private _enabled = true;
+  private _analogX = 0;
+  private _analogY = 0;
 
   public mouseX = 0;
   public mouseY = 0;
@@ -110,6 +112,8 @@ export class InputManager {
       this._mouseDown.clear();
       this._virtualDown.clear();
       this._latchedActions.clear();
+      this._analogX = 0;
+      this._analogY = 0;
     });
   }
 
@@ -122,6 +126,61 @@ export class InputManager {
     } else {
       this._virtualDown.delete(action);
     }
+  }
+
+  /** Set continuous virtual analog stick axis [-1..1] from mobile joystick */
+  setAnalogAxis(x: number, y: number, dropDown = false) {
+    if (!this._enabled) {
+      this._analogX = 0;
+      this._analogY = 0;
+      this._virtualDown.delete('move_left');
+      this._virtualDown.delete('move_right');
+      this._virtualDown.delete('drop_down');
+      return;
+    }
+    this._analogX = Math.max(-1, Math.min(1, x));
+    this._analogY = Math.max(-1, Math.min(1, y));
+
+    if (this._analogX < -0.14) {
+      this._virtualDown.add('move_left');
+      this._virtualDown.delete('move_right');
+    } else if (this._analogX > 0.14) {
+      this._virtualDown.add('move_right');
+      this._virtualDown.delete('move_left');
+    } else {
+      this._virtualDown.delete('move_left');
+      this._virtualDown.delete('move_right');
+    }
+
+    this.setVirtualAction('drop_down', dropDown);
+  }
+
+  /** Continuous horizontal movement axis [-1..1] combining keyboard/D-pad & analog joystick */
+  getMoveAxis(): number {
+    let keyDir = 0;
+    for (const key of ['KeyA', 'ArrowLeft']) {
+      if (this._keysDown.has(key)) {
+        keyDir -= 1;
+        break;
+      }
+    }
+    for (const key of ['KeyD', 'ArrowRight']) {
+      if (this._keysDown.has(key)) {
+        keyDir += 1;
+        break;
+      }
+    }
+    if (keyDir !== 0) return keyDir;
+    if (Math.abs(this._analogX) > 0.14) return this._analogX;
+
+    let virtualDir = 0;
+    if (this._virtualDown.has('move_left')) virtualDir -= 1;
+    if (this._virtualDown.has('move_right')) virtualDir += 1;
+    return virtualDir;
+  }
+
+  get analogY(): number {
+    return this._analogY;
   }
 
   update() {
@@ -178,6 +237,8 @@ export class InputManager {
       this._mouseDown.clear();
       this._virtualDown.clear();
       this._latchedActions.clear();
+      this._analogX = 0;
+      this._analogY = 0;
     }
   }
 }

@@ -770,9 +770,7 @@ export class GameEngine {
   private _handlePlayerInput(dt: number) {
     const p = this.player;
 
-    let moveDir = 0;
-    if (this.input.isHeld('move_left')) moveDir -= 1;
-    if (this.input.isHeld('move_right')) moveDir += 1;
+    const moveDir = this.input.getMoveAxis();
     p.moveHorizontal(moveDir, dt);
 
     if (this.input.isJustPressed('drop_down') && p.onGround) {

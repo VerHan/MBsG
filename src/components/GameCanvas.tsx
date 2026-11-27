@@ -88,8 +88,19 @@ export function GameCanvas({
   const [hud, setHud] = useState<HudSnapshot | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [areaBanner, setAreaBanner] = useState<{ name: string; subtitle: string } | null>(null);
-  const [showTouchControls, setShowTouchControls] = useState<boolean>(
-    () => typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  const [showTouchControls, setShowTouchControls] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return (
+      'ontouchstart' in window ||
+      navigator.maxTouchPoints > 0 ||
+      window.matchMedia('(pointer: coarse)').matches ||
+      window.innerWidth < 1024
+    );
+  });
+  const [viewport, setViewport] = useState<{ w: number; h: number }>(() =>
+    typeof window !== 'undefined'
+      ? { w: window.innerWidth, h: window.innerHeight }
+      : { w: 1280, h: 720 }
   );
   const [puzzleReq, setPuzzleReq] = useState<PuzzleRequest | null>(null);
   const [showInventory, setShowInventory] = useState(false);
@@ -104,6 +115,24 @@ export function GameCanvas({
   } | null>(null);
   const [gameOverReason, setGameOverReason] = useState<string | null>(null);
   const [playerSnapshot, setPlayerSnapshot] = useState<PlayerState | null>(null);
+
+  const userToggledTouchRef = useRef(false);
+
+  useEffect(() => {
+    const onResize = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      setViewport({ w, h });
+      if (!userToggledTouchRef.current && (w < 1024 || h < 500)) {
+        setShowTouchControls(true);
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const isPortraitMobile = viewport.w < 768 && viewport.h > viewport.w;
+  const isCompactMobile = viewport.w < 920 || viewport.h < 500;
 
   const puzzleStatsRef = useRef({ attempted: 0, correct: 0 });
   const toastTimerRef = useRef<number | null>(null);
@@ -201,6 +230,10 @@ export function GameCanvas({
     engineRef.current?.input.setVirtualAction(action, down);
   }, []);
 
+  const handleAnalogChange = useCallback((x: number, y: number, dropDown: boolean) => {
+    engineRef.current?.input.setAnalogAxis(x, y, dropDown);
+  }, []);
+
   const switchMode = (nextMode: PlayableModeKey, keepGear = false) => {
     const engine = engineRef.current;
     if (!engine) return;
@@ -294,13 +327,29 @@ export function GameCanvas({
   const nextStageInfo = NEXT_STAGE_MAP[modeKey];
   const isFinalVictory = modeKey === 'stage_3';
 
+  const usePortraitDeck = isPortraitMobile && showTouchControls;
+  const meleeDefName = hud ? (WEAPONS[hud.meleeWeapon.defId]?.name ?? 'Weapon') : 'Weapon';
+  const rangedDefName =
+    hud && hud.rangedWeapon ? (WEAPONS[hud.rangedWeapon.defId]?.name ?? null) : null;
+
   return (
-    <div className="relative flex h-screen w-screen items-center justify-center bg-black overflow-hidden touch-none">
-      <div className="relative w-full max-w-[1280px] aspect-video border border-ancient-stone bg-abyss-950 shadow-2xl">
+    <div
+      className={`relative flex h-[100dvh] w-screen bg-black overflow-hidden touch-none ${
+        usePortraitDeck ? 'flex-col justify-between bg-abyss-950' : 'items-center justify-center'
+      }`}
+    >
+      <div
+        className={
+          usePortraitDeck
+            ? 'relative w-full aspect-video shrink-0 border-b border-ancient-stone bg-abyss-950 shadow-2xl mt-[env(safe-area-inset-top)]'
+            : 'relative w-[min(100vw,calc(100dvh*16/9),1280px)] h-[min(100dvh,calc(100vw*9/16),720px)] border border-ancient-stone bg-abyss-950 shadow-2xl'
+        }
+      >
         <canvas
           ref={canvasRef}
           width={GAME_WIDTH}
           height={GAME_HEIGHT}
+          data-testid="game-canvas"
           className="pixelated h-full w-full block cursor-crosshair touch-none"
         />
 
@@ -310,7 +359,11 @@ export function GameCanvas({
             toast={toast}
             areaBanner={areaBanner}
             showTouchControls={showTouchControls}
-            onToggleTouchControls={() => setShowTouchControls((v) => !v)}
+            compactMobile={isCompactMobile}
+            onToggleTouchControls={() => {
+              userToggledTouchRef.current = true;
+              setShowTouchControls((v) => !v);
+            }}
             onOpenInventory={() => {
               const engine = engineRef.current;
               if (!engine) return;
@@ -321,18 +374,9 @@ export function GameCanvas({
             onPause={() => engineRef.current?.pause()}
           />
         )}
+      </div>
 
-        {showTouchControls && hud && !puzzleReq && !showInventory && !isPaused && (
-          <TouchControls
-            onAction={handleTouchAction}
-            hasInteractPrompt={Boolean(hud.interactPrompt)}
-            canAdrenaline={hud.adrenaline >= 100 && !hud.adrenalineActive}
-            canRanged={Boolean(hud.rangedWeapon)}
-            rightSkillLabel={hud.rightSkillShortLabel}
-          />
-        )}
-
-        {puzzleReq && (
+      {puzzleReq && (
           <PuzzleModal
             request={puzzleReq}
             stageNumber={hud?.stageNumber ?? 1}
@@ -375,8 +419,8 @@ export function GameCanvas({
         )}
 
         {clearSummary && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-abyss-950/90 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-md border-2 border-loot-gold bg-abyss-900 p-6 text-center shadow-2xl">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-abyss-950/90 p-3 sm:p-4">
+            <div className="max-h-[92dvh] w-full max-w-md overflow-y-auto border-2 border-loot-gold bg-abyss-900 p-5 sm:p-6 text-center shadow-2xl">
               {isFinalVictory ? (
                 <Trophy className="mx-auto mb-2 h-11 w-11 text-loot-gold" />
               ) : (
@@ -477,22 +521,22 @@ export function GameCanvas({
         )}
 
         {gameOverReason && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-abyss-950/90 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-md border-2 border-slayer-red bg-abyss-900 p-6 text-center shadow-2xl">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-abyss-950/90 p-3 sm:p-4">
+            <div className="max-h-[92dvh] w-full max-w-md overflow-y-auto border-2 border-slayer-red bg-abyss-900 p-5 sm:p-6 text-center shadow-2xl">
               <h2 className="font-pixel text-base text-slayer-red">SIGNAL LOST</h2>
               <p className="mt-2 text-xs text-slate-300">{gameOverReason}</p>
               <div className="mt-5 flex flex-col gap-2">
                 <button
                   type="button"
                   onClick={() => switchMode(modeKey)}
-                  className="inline-flex items-center justify-center gap-2 border border-slayer-orange bg-slayer-orange/20 py-2.5 text-xs font-bold text-white hover:bg-slayer-orange/35"
+                  className="min-h-[44px] inline-flex items-center justify-center gap-2 border border-slayer-orange bg-slayer-orange/20 py-2.5 text-xs font-bold text-white hover:bg-slayer-orange/35"
                 >
                   <RotateCcw className="h-4 w-4" /> Respawn &amp; Coba Lagi
                 </button>
                 <button
                   type="button"
                   onClick={onExitToTitle}
-                  className="inline-flex items-center justify-center gap-2 border border-ancient-stone py-2 text-xs text-slate-300"
+                  className="min-h-[44px] inline-flex items-center justify-center gap-2 border border-ancient-stone py-2 text-xs text-slate-300"
                 >
                   <Home className="h-4 w-4" /> Menu Utama
                 </button>
@@ -500,7 +544,38 @@ export function GameCanvas({
             </div>
           </div>
         )}
-      </div>
+
+      {/* Dedicated Portrait Handheld Control Deck OR Full-Viewport Landscape Touch Overlay */}
+      {showTouchControls &&
+        hud &&
+        !puzzleReq &&
+        !showInventory &&
+        !isPaused &&
+        !clearSummary &&
+        !gameOverReason && (
+          <TouchControls
+            onAction={handleTouchAction}
+            onAnalogChange={handleAnalogChange}
+            layoutMode={usePortraitDeck ? 'deck' : 'overlay'}
+            hasInteractPrompt={Boolean(hud.interactPrompt)}
+            interactLabel={hud.interactPrompt}
+            canAdrenaline={hud.adrenaline >= 100 && !hud.adrenalineActive}
+            canRanged={Boolean(hud.rangedWeapon)}
+            rightSkillKind={hud.rightSkillKind}
+            rightSkillLabel={hud.rightSkillShortLabel}
+            rightSkillCost={hud.rightSkillCost}
+            energy={hud.energy}
+            nanoVials={hud.nanoVials}
+            ammoPacks={hud.ammoPacks}
+            isMeleeMode={hud.isMeleeMode}
+            meleeWeaponName={meleeDefName}
+            rangedWeaponName={rangedDefName}
+            styleRank={hud.styleRank}
+            adrenaline={hud.adrenaline}
+            adrenalineActive={hud.adrenalineActive}
+            canAirSlam={hud.canAirSlam}
+          />
+        )}
     </div>
   );
 }

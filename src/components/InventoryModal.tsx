@@ -484,14 +484,14 @@ export function InventoryModal({
   };
 
   return (
-    <div className="absolute inset-0 z-40 flex items-center justify-center bg-abyss-950/88 p-3 sm:p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto border-2 border-loot-gold/70 bg-abyss-900 p-4 sm:p-5 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-abyss-950/90 p-2.5 sm:p-4">
+      <div className="max-h-[92dvh] w-full max-w-4xl overflow-y-auto border-2 border-loot-gold/70 bg-abyss-900 p-3.5 sm:p-5 shadow-2xl">
         {/* Header */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-ancient-stone pb-3">
           <div>
-            <h2 className="font-pixel text-sm text-loot-gold">SLAYER ARSENAL &amp; FORGE</h2>
+            <h2 className="font-pixel text-xs sm:text-sm text-loot-gold">SLAYER ARSENAL &amp; FORGE</h2>
             <p className="mt-1 text-[11px] text-slate-400">
-              Pilih salah satu: <strong className="text-slayer-orange">Mode Melee Murni</strong> (Skill Klik Kanan sesuai senjata + Energy) ATAU{' '}
+              Pilih salah satu: <strong className="text-slayer-orange">Mode Melee Murni</strong> (Skill sesuai senjata + Energy) ATAU{' '}
               <strong className="text-mana-cyan">Mode Range + Short Dagger</strong> (Dagger tanpa Slam).
             </p>
           </div>
@@ -502,14 +502,15 @@ export function InventoryModal({
             <button
               type="button"
               onClick={onUnlockAllDemoGear}
-              className="inline-flex items-center gap-1 border border-mana-cyan/60 bg-mana-cyan/10 px-2.5 py-1 text-[10px] font-bold text-mana-cyan hover:bg-mana-cyan/20"
+              className="min-h-[40px] inline-flex items-center gap-1 border border-mana-cyan/60 bg-mana-cyan/10 px-2.5 py-1 text-[10px] font-bold text-mana-cyan hover:bg-mana-cyan/20"
             >
               <Sparkles className="h-3.5 w-3.5" /> Sandbox: Buka 13 Senjata &amp; 6 Armor
             </button>
             <button
               type="button"
+              aria-label="Tutup Arsenal"
               onClick={onClose}
-              className="border border-ancient-stone p-1.5 text-slate-300 hover:border-slayer-red hover:text-slayer-red"
+              className="min-h-[40px] min-w-[40px] flex items-center justify-center border border-ancient-stone p-1.5 text-slate-300 hover:border-slayer-red hover:text-slayer-red"
             >
               <X className="h-4 w-4" />
             </button>
