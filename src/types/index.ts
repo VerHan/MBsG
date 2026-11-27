@@ -18,7 +18,14 @@ export type GameScreen =
 export type WeaponSlot = 'melee' | 'ranged';
 export type WeaponTier = 'common' | 'rare' | 'epic';
 
-export type MeleeWeaponId = 'dagger' | 'sword' | 'dual_sword' | 'axe';
+export type MeleeWeaponId =
+  | 'dagger'
+  | 'sword'
+  | 'spear'
+  | 'katana'
+  | 'axe'
+  | 'hammer'
+  | 'dual_sword';
 export type RangedWeaponId = 'pistol' | 'dual_pistol' | 'shotgun' | 'rifle';
 export type WeaponId = MeleeWeaponId | RangedWeaponId;
 
@@ -41,6 +48,8 @@ export interface WeaponDef {
 export interface WeaponInstance {
   defId: WeaponId;
   tier: WeaponTier;
+  /** Upgrade level: 1 = Base, 2 = Glowing (+22% DMG), 3 = Overcharged (+48% DMG) */
+  level?: number;
 }
 
 export const TIER_DAMAGE_MULT: Record<WeaponTier, number> = {
@@ -121,6 +130,8 @@ export interface BossDef {
   drops?: {
     weaponId?: WeaponId;
     weaponTier?: WeaponTier;
+    /** Pool of candidate weapons — randomly picks 1 (prioritizes unowned!) on kill */
+    dropPool?: Array<{ weaponId: WeaponId; weaponTier: WeaponTier; level?: number }>;
     secondaryWeaponId?: WeaponId;
     secondaryWeaponTier?: WeaponTier;
     armorId?: ArmorId;
@@ -166,6 +177,9 @@ export interface ChestDef {
   loot: {
     weaponId?: WeaponId;
     weaponTier?: WeaponTier;
+    weaponLevel?: number;
+    /** Specifically upgrades an existing weapon (e.g. Dagger Lv.1 -> Lv.2 Glowing!) */
+    upgradeWeaponId?: WeaponId;
     armorId?: ArmorId;
     energyRestore?: number;
     ammoPacks?: number;
@@ -236,7 +250,8 @@ export interface PlayerState {
   nanoVials: number;
   maxNanoVials: number;
   meleeWeapon: WeaponInstance;
-  rangedWeapon: WeaponInstance;
+  /** Nullable: only 1H Dagger/Sword can pair with a Ranged gun; 2H weapons carry off-hand shield/sheath */
+  rangedWeapon: WeaponInstance | null;
   armorId: ArmorId;
   styleRank: StyleRank;
   stylePoints: number;
@@ -274,6 +289,20 @@ export interface StudentAnswerLog {
   timestamp: number;
 }
 
+export type StageKey = 'stage_1' | 'stage_2' | 'stage_3';
+
+export interface SavedGearState {
+  ammoPacks: number;
+  nanoVials: number;
+  shards: number;
+  meleeWeapon: WeaponInstance;
+  /** Nullable: only 1H Dagger/Sword can pair with a Ranged gun; 2H weapons carry off-hand shield/sheath */
+  rangedWeapon: WeaponInstance | null;
+  armorId: ArmorId;
+  weaponInventory: WeaponInstance[];
+  armorInventory: ArmorId[];
+}
+
 export interface StudentProgress {
   username: string;
   usernameKey: string;
@@ -284,6 +313,10 @@ export interface StudentProgress {
   puzzlesCorrect: number;
   answeredPuzzleIds: string[];
   modesCleared: GameMode[];
+  completedStages: StageKey[];
+  stageBestKills?: Record<string, number>;
+  stageBestShards?: Record<string, number>;
+  savedGear?: SavedGearState;
   recentAnswers: StudentAnswerLog[];
   updatedAt: number;
 }
@@ -303,6 +336,12 @@ export interface SaveData {
 export type SoundId =
   | 'sword_slash'
   | 'dual_slash'
+  | 'combo_spin'
+  | 'combo_finisher'
+  | 'spear_thrust'
+  | 'hammer_slam'
+  | 'block_clang'
+  | 'parry_flash'
   | 'axe_hit'
   | 'pistol_fire'
   | 'dual_pistol_fire'

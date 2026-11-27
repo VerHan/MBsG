@@ -52,7 +52,7 @@ export function HUD({
     hud.pylonMaxHp > 0 ? Math.max(0, Math.min(100, (hud.pylonHp / hud.pylonMaxHp) * 100)) : 0;
 
   const meleeDef = WEAPONS[hud.meleeWeapon.defId];
-  const rangedDef = WEAPONS[hud.rangedWeapon.defId];
+  const rangedDef = hud.rangedWeapon ? WEAPONS[hud.rangedWeapon.defId] : null;
   const armorDef = ARMORS[hud.armorId];
 
   return (
@@ -298,24 +298,61 @@ export function HUD({
       <div className="flex items-end justify-between gap-3">
         <div className="flex gap-2">
           <div className="border border-slayer-orange/60 bg-abyss-950/85 px-2 py-1 backdrop-blur-sm">
-            <div className="flex items-center gap-1 text-[9px] font-bold text-slayer-orange">
-              <Sword className="h-3 w-3" /> [J] MELEE
+            <div className="flex items-center justify-between gap-2 text-[9px] font-bold text-slayer-orange">
+              <span className="flex items-center gap-1">
+                <Sword className="h-3 w-3" /> [J] TAP HIT · HOLD BLOK
+              </span>
+              {hud.isBlocking ? (
+                <span className="text-mana-cyan animate-pulse">BLOCK!</span>
+              ) : hud.counterReady ? (
+                <span className="text-loot-gold animate-pulse">COUNTER!</span>
+              ) : hud.meleeCombo > 0 ? (
+                <span className="text-loot-gold">x{hud.meleeCombo}</span>
+              ) : null}
             </div>
             <div className="text-[10px] font-semibold text-white">
               {meleeDef?.name}{' '}
-              <span className="text-[9px] uppercase text-mana-cyan">({hud.meleeWeapon.tier})</span>
+              <span
+                className={`text-[9px] font-bold uppercase ${
+                  (hud.meleeWeapon.level ?? 1) >= 3
+                    ? 'text-loot-gold'
+                    : (hud.meleeWeapon.level ?? 1) === 2
+                      ? 'text-mana-cyan'
+                      : 'text-slate-400'
+                }`}
+              >
+                Lv.{hud.meleeWeapon.level ?? 1}
+                {(hud.meleeWeapon.level ?? 1) >= 2 ? ' ★' : ''} ({hud.meleeWeapon.tier})
+              </span>
             </div>
           </div>
           <div className="border border-mana-cyan/60 bg-abyss-950/85 px-2 py-1 backdrop-blur-sm">
-            <div className="flex items-center gap-1 text-[9px] font-bold text-mana-cyan">
-              <Crosshair className="h-3 w-3" /> [K] RANGED
-            </div>
-            <div className="text-[10px] font-semibold text-white">
-              {rangedDef?.name}{' '}
-              <span className="text-[9px] uppercase text-mana-purple">
-                ({hud.rangedWeapon.tier})
-              </span>
-            </div>
+            {hud.rangedWeapon && rangedDef ? (
+              <>
+                <div className="flex items-center gap-1 text-[9px] font-bold text-mana-cyan">
+                  <Crosshair className="h-3 w-3" /> [K] RANGED (1H)
+                </div>
+                <div className="text-[10px] font-semibold text-white">
+                  {rangedDef.name}{' '}
+                  <span className="text-[9px] uppercase text-mana-purple">
+                    Lv.{hud.rangedWeapon.level ?? 1} ({hud.rangedWeapon.tier})
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-1 text-[9px] font-bold text-slayer-orange">
+                  <Shield className="h-3 w-3" /> OFF-HAND (2H)
+                </div>
+                <div className="text-[10px] font-semibold text-mana-cyan">
+                  {hud.hasFullShield
+                    ? 'Energy Shield (Full Guard)'
+                    : hud.meleeWeapon.defId === 'dual_sword'
+                      ? 'Twin Blade (No Gun)'
+                      : 'Melee Focus (No Gun)'}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -329,8 +366,8 @@ export function HUD({
         <div className="hidden border border-ancient-stone bg-abyss-950/80 px-2.5 py-1 text-[10px] text-slate-400 lg:block">
           <span className="text-slate-200">A/D</span> Gerak ·{' '}
           <span className="text-slate-200">Space</span> Jump/2x ·{' '}
-          <span className="text-slate-200">Shift</span> Dash ·{' '}
-          <span className="text-slate-200">S+J</span> Pogo ·{' '}
+          <span className="text-slate-200">Tap J</span> Combo ·{' '}
+          <span className="text-slate-200">Hold J</span> Blok ·{' '}
           <span className="text-slate-200">E</span> Interaksi
         </div>
       </div>

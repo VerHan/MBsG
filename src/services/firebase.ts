@@ -5,7 +5,7 @@
 // ============================================================
 
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { collection, getDocs, getFirestore, limit, query, type Firestore } from 'firebase/firestore';
 
 export interface FirebaseConfigInput {
   apiKey: string;
@@ -75,5 +75,23 @@ export function getDb(): Firestore | null {
   } catch (err) {
     console.warn('[Firebase] Gagal inisialisasi:', err);
     return null;
+  }
+}
+
+/** Verify live Firestore connectivity and read permission on the `students` collection. */
+export async function testFirestoreConnection(): Promise<{ ok: boolean; error?: string }> {
+  const db = getDb();
+  if (!db) {
+    return { ok: false, error: 'Konfigurasi Firebase belum diisi (API Key & Project ID wajib).' };
+  }
+  if (!navigator.onLine) {
+    return { ok: false, error: 'Perangkat sedang offline — tidak dapat menghubungi Firestore.' };
+  }
+  try {
+    await getDocs(query(collection(db, 'students'), limit(1)));
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: msg };
   }
 }

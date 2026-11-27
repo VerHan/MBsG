@@ -1,15 +1,30 @@
 // ============================================================
 // RIFTBOUND: SLAYER CORPS — GameCanvas (React <-> GameEngine Bridge)
+// Handles Firestore stage-clear sync + sequential Next Stage unlock
+// and per-student gear synchronization.
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Award, BarChart3, Home, RotateCcw, Trophy } from 'lucide-react';
+import {
+  ArrowRight,
+  Award,
+  BarChart3,
+  CheckCircle2,
+  Cloud,
+  CloudOff,
+  Home,
+  RotateCcw,
+  Trophy,
+} from 'lucide-react';
 import type {
   ArmorId,
   GameMode,
   PlayerState,
+  SavedGearState,
+  StageKey,
   StudentAnswerLog,
   StudentProgress,
+  WeaponId,
   WeaponInstance,
 } from '../types';
 import { WEAPONS } from '../data/weapons';
@@ -33,7 +48,14 @@ interface GameCanvasProps {
   initialMode: PlayableModeKey;
   student: StudentProgress | null;
   onRecordPuzzleLogs: (logs: StudentAnswerLog[]) => void;
-  onRecordModeClear: (mode: GameMode, kills: number, shards: number) => void;
+  onRecordModeClear: (
+    mode: GameMode,
+    kills: number,
+    shards: number,
+    stageKey?: StageKey | null,
+    gear?: SavedGearState
+  ) => Promise<{ synced: boolean; error?: string }>;
+  onGearChange: (gear: SavedGearState) => void;
   onOpenReport: () => void;
   onExitToTitle: () => void;
 }
@@ -45,11 +67,17 @@ const NEXT_STAGE_MAP: Partial<Record<PlayableModeKey, { next: PlayableModeKey; l
   defense: { next: 'stage_1', label: 'Kembali ke STAGE 1' },
 };
 
+function toStageKey(k: PlayableModeKey): StageKey | null {
+  if (k === 'stage_1' || k === 'stage_2' || k === 'stage_3') return k;
+  return null;
+}
+
 export function GameCanvas({
   initialMode,
   student,
   onRecordPuzzleLogs,
   onRecordModeClear,
+  onGearChange,
   onOpenReport,
   onExitToTitle,
 }: GameCanvasProps) {
@@ -71,6 +99,8 @@ export function GameCanvas({
     shards: number;
     puzzleAttempted: number;
     puzzleCorrect: number;
+    saveStatus: 'saving' | 'cloud' | 'local' | 'error';
+    saveError?: string;
   } | null>(null);
   const [gameOverReason, setGameOverReason] = useState<string | null>(null);
   const [playerSnapshot, setPlayerSnapshot] = useState<PlayerState | null>(null);
@@ -80,6 +110,11 @@ export function GameCanvas({
   const areaTimerRef = useRef<number | null>(null);
   const modeKeyRef = useRef<PlayableModeKey>(initialMode);
   modeKeyRef.current = modeKey;
+
+  const studentRef = useRef(student);
+  studentRef.current = student;
+  const onGearChangeRef = useRef(onGearChange);
+  onGearChangeRef.current = onGearChange;
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -100,34 +135,53 @@ export function GameCanvas({
     const engine = new GameEngine(canvas);
     engineRef.current = engine;
 
+    const curStudent = studentRef.current;
+    engine.setStudentKey(curStudent?.usernameKey ?? null);
+
     engine.onHudUpdate = (snap) => setHud(snap);
     engine.onToast = showToast;
     engine.onAreaChange = showAreaBanner;
+    engine.onGearChange = (gear) => onGearChangeRef.current(gear);
     engine.onPause = () => setIsPaused(true);
     engine.onToggleInventory = () => {
       setPlayerSnapshot({ ...engine.player.state });
       setShowInventory(true);
     };
     engine.onPuzzleTrigger = (req) => setPuzzleReq(req);
-    engine.onSegmentComplete = (_segId, kills, shards) => {
+    engine.onSegmentComplete = async (_segId, kills, shards) => {
       engine.pauseForModal();
       const k = modeKeyRef.current;
       const recordedMode: GameMode =
         k === 'survival' ? 'survival' : k === 'defense' ? 'defense' : 'traverse';
-      onRecordModeClear(recordedMode, kills, shards);
+      const stageKey = toStageKey(k);
+      const gear = engine.player.exportSavedGear();
+      engine.saveGear();
+
       setClearSummary({
         kills,
         shards,
         puzzleAttempted: puzzleStatsRef.current.attempted,
         puzzleCorrect: puzzleStatsRef.current.correct,
+        saveStatus: 'saving',
       });
+
+      const res = await onRecordModeClear(recordedMode, kills, shards, stageKey, gear);
+      setClearSummary((prev) =>
+        prev
+          ? {
+              ...prev,
+              saveStatus: res.synced ? 'cloud' : res.error ? 'error' : 'local',
+              saveError: res.error,
+            }
+          : null
+      );
     };
     engine.onGameOver = (reason) => {
       engine.pauseForModal();
       setGameOverReason(reason);
     };
 
-    engine.loadPlayableMode(initialMode);
+    engine.loadPlayableMode(initialMode, false, curStudent?.savedGear ?? null);
     engine.start();
 
     return () => {
@@ -150,7 +204,7 @@ export function GameCanvas({
     setPuzzleReq(null);
     setShowInventory(false);
     puzzleStatsRef.current = { attempted: 0, correct: 0 };
-    engine.loadPlayableMode(nextMode, keepGear);
+    engine.loadPlayableMode(nextMode, keepGear, keepGear ? null : studentRef.current?.savedGear ?? null);
     engine.resumeFromModal();
   };
 
@@ -175,9 +229,36 @@ export function GameCanvas({
   const handleEquipWeapon = (w: WeaponInstance) => {
     const engine = engineRef.current;
     if (!engine) return;
-    engine.player.equipWeapon(w);
+    const res = engine.player.equipWeapon(w);
     engine.saveGear();
     setPlayerSnapshot({ ...engine.player.state });
+    if (res.notice) showToast(res.notice);
+  };
+
+  const handleUnequipRanged = () => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.player.unequipRanged();
+    engine.saveGear();
+    setPlayerSnapshot({ ...engine.player.state });
+    showToast('Gun dilepas (Fokus Melee).');
+  };
+
+  const handleUpgradeWeapon = (weaponId: WeaponId) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    const res = engine.player.upgradeWeaponWithShards(weaponId);
+    if (res.ok && res.weapon) {
+      engine.saveGear();
+      setPlayerSnapshot({ ...engine.player.state });
+      showToast(
+        `UPGRADE! ${WEAPONS[weaponId]?.name} -> Lv.${res.weapon.level} (${
+          res.weapon.level === 3 ? 'MAX GLOW!' : 'GLOWING!'
+        })`
+      );
+    } else if (res.reason) {
+      showToast(res.reason);
+    }
   };
 
   const handleEquipArmor = (id: ArmorId) => {
@@ -194,11 +275,13 @@ export function GameCanvas({
     engine.player.state.weaponInventory = Object.keys(WEAPONS).map((id) => ({
       defId: id as WeaponInstance['defId'],
       tier: 'epic',
+      level: 2,
     }));
     engine.player.state.armorInventory = [...ARMOR_ORDER] as ArmorId[];
+    engine.player.state.shards = Math.max(engine.player.state.shards, 200);
     engine.saveGear();
     setPlayerSnapshot({ ...engine.player.state });
-    showToast('Sandbox aktif: Semua 8 Senjata (Epic) & 4 Armor dibuka!');
+    showToast('Sandbox aktif: 11 Senjata (Lv.2 Glow) + 200 Shards & 4 Armor dibuka!');
   };
 
   const nextStageInfo = NEXT_STAGE_MAP[modeKey];
@@ -237,6 +320,7 @@ export function GameCanvas({
             onAction={handleTouchAction}
             hasInteractPrompt={Boolean(hud.interactPrompt)}
             canAdrenaline={hud.adrenaline >= 100 && !hud.adrenalineActive}
+            canRanged={Boolean(hud.rangedWeapon)}
           />
         )}
 
@@ -257,6 +341,8 @@ export function GameCanvas({
           <InventoryModal
             playerState={playerSnapshot}
             onEquipWeapon={handleEquipWeapon}
+            onUnequipRanged={handleUnequipRanged}
+            onUpgradeWeapon={handleUpgradeWeapon}
             onEquipArmor={handleEquipArmor}
             onUnlockAllDemoGear={handleUnlockAllDemoGear}
             onClose={() => {
@@ -269,6 +355,7 @@ export function GameCanvas({
         {isPaused && !puzzleReq && !showInventory && (
           <PauseMenu
             currentMode={modeKey}
+            completedStages={student?.completedStages ?? []}
             onResume={() => {
               setIsPaused(false);
               engineRef.current?.resume();
@@ -298,6 +385,30 @@ export function GameCanvas({
                 selesai!
               </p>
 
+              {/* Save status pill */}
+              <div className="mt-2.5 flex justify-center">
+                {clearSummary.saveStatus === 'saving' && (
+                  <span className="inline-flex items-center gap-1.5 border border-mana-cyan/50 bg-mana-cyan/10 px-3 py-1 text-[11px] text-mana-cyan">
+                    Menyimpan progres ke Firestore...
+                  </span>
+                )}
+                {clearSummary.saveStatus === 'cloud' && (
+                  <span className="inline-flex items-center gap-1.5 border border-loot-green/70 bg-loot-green/15 px-3 py-1 text-[11px] font-bold text-loot-green">
+                    <Cloud className="h-3.5 w-3.5" /> PROGRES TERSIMPAN KE FIRESTORE ✓
+                  </span>
+                )}
+                {clearSummary.saveStatus === 'local' && (
+                  <span className="inline-flex items-center gap-1.5 border border-loot-gold/60 bg-loot-gold/10 px-3 py-1 text-[11px] text-loot-gold">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Tersimpan Lokal (Hubungkan Firestore untuk Cloud)
+                  </span>
+                )}
+                {clearSummary.saveStatus === 'error' && (
+                  <span className="inline-flex items-center gap-1.5 border border-slayer-red/60 bg-slayer-red/10 px-3 py-1 text-[11px] text-slayer-red">
+                    <CloudOff className="h-3.5 w-3.5" /> Gagal Sync Cloud: {clearSummary.saveError}
+                  </span>
+                )}
+              </div>
+
               <div className="my-4 grid grid-cols-2 gap-2 border border-ancient-stone bg-abyss-950 p-3 text-xs">
                 <div>
                   <div className="text-slate-400">Kills</div>
@@ -323,10 +434,12 @@ export function GameCanvas({
                 {nextStageInfo && (
                   <button
                     type="button"
+                    disabled={clearSummary.saveStatus === 'saving'}
                     onClick={() => switchMode(nextStageInfo.next, true)}
-                    className="inline-flex items-center justify-center gap-2 border border-mana-cyan bg-mana-cyan/15 py-2.5 text-xs font-bold text-mana-cyan hover:bg-mana-cyan/25"
+                    className="inline-flex items-center justify-center gap-2 border border-mana-cyan bg-mana-cyan/15 py-2.5 text-xs font-bold text-mana-cyan hover:bg-mana-cyan/25 disabled:opacity-50"
                   >
-                    {nextStageInfo.label} <ArrowRight className="h-4 w-4" />
+                    {clearSummary.saveStatus === 'saving' ? 'Menyimpan...' : nextStageInfo.label}{' '}
+                    <ArrowRight className="h-4 w-4" />
                   </button>
                 )}
                 <button

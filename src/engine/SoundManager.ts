@@ -40,6 +40,46 @@ const SFX_LIBRARY: Partial<Record<SoundId, SfxDef>> = {
       { freq: 1000, duration: 0.03, type: 'sawtooth', gain: 0.25, slideTo: 250 },
     ],
   },
+  combo_spin: {
+    steps: [
+      { freq: 520, duration: 0.04, type: 'sawtooth', gain: 0.26, slideTo: 1180 },
+      { freq: 980, duration: 0.06, type: 'triangle', gain: 0.28, slideTo: 420 },
+    ],
+    noise: { duration: 0.08, gain: 0.16 },
+  },
+  combo_finisher: {
+    steps: [
+      { freq: 340, duration: 0.05, type: 'sawtooth', gain: 0.36, slideTo: 90 },
+      { freq: 180, duration: 0.1, type: 'square', gain: 0.3, slideTo: 55 },
+    ],
+    noise: { duration: 0.12, gain: 0.3 },
+  },
+  spear_thrust: {
+    steps: [
+      { freq: 1050, duration: 0.04, type: 'triangle', gain: 0.28, slideTo: 320 },
+    ],
+    noise: { duration: 0.04, gain: 0.14 },
+  },
+  hammer_slam: {
+    steps: [
+      { freq: 130, duration: 0.11, type: 'sawtooth', gain: 0.45, slideTo: 38 },
+    ],
+    noise: { duration: 0.16, gain: 0.38 },
+  },
+  block_clang: {
+    steps: [
+      { freq: 960, duration: 0.03, type: 'square', gain: 0.24, slideTo: 620 },
+      { freq: 1320, duration: 0.05, type: 'triangle', gain: 0.2, slideTo: 880 },
+    ],
+    noise: { duration: 0.04, gain: 0.14 },
+  },
+  parry_flash: {
+    steps: [
+      { freq: 1100, duration: 0.04, type: 'sine', gain: 0.3, slideTo: 1800 },
+      { freq: 1560, duration: 0.09, type: 'triangle', gain: 0.28, slideTo: 980 },
+    ],
+    noise: { duration: 0.06, gain: 0.18 },
+  },
   axe_hit: {
     steps: [
       { freq: 200, duration: 0.08, type: 'sawtooth', gain: 0.4, slideTo: 60 },

@@ -232,9 +232,9 @@ export function LearningReportModal({
                 </div>
               </div>
               <div className="border border-ancient-stone bg-abyss-950 p-3">
-                <div className="text-[10px] text-slate-400">SHARDS / CLEAR</div>
+                <div className="text-[10px] text-slate-400">SHARDS / STAGE</div>
                 <div className="mt-1 font-pixel text-sm text-loot-gold">
-                  {student.totalShards} · {student.modesCleared.length}/3
+                  {student.totalShards} · {student.completedStages.length}/3
                 </div>
               </div>
             </div>

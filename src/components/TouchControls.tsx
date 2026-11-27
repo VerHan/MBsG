@@ -10,6 +10,7 @@ interface TouchControlsProps {
   onAction: (action: InputAction, down: boolean) => void;
   hasInteractPrompt: boolean;
   canAdrenaline: boolean;
+  canRanged?: boolean;
 }
 
 interface TouchBtnProps {
@@ -44,6 +45,7 @@ export function TouchControls({
   onAction,
   hasInteractPrompt,
   canAdrenaline,
+  canRanged = true,
 }: TouchControlsProps) {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-14 z-30 flex items-end justify-between px-3 sm:bottom-12 sm:px-5">
@@ -113,9 +115,10 @@ export function TouchControls({
         <TouchBtn
           action="melee"
           onAction={onAction}
-          className="h-12 w-12 rounded-full border-slayer-orange/80 bg-slayer-orange/20 text-slayer-orange active:bg-slayer-orange/40"
+          className="h-12 w-12 flex-col rounded-full border-slayer-orange/80 bg-slayer-orange/20 text-slayer-orange active:bg-slayer-orange/40"
         >
-          <Sword className="h-5 w-5" />
+          <Sword className="h-4 w-4" />
+          <span className="text-[7px] font-bold leading-none mt-0.5">TAP/HLD</span>
         </TouchBtn>
         <TouchBtn
           action="jump"
@@ -127,7 +130,9 @@ export function TouchControls({
         <TouchBtn
           action="ranged"
           onAction={onAction}
-          className="h-11 w-11 rounded-full border-mana-cyan/80 bg-mana-cyan/20 text-mana-cyan active:bg-mana-cyan/40"
+          className={`h-11 w-11 rounded-full border-mana-cyan/80 bg-mana-cyan/20 text-mana-cyan ${
+            canRanged ? 'active:bg-mana-cyan/40' : 'opacity-30'
+          }`}
         >
           <Crosshair className="h-4 w-4" />
         </TouchBtn>

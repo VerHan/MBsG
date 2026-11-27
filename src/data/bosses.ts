@@ -1,5 +1,5 @@
 // ============================================================
-// RIFTBOUND: SLAYER CORPS — Boss Definitions & Boss Drop Tables
+// RIFTBOUND: SLAYER CORPS — Boss Definitions & Random Drop Pools
 // ============================================================
 
 import type { BossDef } from '../types';
@@ -13,8 +13,11 @@ export const BOSSES: Record<string, BossDef> = {
     contactDamage: 15,
     hasRunicPillar: true,
     drops: {
-      weaponId: 'sword',
-      weaponTier: 'rare',
+      dropPool: [
+        { weaponId: 'sword', weaponTier: 'rare', level: 1 },
+        { weaponId: 'spear', weaponTier: 'rare', level: 2 },
+        { weaponId: 'katana', weaponTier: 'rare', level: 1 },
+      ],
       armorId: 'vanguard',
       shards: 150,
       ammoPacks: 2,
@@ -44,8 +47,11 @@ export const BOSSES: Record<string, BossDef> = {
     contactDamage: 20,
     hasRunicPillar: true,
     drops: {
-      weaponId: 'axe',
-      weaponTier: 'epic',
+      dropPool: [
+        { weaponId: 'axe', weaponTier: 'epic', level: 1 },
+        { weaponId: 'hammer', weaponTier: 'epic', level: 1 },
+        { weaponId: 'spear', weaponTier: 'epic', level: 2 },
+      ],
       secondaryWeaponId: 'shotgun',
       secondaryWeaponTier: 'rare',
       armorId: 'rift_stalker',
@@ -81,8 +87,11 @@ export const BOSSES: Record<string, BossDef> = {
     contactDamage: 25,
     hasRunicPillar: true,
     drops: {
-      weaponId: 'dual_sword',
-      weaponTier: 'epic',
+      dropPool: [
+        { weaponId: 'dual_sword', weaponTier: 'epic', level: 2 },
+        { weaponId: 'katana', weaponTier: 'epic', level: 2 },
+        { weaponId: 'hammer', weaponTier: 'epic', level: 2 },
+      ],
       secondaryWeaponId: 'rifle',
       secondaryWeaponTier: 'epic',
       armorId: 'aether_praetor',

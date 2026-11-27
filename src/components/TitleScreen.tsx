@@ -1,15 +1,20 @@
 // ============================================================
-// RIFTBOUND: SLAYER CORPS — Title Screen + 3 Themed Stages
+// RIFTBOUND: SLAYER CORPS — Title Screen
+// Sequential Stage Locking (Stage 1 -> Save -> Stage 2 -> Stage 3),
+// inline Firestore Connect + Test UI, and Student Profile Sync.
 // ============================================================
 
 import { useEffect, useState } from 'react';
 import {
   BarChart3,
   BookOpen,
+  CheckCircle2,
   Cloud,
   CloudOff,
   Compass,
+  Database,
   Download,
+  Lock,
   Play,
   Shield,
   Timer,
@@ -17,10 +22,16 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
-import type { StudentProgress } from '../types';
+import type { StageKey, StudentProgress } from '../types';
 import type { PlayableModeKey } from '../engine/LevelBuilder';
-import { isFirebaseConfigured } from '../services/firebase';
-import { loginOrCreateStudent } from '../services/progressService';
+import {
+  clearCustomFirebaseConfig,
+  getFirebaseConfig,
+  isFirebaseConfigured,
+  saveCustomFirebaseConfig,
+  testFirestoreConnection,
+} from '../services/firebase';
+import { isStageUnlocked, loginOrCreateStudent } from '../services/progressService';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -35,6 +46,44 @@ interface TitleScreenProps {
   onStartMode: (mode: PlayableModeKey) => void;
 }
 
+const STAGE_CARDS: Array<{
+  key: StageKey;
+  badge: string;
+  title: string;
+  desc: string;
+  lockHint: string;
+  accentBorder: string;
+  accentText: string;
+}> = [
+  {
+    key: 'stage_1',
+    badge: 'STAGE 1 · 4 AREA + BOSS',
+    title: 'Berpikir Komputasional',
+    desc: 'Dekomposisi, Abstraksi, Pola, Flowchart & Pseudocode. 4 Chest + Shrine + Boss Mana Colossus.',
+    lockHint: '',
+    accentBorder: 'hover:border-loot-gold',
+    accentText: 'text-loot-gold',
+  },
+  {
+    key: 'stage_2',
+    badge: 'STAGE 2 · 4 AREA + BOSS',
+    title: 'Gerbang Logika',
+    desc: 'AND, OR, NOT, XOR, NAND, NOR, XNOR & De Morgan. 4 Chest + Barrier + Boss Forge Titan.',
+    lockHint: 'Selesaikan & Save Stage 1 untuk membuka',
+    accentBorder: 'hover:border-mana-purple',
+    accentText: 'text-mana-cyan',
+  },
+  {
+    key: 'stage_3',
+    badge: 'STAGE 3 · 4 AREA + FINAL BOSS',
+    title: 'Sistem Biner',
+    desc: 'Bit/Byte, Konversi Biner-Desimal, Penjumlahan Biner & ASCII. 4 Chest + Final Boss Aetherion.',
+    lockHint: 'Selesaikan & Save Stage 2 untuk membuka',
+    accentBorder: 'hover:border-slayer-red',
+    accentText: 'text-white',
+  },
+];
+
 export function TitleScreen({
   student,
   onStudentUpdate,
@@ -48,6 +97,16 @@ export function TitleScreen({
   const [classInput, setClassInput] = useState(student?.className ?? '');
   const [loginMsg, setLoginMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Inline Firestore setup panel
+  const existingCfg = getFirebaseConfig();
+  const [showFbSetup, setShowFbSetup] = useState(false);
+  const [fbApiKey, setFbApiKey] = useState(existingCfg?.apiKey ?? '');
+  const [fbProjectId, setFbProjectId] = useState(existingCfg?.projectId ?? '');
+  const [fbAuthDomain, setFbAuthDomain] = useState(existingCfg?.authDomain ?? '');
+  const [fbAppId, setFbAppId] = useState(existingCfg?.appId ?? '');
+  const [fbStatus, setFbStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [fbTesting, setFbTesting] = useState(false);
 
   useEffect(() => {
     const onBeforeInstall = (e: Event) => {
@@ -77,22 +136,58 @@ export function TitleScreen({
     e?.preventDefault();
     const trimmed = usernameInput.trim();
     if (!trimmed) {
-      setLoginMsg('Isi username terlebih dahulu sebelum bermain.');
+      setLoginMsg('Isi username siswa terlebih dahulu sebelum bermain.');
       return null;
     }
     setSaving(true);
     setLoginMsg(null);
     try {
-      const { profile, syncedFromCloud } = await loginOrCreateStudent(trimmed, classInput);
-      onStudentUpdate(profile);
-      setLoginMsg(
-        syncedFromCloud
-          ? `Profil "${profile.username}" siap & tersinkron ke Firebase!`
-          : `Profil "${profile.username}" siap (tersimpan lokal di perangkat).`
+      const { profile, syncedFromCloud, syncError } = await loginOrCreateStudent(
+        trimmed,
+        classInput
       );
+      onStudentUpdate(profile);
+      if (syncedFromCloud) {
+        setLoginMsg(
+          `Profil "${profile.username}" siap & tersinkron ke Firestore! (${profile.completedStages.length}/3 Stage selesai)`
+        );
+      } else if (syncError) {
+        setLoginMsg(
+          `Profil dimuat lokal (Firestore error: ${syncError}). Cek koneksi/Rules Firestore.`
+        );
+      } else {
+        setLoginMsg(
+          `Profil "${profile.username}" tersimpan lokal. Hubungkan Firestore agar progres aman di Cloud.`
+        );
+      }
       return profile;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveAndTestFirestore = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fbApiKey.trim() || !fbProjectId.trim()) {
+      setFbStatus({ ok: false, msg: 'API Key dan Project ID wajib diisi.' });
+      return;
+    }
+    saveCustomFirebaseConfig({
+      apiKey: fbApiKey.trim(),
+      projectId: fbProjectId.trim(),
+      authDomain: fbAuthDomain.trim() || undefined,
+      appId: fbAppId.trim() || undefined,
+    });
+    setFbTesting(true);
+    const res = await testFirestoreConnection();
+    setFbTesting(false);
+    if (res.ok) {
+      setFbStatus({ ok: true, msg: 'Berhasil terhubung ke Firestore (koleksi `students` siap)!' });
+      if (usernameInput.trim()) {
+        await handleLoginSubmit();
+      }
+    } else {
+      setFbStatus({ ok: false, msg: `Gagal terhubung ke Firestore: ${res.error}` });
     }
   };
 
@@ -109,6 +204,8 @@ export function TitleScreen({
     student && student.puzzlesAttempted > 0
       ? Math.round((student.puzzlesCorrect / student.puzzlesAttempted) * 100)
       : 0;
+  const completedStages = student?.completedStages ?? [];
+  const fbConfigured = isFirebaseConfigured();
 
   return (
     <div className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-y-auto bg-abyss-950 px-5 py-6 text-slate-100 scanlines">
@@ -118,26 +215,28 @@ export function TitleScreen({
       <main className="relative z-10 w-full max-w-4xl border-2 border-ancient-stone bg-abyss-900/95 p-6 shadow-2xl md:p-8">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-ancient-stone pb-3 text-[11px]">
           <span className="font-bold tracking-widest text-mana-cyan">
-            RIFTBOUND PWA // 3 STAGE BERTEMA (27 SOAL)
+            RIFTBOUND PWA // 3 STAGE BERURUTAN (27 SOAL)
           </span>
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1 border px-2 py-0.5 ${
-                isFirebaseConfigured()
-                  ? 'border-mana-cyan/50 bg-mana-cyan/10 text-mana-cyan'
-                  : 'border-slate-600 bg-abyss-950 text-slate-400'
+            <button
+              type="button"
+              onClick={() => setShowFbSetup((v) => !v)}
+              className={`inline-flex items-center gap-1 border px-2 py-0.5 font-semibold transition ${
+                fbConfigured
+                  ? 'border-mana-cyan/50 bg-mana-cyan/10 text-mana-cyan hover:bg-mana-cyan/20'
+                  : 'border-slayer-orange bg-slayer-orange/15 text-loot-gold hover:bg-slayer-orange/25 animate-pulse'
               }`}
             >
-              {isFirebaseConfigured() ? (
+              {fbConfigured ? (
                 <>
-                  <Cloud className="h-3 w-3" /> FIREBASE SYNC
+                  <Cloud className="h-3 w-3" /> FIRESTORE TERHUBUNG
                 </>
               ) : (
                 <>
-                  <CloudOff className="h-3 w-3" /> LOCAL SAVE
+                  <CloudOff className="h-3 w-3" /> HUBUNGKAN FIRESTORE
                 </>
               )}
-            </span>
+            </button>
             <span
               className={`inline-flex items-center gap-1 border px-2 py-0.5 ${
                 isOnline
@@ -160,6 +259,101 @@ export function TitleScreen({
           </div>
         </div>
 
+        {/* Inline Firestore Connection & Verification Panel */}
+        {(!fbConfigured || showFbSetup) && (
+          <div className="mb-4 border border-mana-purple/60 bg-abyss-950/95 p-3.5 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 font-bold text-mana-purple">
+                <Database className="h-4 w-4" />
+                {fbConfigured
+                  ? 'Pengaturan Koneksi Firebase Firestore'
+                  : 'Hubungkan Firebase Firestore agar Progres & Gear Anak Tersimpan Permanen'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowFbSetup((v) => !v)}
+                className="border border-ancient-stone px-2 py-0.5 text-[10px] text-slate-300 hover:border-mana-cyan"
+              >
+                {showFbSetup ? 'Tutup Form' : 'Buka Form Firestore'}
+              </button>
+            </div>
+
+            {showFbSetup && (
+              <form onSubmit={handleSaveAndTestFirestore} className="mt-3">
+                <p className="mb-2.5 text-[11px] text-slate-400">
+                  Isi dari Firebase Console -&gt; Project Settings -&gt; Web App (atau set di file{' '}
+                  <code>.env</code>). Progres stage, nilai soal, &amp; gear anak tersimpan di koleksi{' '}
+                  <code>students</code>.
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input
+                    type="text"
+                    placeholder="VITE_FIREBASE_API_KEY *"
+                    value={fbApiKey}
+                    onChange={(e) => setFbApiKey(e.target.value)}
+                    className="border border-ancient-stone bg-abyss-900 px-2.5 py-1.5 text-xs text-white outline-none focus:border-mana-cyan"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="VITE_FIREBASE_PROJECT_ID *"
+                    value={fbProjectId}
+                    onChange={(e) => setFbProjectId(e.target.value)}
+                    className="border border-ancient-stone bg-abyss-900 px-2.5 py-1.5 text-xs text-white outline-none focus:border-mana-cyan"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="VITE_FIREBASE_AUTH_DOMAIN"
+                    value={fbAuthDomain}
+                    onChange={(e) => setFbAuthDomain(e.target.value)}
+                    className="border border-ancient-stone bg-abyss-900 px-2.5 py-1.5 text-xs text-white outline-none focus:border-mana-cyan"
+                  />
+                  <input
+                    type="text"
+                    placeholder="VITE_FIREBASE_APP_ID"
+                    value={fbAppId}
+                    onChange={(e) => setFbAppId(e.target.value)}
+                    className="border border-ancient-stone bg-abyss-900 px-2.5 py-1.5 text-xs text-white outline-none focus:border-mana-cyan"
+                  />
+                </div>
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  <button
+                    type="submit"
+                    disabled={fbTesting}
+                    className="border border-loot-green bg-loot-green/15 px-3 py-1 font-bold text-loot-green hover:bg-loot-green/25 disabled:opacity-50"
+                  >
+                    {fbTesting ? 'Menguji Koneksi...' : 'Simpan & Tes Firestore'}
+                  </button>
+                  {fbConfigured && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearCustomFirebaseConfig();
+                        setFbApiKey('');
+                        setFbProjectId('');
+                        setFbAuthDomain('');
+                        setFbAppId('');
+                        setFbStatus({ ok: false, msg: 'Konfigurasi lokal dihapus.' });
+                      }}
+                      className="border border-slayer-red/60 px-2.5 py-1 text-[11px] text-slayer-red hover:bg-slayer-red/10"
+                    >
+                      Putuskan Config Lokal
+                    </button>
+                  )}
+                  {fbStatus && (
+                    <span
+                      className={`text-[11px] ${fbStatus.ok ? 'text-loot-green' : 'text-slayer-red'}`}
+                    >
+                      {fbStatus.msg}
+                    </span>
+                  )}
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center">
           <img
             src="/favicon.svg"
@@ -168,14 +362,14 @@ export function TitleScreen({
           />
           <div>
             <p className="text-[11px] font-bold tracking-widest text-slayer-orange">
-              SILKSONG AGILITY · DOOM ARSENAL · 3 BOSS · 27 SOAL BERTEMA
+              COMBO BLOK &amp; PARRY · DOOM ARSENAL · 3 BOSS · FIRESTORE SAVE
             </p>
             <h1 className="mt-1 font-pixel text-xl leading-snug text-white md:text-2xl">
               RIFTBOUND: <span className="text-mana-cyan">SLAYER CORPS</span>
             </h1>
             <p className="mt-1.5 text-xs text-slate-400">
-              Setiap Stage punya tema materi khusus (9 soal per Stage di Chest, Puzzle Shrine,
-              Terminal, dan Runic Pillar Boss).
+              Selesaikan Stage secara berurutan (1 -&gt; 2 -&gt; 3). Setiap Stage selesai otomatis
+              disimpan ke profil siswa sebelum membuka Stage berikutnya.
             </p>
           </div>
         </div>
@@ -187,7 +381,7 @@ export function TitleScreen({
         >
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-xs font-bold text-mana-cyan">
-              <UserCheck className="h-4 w-4" /> PROFIL SISWA (CATATAN PROGRES)
+              <UserCheck className="h-4 w-4" /> PROFIL SISWA (SIMPAN PROGRES &amp; STAGE)
             </span>
             <button
               type="button"
@@ -218,7 +412,7 @@ export function TitleScreen({
               disabled={saving}
               className="sm:col-span-3 border border-loot-green bg-loot-green/15 px-3 py-2 text-xs font-bold text-loot-green hover:bg-loot-green/25 disabled:opacity-50"
             >
-              {saving ? 'Menyimpan...' : student ? 'Ganti / Simpan' : 'Buat Profil'}
+              {saving ? 'Menyinkronkan...' : student ? 'Ganti / Sync Profil' : 'Buat & Muat Profil'}
             </button>
           </div>
 
@@ -227,6 +421,9 @@ export function TitleScreen({
               <span>
                 Aktif: <strong className="text-white">{student.username}</strong>
                 {student.className ? ` (${student.className})` : ''}
+              </span>
+              <span className="text-mana-cyan">
+                Stage Tersimpan: <strong>{completedStages.length}/3</strong>
               </span>
               <span className="text-loot-green">
                 Soal Benar: {student.puzzlesCorrect}/{student.puzzlesAttempted} ({accuracy}%)
@@ -256,52 +453,63 @@ export function TitleScreen({
           </button>
         </div>
 
-        {/* 3 Full Themed Stages */}
+        {/* 3 Sequential Stage Cards */}
         <div className="mb-3 grid gap-3 md:grid-cols-3">
-          <button
-            type="button"
-            onClick={() => ensureStudentThenRun(() => onStartMode('stage_1'))}
-            className="border border-ancient-stone bg-abyss-950/90 p-3.5 text-left transition hover:border-loot-gold"
-          >
-            <div className="text-[10px] font-bold text-slayer-orange">STAGE 1 · 4 AREA + BOSS</div>
-            <div className="mt-0.5 flex items-center gap-1.5 text-xs font-bold text-loot-gold">
-              <Compass className="h-4 w-4 shrink-0" /> Berpikir Komputasional
-            </div>
-            <p className="mt-1 text-[11px] text-slate-400">
-              Dekomposisi, Abstraksi, Pola, Flowchart &amp; Pseudocode. 4 Chest + Shrine + Boss
-              Mana Colossus.
-            </p>
-          </button>
+          {STAGE_CARDS.map((card) => {
+            const unlocked = isStageUnlocked(student, card.key);
+            const cleared = completedStages.includes(card.key);
+            const bestKills = student?.stageBestKills?.[card.key];
 
-          <button
-            type="button"
-            onClick={() => ensureStudentThenRun(() => onStartMode('stage_2'))}
-            className="border border-ancient-stone bg-abyss-950/90 p-3.5 text-left transition hover:border-mana-purple"
-          >
-            <div className="text-[10px] font-bold text-mana-purple">STAGE 2 · 4 AREA + BOSS</div>
-            <div className="mt-0.5 flex items-center gap-1.5 text-xs font-bold text-mana-cyan">
-              <Compass className="h-4 w-4 shrink-0" /> Gerbang Logika
-            </div>
-            <p className="mt-1 text-[11px] text-slate-400">
-              AND, OR, NOT, XOR, NAND, NOR, XNOR &amp; De Morgan. 4 Chest + Barrier + Boss Forge
-              Titan.
-            </p>
-          </button>
+            return (
+              <button
+                key={card.key}
+                type="button"
+                disabled={!unlocked}
+                onClick={() => ensureStudentThenRun(() => onStartMode(card.key))}
+                className={`border p-3.5 text-left transition ${
+                  unlocked
+                    ? `border-ancient-stone bg-abyss-950/90 ${card.accentBorder}`
+                    : 'cursor-not-allowed border-ancient-stone/50 bg-abyss-950/50 opacity-65'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1 text-[10px] font-bold">
+                  <span className={unlocked ? 'text-slayer-orange' : 'text-slate-500'}>
+                    {card.badge}
+                  </span>
+                  {cleared ? (
+                    <span className="inline-flex items-center gap-1 text-loot-green">
+                      <CheckCircle2 className="h-3 w-3" /> SAVED
+                    </span>
+                  ) : !unlocked ? (
+                    <span className="inline-flex items-center gap-1 text-slayer-red">
+                      <Lock className="h-3 w-3" /> TERKUNCI
+                    </span>
+                  ) : (
+                    <span className="text-mana-cyan">TERBUKA</span>
+                  )}
+                </div>
 
-          <button
-            type="button"
-            onClick={() => ensureStudentThenRun(() => onStartMode('stage_3'))}
-            className="border border-ancient-stone bg-abyss-950/90 p-3.5 text-left transition hover:border-slayer-red"
-          >
-            <div className="text-[10px] font-bold text-slayer-red">STAGE 3 · 4 AREA + FINAL BOSS</div>
-            <div className="mt-0.5 flex items-center gap-1.5 text-xs font-bold text-white">
-              <Compass className="h-4 w-4 shrink-0 text-loot-gold" /> Sistem Biner
-            </div>
-            <p className="mt-1 text-[11px] text-slate-400">
-              Bit/Byte, Konversi Biner-Desimal, Penjumlahan Biner &amp; ASCII. 4 Chest + Final Boss
-              Aetherion.
-            </p>
-          </button>
+                <div className={`mt-1 flex items-center gap-1.5 text-xs font-bold ${card.accentText}`}>
+                  {unlocked ? (
+                    <Compass className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <Lock className="h-4 w-4 shrink-0 text-slate-500" />
+                  )}
+                  {card.title}
+                </div>
+
+                <p className="mt-1 text-[11px] text-slate-400">
+                  {unlocked ? card.desc : card.lockHint}
+                </p>
+
+                {cleared && bestKills !== undefined && (
+                  <div className="mt-1.5 text-[10px] text-loot-gold">
+                    Rekor Kills: {bestKills}
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Bonus Modes */}
@@ -313,7 +521,7 @@ export function TitleScreen({
           >
             <Timer className="h-5 w-5 shrink-0 text-slayer-red" />
             <div>
-              <div className="text-xs font-bold text-slayer-red">MODE BONUS: SURVIVAL TIMER (45s)</div>
+              <div className="text-xs font-bold text-slayer-red">MODE LATIHAN: SURVIVAL (45s)</div>
               <div className="text-[10px] text-slate-400">
                 Arena bertingkat + Emergency Shield Terminal (Tema Stage 1).
               </div>
@@ -327,7 +535,7 @@ export function TitleScreen({
           >
             <Shield className="h-5 w-5 shrink-0 text-mana-cyan" />
             <div>
-              <div className="text-xs font-bold text-mana-cyan">MODE BONUS: HOLD THE FORT</div>
+              <div className="text-xs font-bold text-mana-cyan">MODE LATIHAN: HOLD THE FORT</div>
               <div className="text-[10px] text-slate-400">
                 Pertahankan Pylon + Barricade &amp; Repair Turret (Tema Stage 2).
               </div>
@@ -338,8 +546,10 @@ export function TitleScreen({
         <div className="border border-ancient-stone bg-abyss-950/80 p-3 text-[11px] text-slate-400">
           <span className="font-bold text-slate-200">Kontrol:</span>{' '}
           <code>A/D</code> Gerak · <code>Space/W</code> Jump/2x · <code>Shift</code> Dash ·{' '}
-          <code>J/LMB</code> Melee · <code>S+J</code> Pogo · <code>K/RMB</code> Ranged ·{' '}
-          <code>E</code> Chest/Shrine/Pillar · <code>Q</code> Heal · <code>R</code> Ammo · <code>I</code> Gear
+          <code>Tap J/LMB</code> 3-Hit Combo (Hit 2 Spin!) ·{' '}
+          <code>Hold J/LMB</code> Block &amp; Parry · <code>S+J</code> Pogo ·{' '}
+          <code>K/RMB</code> Ranged · <code>E</code> Interaksi · <code>Q</code> Heal ·{' '}
+          <code>R</code> Ammo · <code>I</code> Gear
         </div>
       </main>
     </div>

@@ -1,6 +1,7 @@
 // ============================================================
 // RIFTBOUND: SLAYER CORPS — Student Progress Service
-// Offline-first LocalStorage + automatic Firebase Firestore sync.
+// Offline-first LocalStorage + automatic Firebase Firestore sync,
+// per-student gear persistence, and sequential Stage unlocking.
 // ============================================================
 
 import {
@@ -13,11 +14,19 @@ import {
   query,
   setDoc,
 } from 'firebase/firestore';
-import type { GameMode, StudentAnswerLog, StudentProgress } from '../types';
+import type {
+  GameMode,
+  SavedGearState,
+  StageKey,
+  StudentAnswerLog,
+  StudentProgress,
+} from '../types';
 import { getDb, isFirebaseConfigured } from './firebase';
 
 const ACTIVE_USER_KEY = 'riftbound_active_user_v1';
 const STUDENTS_MAP_KEY = 'riftbound_students_v1';
+
+export const STAGE_SEQUENCE: StageKey[] = ['stage_1', 'stage_2', 'stage_3'];
 
 export function normalizeUsernameKey(username: string): string {
   return username
@@ -39,6 +48,27 @@ function _writeLocalMap(map: Record<string, StudentProgress>) {
   localStorage.setItem(STUDENTS_MAP_KEY, JSON.stringify(map));
 }
 
+function _hydrateProgress(raw: Partial<StudentProgress>, fallbackName = 'Siswa', fallbackClass = ''): StudentProgress {
+  const username = (raw.username || fallbackName).trim();
+  return {
+    username,
+    usernameKey: raw.usernameKey || normalizeUsernameKey(username),
+    className: (raw.className ?? fallbackClass).trim(),
+    totalKills: raw.totalKills ?? 0,
+    totalShards: raw.totalShards ?? 0,
+    puzzlesAttempted: raw.puzzlesAttempted ?? 0,
+    puzzlesCorrect: raw.puzzlesCorrect ?? 0,
+    answeredPuzzleIds: Array.isArray(raw.answeredPuzzleIds) ? raw.answeredPuzzleIds : [],
+    modesCleared: Array.isArray(raw.modesCleared) ? raw.modesCleared : [],
+    completedStages: Array.isArray(raw.completedStages) ? raw.completedStages : [],
+    stageBestKills: raw.stageBestKills ?? {},
+    stageBestShards: raw.stageBestShards ?? {},
+    savedGear: raw.savedGear,
+    recentAnswers: Array.isArray(raw.recentAnswers) ? raw.recentAnswers : [],
+    updatedAt: raw.updatedAt ?? Date.now(),
+  };
+}
+
 export function createEmptyProgress(username: string, className = ''): StudentProgress {
   return {
     username: username.trim(),
@@ -50,9 +80,22 @@ export function createEmptyProgress(username: string, className = ''): StudentPr
     puzzlesCorrect: 0,
     answeredPuzzleIds: [],
     modesCleared: [],
+    completedStages: [],
+    stageBestKills: {},
+    stageBestShards: {},
     recentAnswers: [],
     updatedAt: Date.now(),
   };
+}
+
+/** Check sequential stage unlock rule: Stage 1 open -> Stage 2 requires Stage 1 saved -> Stage 3 requires Stage 2 saved. */
+export function isStageUnlocked(student: StudentProgress | null, stageKey: StageKey): boolean {
+  if (stageKey === 'stage_1') return true;
+  if (!student) return false;
+  const completed = student.completedStages ?? [];
+  if (stageKey === 'stage_2') return completed.includes('stage_1');
+  if (stageKey === 'stage_3') return completed.includes('stage_1') && completed.includes('stage_2');
+  return false;
 }
 
 export function getActiveStudentLocal(): StudentProgress | null {
@@ -60,7 +103,8 @@ export function getActiveStudentLocal(): StudentProgress | null {
     const activeKey = localStorage.getItem(ACTIVE_USER_KEY);
     if (!activeKey) return null;
     const map = _readLocalMap();
-    return map[activeKey] ?? null;
+    const raw = map[activeKey];
+    return raw ? _hydrateProgress(raw) : null;
   } catch {
     return null;
   }
@@ -69,32 +113,52 @@ export function getActiveStudentLocal(): StudentProgress | null {
 export async function loginOrCreateStudent(
   username: string,
   className = ''
-): Promise<{ profile: StudentProgress; syncedFromCloud: boolean }> {
+): Promise<{ profile: StudentProgress; syncedFromCloud: boolean; syncError?: string }> {
   const key = normalizeUsernameKey(username);
   if (!key) throw new Error('Username tidak boleh kosong.');
 
   const map = _readLocalMap();
-  let profile = map[key] ?? createEmptyProgress(username, className);
+  let profile = map[key]
+    ? _hydrateProgress(map[key], username, className)
+    : createEmptyProgress(username, className);
   if (className.trim()) profile.className = className.trim();
   profile.username = username.trim();
 
   let syncedFromCloud = false;
+  let syncError: string | undefined;
   const db = getDb();
   if (db && navigator.onLine) {
     try {
       const snap = await getDoc(doc(db, 'students', key));
       if (snap.exists()) {
-        const cloud = snap.data() as StudentProgress;
+        const cloud = snap.data() as Partial<StudentProgress>;
         if ((cloud.updatedAt ?? 0) >= profile.updatedAt) {
+          profile = _hydrateProgress(
+            {
+              ...cloud,
+              className: className.trim() || cloud.className || profile.className,
+            },
+            username,
+            className
+          );
+        } else {
+          // Merge completedStages & answeredPuzzleIds union so neither device loses clears
+          const mergedStages = Array.from(
+            new Set([...(profile.completedStages ?? []), ...(cloud.completedStages ?? [])])
+          ) as StageKey[];
+          const mergedPuzzles = Array.from(
+            new Set([...profile.answeredPuzzleIds, ...(cloud.answeredPuzzleIds ?? [])])
+          );
           profile = {
-            ...createEmptyProgress(cloud.username || username, cloud.className || className),
-            ...cloud,
-            className: className.trim() || cloud.className || '',
+            ...profile,
+            completedStages: mergedStages,
+            answeredPuzzleIds: mergedPuzzles,
           };
         }
         syncedFromCloud = true;
       }
     } catch (err) {
+      syncError = err instanceof Error ? err.message : String(err);
       console.warn('[ProgressService] Cloud load fallback to local:', err);
     }
   }
@@ -107,15 +171,19 @@ export async function loginOrCreateStudent(
     try {
       await setDoc(doc(db, 'students', key), profile, { merge: true });
       syncedFromCloud = true;
+      syncError = undefined;
     } catch (err) {
+      syncError = err instanceof Error ? err.message : String(err);
       console.warn('[ProgressService] Cloud save skipped:', err);
     }
   }
 
-  return { profile, syncedFromCloud };
+  return { profile, syncedFromCloud, syncError };
 }
 
-export async function saveStudentProgress(progress: StudentProgress): Promise<boolean> {
+export async function saveStudentProgress(
+  progress: StudentProgress
+): Promise<{ synced: boolean; error?: string }> {
   const updated: StudentProgress = {
     ...progress,
     updatedAt: Date.now(),
@@ -129,18 +197,20 @@ export async function saveStudentProgress(progress: StudentProgress): Promise<bo
   if (db && navigator.onLine) {
     try {
       await setDoc(doc(db, 'students', updated.usernameKey), updated, { merge: true });
-      return true;
+      return { synced: true };
     } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
       console.warn('[ProgressService] Firestore sync failed, kept local:', err);
+      return { synced: false, error };
     }
   }
-  return false;
+  return { synced: false };
 }
 
 export async function recordPuzzleAttempts(
   current: StudentProgress,
   logs: StudentAnswerLog[]
-): Promise<{ profile: StudentProgress; synced: boolean }> {
+): Promise<{ profile: StudentProgress; synced: boolean; error?: string }> {
   const answeredSet = new Set(current.answeredPuzzleIds);
   let correctDelta = 0;
 
@@ -160,28 +230,57 @@ export async function recordPuzzleAttempts(
     updatedAt: Date.now(),
   };
 
-  const synced = await saveStudentProgress(next);
-  return { profile: next, synced };
+  const { synced, error } = await saveStudentProgress(next);
+  return { profile: next, synced, error };
 }
 
 export async function recordModeClear(
   current: StudentProgress,
   mode: GameMode,
   killsDelta: number,
-  shardsEarned: number
-): Promise<{ profile: StudentProgress; synced: boolean }> {
+  shardsEarned: number,
+  stageKey?: StageKey | null,
+  gear?: SavedGearState
+): Promise<{ profile: StudentProgress; synced: boolean; error?: string }> {
   const clearedSet = new Set(current.modesCleared);
   clearedSet.add(mode);
+
+  const completedStageSet = new Set<StageKey>(current.completedStages ?? []);
+  const stageBestKills = { ...(current.stageBestKills ?? {}) };
+  const stageBestShards = { ...(current.stageBestShards ?? {}) };
+
+  if (stageKey) {
+    completedStageSet.add(stageKey);
+    stageBestKills[stageKey] = Math.max(stageBestKills[stageKey] ?? 0, killsDelta);
+    stageBestShards[stageKey] = Math.max(stageBestShards[stageKey] ?? 0, shardsEarned);
+  }
 
   const next: StudentProgress = {
     ...current,
     totalKills: current.totalKills + killsDelta,
     totalShards: Math.max(current.totalShards, shardsEarned),
     modesCleared: Array.from(clearedSet),
+    completedStages: STAGE_SEQUENCE.filter((s) => completedStageSet.has(s)),
+    stageBestKills,
+    stageBestShards,
+    savedGear: gear ?? current.savedGear,
     updatedAt: Date.now(),
   };
 
-  const synced = await saveStudentProgress(next);
+  const { synced, error } = await saveStudentProgress(next);
+  return { profile: next, synced, error };
+}
+
+export async function syncStudentGear(
+  current: StudentProgress,
+  gear: SavedGearState
+): Promise<{ profile: StudentProgress; synced: boolean }> {
+  const next: StudentProgress = {
+    ...current,
+    savedGear: gear,
+    updatedAt: Date.now(),
+  };
+  const { synced } = await saveStudentProgress(next);
   return { profile: next, synced };
 }
 
@@ -198,7 +297,7 @@ export async function fetchLeaderboard(): Promise<{
         limit(20)
       );
       const snap = await getDocs(q);
-      const entries = snap.docs.map((d) => d.data() as StudentProgress);
+      const entries = snap.docs.map((d) => _hydrateProgress(d.data() as Partial<StudentProgress>));
       if (entries.length > 0) {
         return { entries, source: 'firebase' };
       }
@@ -207,8 +306,8 @@ export async function fetchLeaderboard(): Promise<{
     }
   }
 
-  const localEntries = Object.values(_readLocalMap()).sort(
-    (a, b) => b.puzzlesCorrect - a.puzzlesCorrect || b.totalKills - a.totalKills
-  );
+  const localEntries = Object.values(_readLocalMap())
+    .map((e) => _hydrateProgress(e))
+    .sort((a, b) => b.puzzlesCorrect - a.puzzlesCorrect || b.totalKills - a.totalKills);
   return { entries: localEntries, source: 'local' };
 }

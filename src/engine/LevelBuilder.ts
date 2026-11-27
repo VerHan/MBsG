@@ -350,23 +350,23 @@ function _buildStage1(): BuiltLevel {
   ];
 
   const interactables: InteractableInstance[] = [
-    // Standard Supply Chest (1 soal -> Energy + Ammo Pack + Vial + Shards)
+    // Standard Supply Chest (1 soal -> Energy + Ammo Pack + Upgrade Dagger Lv.2 Glowing!)
     createChest(790, 472, {
       tier: 'common',
       questionsRequired: 1,
-      loot: { energyRestore: 65, ammoPacks: 1, nanoVials: 1, shards: 25 },
+      loot: { energyRestore: 65, ammoPacks: 1, nanoVials: 1, upgradeWeaponId: 'dagger', shards: 35 },
     }),
     // Standard Supply Chest (1 soal -> Energy + Ammo Pack + Shards)
     createChest(2180, 266, {
       tier: 'common',
       questionsRequired: 1,
-      loot: { energyRestore: 70, ammoPacks: 1, shards: 30 },
+      loot: { energyRestore: 70, ammoPacks: 1, shards: 35 },
     }),
-    // Rare Armory Chest (2 soal beruntun -> Sword + Dual Pistol + Ammo)
+    // Rare Armory Chest (2 soal beruntun -> Volt Rift Spear + Ammo)
     createChest(1940, 146, {
       tier: 'rare',
       questionsRequired: 2,
-      loot: { weaponId: 'sword', weaponTier: 'rare', ammoPacks: 1, shards: 50 },
+      loot: { weaponId: 'spear', weaponTier: 'rare', ammoPacks: 1, shards: 55 },
     }),
     // Epic Relic Chest (3 soal beruntun -> Dual Pistol + Vanguard Armor!)
     createChest(3460, 221, {
@@ -513,11 +513,11 @@ function _buildStage2(): BuiltLevel {
       questionsRequired: 1,
       loot: { energyRestore: 75, ammoPacks: 1, nanoVials: 1, shards: 35 },
     }),
-    // Rare Armory Chest (2 soal -> Axe + Ammo)
+    // Rare Armory Chest (2 soal -> Crimson Rift Katana + Ammo)
     createChest(1480, 141, {
       tier: 'rare',
       questionsRequired: 2,
-      loot: { weaponId: 'axe', weaponTier: 'rare', ammoPacks: 1, shards: 60 },
+      loot: { weaponId: 'katana', weaponTier: 'rare', weaponLevel: 2, ammoPacks: 1, shards: 60 },
     }),
     // Rare Armory Chest (2 soal -> Shotgun + Ammo)
     createChest(2140, 221, {
@@ -525,11 +525,11 @@ function _buildStage2(): BuiltLevel {
       questionsRequired: 2,
       loot: { weaponId: 'shotgun', weaponTier: 'rare', ammoPacks: 1, shards: 65 },
     }),
-    // Epic Relic Chest (3 soal -> Rift-Stalker Armor + Epic Dual Pistol)
+    // Epic Relic Chest (3 soal -> Grav-Crusher Hammer + Rift-Stalker Armor)
     createChest(3380, 271, {
       tier: 'epic',
       questionsRequired: 3,
-      loot: { weaponId: 'dual_pistol', weaponTier: 'epic', armorId: 'rift_stalker', ammoPacks: 2, shards: 120 },
+      loot: { weaponId: 'hammer', weaponTier: 'epic', weaponLevel: 1, armorId: 'rift_stalker', ammoPacks: 2, shards: 120 },
     }),
     createQuickDecryptGate(2630, 362),
     createPuzzleShrine(3080, 160),
@@ -674,17 +674,17 @@ function _buildStage3(): BuiltLevel {
       questionsRequired: 2,
       loot: { weaponId: 'rifle', weaponTier: 'rare', ammoPacks: 2, shards: 75 },
     }),
-    // Supply Chest (1 soal -> Energy + Ammo)
+    // Supply Chest (1 soal -> Energy + Ammo + Upgrade Weapon!)
     createChest(2210, 276, {
       tier: 'common',
       questionsRequired: 1,
-      loot: { energyRestore: 90, ammoPacks: 2, shards: 50 },
+      loot: { energyRestore: 90, ammoPacks: 2, upgradeWeaponId: 'sword', shards: 50 },
     }),
-    // Epic Relic Chest (3 soal -> Dual Sword Epic + Aether-Forge Praetor!)
+    // Epic Relic Chest (3 soal -> Dual Sword Epic Lv.2 Glowing + Aether-Forge Praetor!)
     createChest(3400, 256, {
       tier: 'epic',
       questionsRequired: 3,
-      loot: { weaponId: 'dual_sword', weaponTier: 'epic', armorId: 'aether_praetor', ammoPacks: 2, shards: 150 },
+      loot: { weaponId: 'dual_sword', weaponTier: 'epic', weaponLevel: 2, armorId: 'aether_praetor', ammoPacks: 2, shards: 150 },
     }),
     createQuickDecryptGate(2640, 352),
     createPuzzleShrine(3090, 155),

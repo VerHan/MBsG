@@ -1,13 +1,17 @@
 // ============================================================
 // RIFTBOUND: SLAYER CORPS — Root App State Router
+// Manages Firestore-synced StudentProgress, per-student gear,
+// and sequential Stage 1 -> Stage 2 -> Stage 3 progression.
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { GameMode, StudentAnswerLog, StudentProgress } from './types';
+import type { GameMode, SavedGearState, StageKey, StudentAnswerLog, StudentProgress } from './types';
 import {
   getActiveStudentLocal,
+  isStageUnlocked,
   recordModeClear,
   recordPuzzleAttempts,
+  syncStudentGear,
 } from './services/progressService';
 import { TitleScreen } from './components/TitleScreen';
 import { LoreIntro } from './components/LoreIntro';
@@ -38,15 +42,47 @@ export default function App() {
   }, []);
 
   const handleRecordModeClear = useCallback(
-    async (mode: GameMode, kills: number, shards: number) => {
+    async (
+      mode: GameMode,
+      kills: number,
+      shards: number,
+      stageKey?: StageKey | null,
+      gear?: SavedGearState
+    ): Promise<{ synced: boolean; error?: string }> => {
       const current = studentRef.current;
-      if (!current) return;
-      const { profile } = await recordModeClear(current, mode, kills, shards);
+      if (!current) return { synced: false };
+      const { profile, synced, error } = await recordModeClear(
+        current,
+        mode,
+        kills,
+        shards,
+        stageKey,
+        gear
+      );
       studentRef.current = profile;
       setStudent(profile);
+      return { synced, error };
     },
     []
   );
+
+  const handleGearChange = useCallback(async (gear: SavedGearState) => {
+    const current = studentRef.current;
+    if (!current) return;
+    const { profile } = await syncStudentGear(current, gear);
+    studentRef.current = profile;
+    setStudent(profile);
+  }, []);
+
+  const handleStartMode = useCallback((mode: PlayableModeKey) => {
+    if (mode === 'stage_2' || mode === 'stage_3') {
+      if (!isStageUnlocked(studentRef.current, mode)) {
+        return;
+      }
+    }
+    setSelectedMode(mode);
+    setScreen('playing');
+  }, []);
 
   return (
     <>
@@ -65,6 +101,7 @@ export default function App() {
           student={student}
           onRecordPuzzleLogs={handleRecordPuzzleLogs}
           onRecordModeClear={handleRecordModeClear}
+          onGearChange={handleGearChange}
           onOpenReport={() => setShowReport(true)}
           onExitToTitle={() => setScreen('title')}
         />
@@ -76,10 +113,7 @@ export default function App() {
           onStudentUpdate={setStudent}
           onOpenReport={() => setShowReport(true)}
           onStartWithLore={() => setScreen('lore')}
-          onStartMode={(mode) => {
-            setSelectedMode(mode);
-            setScreen('playing');
-          }}
+          onStartMode={handleStartMode}
         />
       )}
 

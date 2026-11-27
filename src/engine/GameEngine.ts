@@ -10,13 +10,14 @@ import type {
   GameMode,
   PlayerState,
   PuzzleTrigger,
+  SavedGearState,
   StyleRank,
   WaveConfig,
   WeaponInstance,
 } from '../types';
 import { ARMORS } from '../data/armors';
 import { ENEMIES } from '../data/enemies';
-import { WEAPONS } from '../data/weapons';
+import { WEAPONS, getWeaponLevel } from '../data/weapons';
 import { InputManager } from './InputManager';
 import { ModeManager } from './ModeManager';
 import { ParallaxRenderer } from './ParallaxRenderer';
@@ -27,10 +28,8 @@ import {
   PYLON_SPRITE,
   PixelSpriteRenderer,
   drawBossSprite,
-  drawWeaponInHand,
+  drawComplexSlayerAvatar,
   getEnemyMatrix,
-  getMCPoseMatrix,
-  type MCPoseName,
 } from './PixelSpriteRenderer';
 import { SoundManager } from './SoundManager';
 import {
@@ -85,9 +84,30 @@ interface SlashVisual {
   isPogo: boolean;
   facingRight: boolean;
   comboStep: number;
+  shape: 'crescent' | 'thrust' | 'tornado' | 'vertical_chop' | 'vertical_spin' | 'x_cut';
+  bidirectional?: boolean;
   color: string;
   life: number;
   maxLife: number;
+}
+
+interface PendingComboStrike {
+  delay: number;
+  rangeW: number;
+  rangeH: number;
+  radius: number;
+  damageRatio: number;
+  shape: SlashVisual['shape'];
+  color: string;
+  comboStep: number;
+  isPogo: boolean;
+  bidirectional: boolean;
+  armorBreak: boolean;
+  knockbackX: number;
+  liftVy?: number;
+  lungeVx?: number;
+  shake?: number;
+  sound?: Parameters<SoundManager['play']>[0];
 }
 
 interface FloatingText {
@@ -107,6 +127,15 @@ interface ManaTurret {
   fireTimer: number;
 }
 
+interface GhostTrail {
+  x: number;
+  y: number;
+  facingRight: boolean;
+  life: number;
+  maxLife: number;
+  color: string;
+}
+
 interface GroundDrop {
   id: string;
   kind: 'energy_orb' | 'ammo_pack' | 'boss_relic';
@@ -119,6 +148,7 @@ interface GroundDrop {
   shards?: number;
   weaponId?: WeaponInstance['defId'];
   weaponTier?: WeaponInstance['tier'];
+  weaponLevel?: number;
   secondaryWeaponId?: WeaponInstance['defId'];
   secondaryWeaponTier?: WeaponInstance['tier'];
   armorId?: ArmorId;
@@ -145,7 +175,7 @@ export interface HudSnapshot {
   maxNanoVials: number;
   shards: number;
   meleeWeapon: WeaponInstance;
-  rangedWeapon: WeaponInstance;
+  rangedWeapon: WeaponInstance | null;
   armorId: ArmorId;
   styleRank: StyleRank;
   stylePoints: number;
@@ -161,6 +191,10 @@ export interface HudSnapshot {
   interactPrompt: string | null;
   manaShieldTimer: number;
   turretTimer: number;
+  isBlocking: boolean;
+  hasFullShield: boolean;
+  meleeCombo: number;
+  counterReady: boolean;
   boss?: {
     name: string;
     title: string;
@@ -220,12 +254,27 @@ export class GameEngine {
   private _scaleX = 1;
   private _scaleY = 1;
   private _meleeAnimTimer = 0;
+  private _meleeAnimDuration = 0.16;
   private _meleeAnimIsPogo = false;
+  private _meleePressHeld = false;
+  private _meleeHoldTime = 0;
+  private _meleeBufferTimer = 0;
+  private _spinAttackTimer = 0;
+  private _spinAttackDuration = 0.24;
+  private _spinMode: 'vertical' | 'horizontal' = 'vertical';
+  private _iaidoWindupTimer = 0;
+  private _doubleJumpFlipTimer = 0;
+  private _parryFlashTimer = 0;
+  private _walkCycle = 0;
+  private _prevFacingRight = true;
+  private _ghostTrails: GhostTrail[] = [];
+  private _gearStorageKey = GEAR_STORAGE_KEY;
   private _lastRunStep = -1;
   private _rangedAnimTimer = 0;
   private _scarfPoints: Array<{ x: number; y: number }> = [];
   private _currentAreaId = '';
   private _slashes: SlashVisual[] = [];
+  private _pendingComboStrikes: PendingComboStrike[] = [];
   private _floatingTexts: FloatingText[] = [];
   private _turrets: ManaTurret[] = [];
   private _groundDrops: GroundDrop[] = [];
@@ -244,6 +293,7 @@ export class GameEngine {
   public onPause?: () => void;
   public onToggleInventory?: () => void;
   public onToast?: (msg: string) => void;
+  public onGearChange?: (gear: SavedGearState) => void;
 
   constructor(canvas: HTMLCanvasElement, initialPlayer?: Partial<PlayerState>) {
     this.canvas = canvas;
@@ -298,7 +348,15 @@ export class GameEngine {
     }
   }
 
-  loadPlayableMode(modeKey: PlayableModeKey, keepGear = false) {
+  setStudentKey(usernameKey: string | null) {
+    this._gearStorageKey = usernameKey ? `${GEAR_STORAGE_KEY}_${usernameKey}` : GEAR_STORAGE_KEY;
+  }
+
+  loadPlayableMode(
+    modeKey: PlayableModeKey,
+    keepGear = false,
+    cloudGear?: SavedGearState | null
+  ) {
     const built = buildPlayableLevel(modeKey);
     this.level = built;
     this.currentMode = built.segment.mode;
@@ -310,12 +368,22 @@ export class GameEngine {
     this.interactables = built.interactables;
     this.projectiles = [];
     this._slashes = [];
+    this._pendingComboStrikes = [];
+    this._ghostTrails = [];
     this._floatingTexts = [];
     this._turrets = [];
     this._groundDrops = [];
     this._laserCooldown = 0;
     this._pendingSpawns = [];
     this._manaShieldTimer = 0;
+    this._meleePressHeld = false;
+    this._meleeHoldTime = 0;
+    this._meleeBufferTimer = 0;
+    this._spinAttackTimer = 0;
+    this._iaidoWindupTimer = 0;
+    this._doubleJumpFlipTimer = 0;
+    this._parryFlashTimer = 0;
+    this._walkCycle = 0;
     this._kills = 0;
     this._currentAreaId = '';
     this._lastStyleRank = 'D';
@@ -323,7 +391,7 @@ export class GameEngine {
     this._scaleY = 1;
 
     if (!keepGear) {
-      const saved = this._loadSavedGear();
+      const saved = cloudGear ?? this._loadSavedGear();
       this.player = new Player(saved ?? undefined);
     }
 
@@ -331,6 +399,7 @@ export class GameEngine {
     this.player.y = built.playerSpawn.y;
     this.player.vx = 0;
     this.player.vy = 0;
+    this._prevFacingRight = this.player.facingRight;
     this.player.state.hp = this.player.state.maxHp;
     this.player.state.energy = this.player.state.maxEnergy;
     this.player.state.styleRank = 'D';
@@ -417,13 +486,72 @@ export class GameEngine {
     if (this._bossFlashTimer > 0) this._bossFlashTimer -= dt;
     if (this._meleeAnimTimer > 0) this._meleeAnimTimer = Math.max(0, this._meleeAnimTimer - dt);
     if (this._rangedAnimTimer > 0) this._rangedAnimTimer = Math.max(0, this._rangedAnimTimer - dt);
+    if (this._meleeBufferTimer > 0) this._meleeBufferTimer = Math.max(0, this._meleeBufferTimer - dt);
+    if (this._spinAttackTimer > 0) this._spinAttackTimer = Math.max(0, this._spinAttackTimer - dt);
+    if (this._iaidoWindupTimer > 0) {
+      this._iaidoWindupTimer = Math.max(0, this._iaidoWindupTimer - dt);
+    }
+    if (this._doubleJumpFlipTimer > 0) {
+      this._doubleJumpFlipTimer = Math.max(0, this._doubleJumpFlipTimer - dt);
+    }
+    if (this._parryFlashTimer > 0) this._parryFlashTimer = Math.max(0, this._parryFlashTimer - dt);
+
+    // Continuous smooth stride cycle + turn-around skid dust
+    if (this.player.onGround && Math.abs(this.player.vx) > 12) {
+      const strideRate = (Math.abs(this.player.vx) / 165) * 14;
+      this._walkCycle += strideRate * dt;
+      const stepHalf = Math.floor(this._walkCycle / Math.PI);
+      if (stepHalf !== this._lastRunStep) {
+        this._lastRunStep = stepHalf;
+        this.particles.emit(
+          'mana_dust',
+          this.player.x + this.player.width / 2,
+          this.player.y + this.player.height,
+          -Math.PI / 2
+        );
+      }
+      if (this.player.facingRight !== this._prevFacingRight && Math.abs(this.player.vx) > 55) {
+        this.particles.emit(
+          'mana_dust',
+          this.player.x + this.player.width / 2,
+          this.player.y + this.player.height,
+          this.player.facingRight ? Math.PI : 0
+        );
+      }
+    } else {
+      this._lastRunStep = -1;
+    }
+    this._prevFacingRight = this.player.facingRight;
+
+    // Emit dynamic ghost afterimages on spin attack, dash, or double-jump flip
+    if (
+      (this.player.isDashing || this._spinAttackTimer > 0 || this._doubleJumpFlipTimer > 0) &&
+      Math.random() < 0.72
+    ) {
+      const armor = ARMORS[this.player.state.armorId] ?? ARMORS.recruit_mk1;
+      this._ghostTrails.push({
+        x: this.player.x + this.player.width / 2,
+        y: this.player.y + this.player.height,
+        facingRight: this.player.facingRight,
+        life: 0.14,
+        maxLife: 0.14,
+        color: this._spinAttackTimer > 0 ? '#FACC15' : armor.palette.glow,
+      });
+    }
 
     // Smooth squash & stretch recovery
-    this._scaleX += (1 - this._scaleX) * Math.min(1, dt * 14);
-    this._scaleY += (1 - this._scaleY) * Math.min(1, dt * 14);
+    this._scaleX += (1 - this._scaleX) * Math.min(1, dt * 15);
+    this._scaleY += (1 - this._scaleY) * Math.min(1, dt * 15);
 
     this._updateStageMechanisms(dt);
     this._handlePlayerInput(dt);
+    for (let i = this._pendingComboStrikes.length - 1; i >= 0; i--) {
+      this._pendingComboStrikes[i].delay -= dt;
+      if (this._pendingComboStrikes[i].delay <= 0) {
+        const strike = this._pendingComboStrikes.splice(i, 1)[0];
+        this._executeMeleeStrike(strike);
+      }
+    }
     this.player.update(dt);
     this.player.applyGravity(dt);
     this._moveAndCollidePlayer(dt);
@@ -472,20 +600,22 @@ export class GameEngine {
 
   private _updateScarf(dt: number) {
     if (this._scarfPoints.length === 0) return;
-    const anchorX = this.player.x + this.player.width / 2 + (this.player.facingRight ? -3 : 3);
-    const anchorY = this.player.y + 10;
+    const p = this.player;
+    const anchorX = p.x + p.width / 2 + (p.facingRight ? -4 : 4);
+    const anchorY = p.y + (p.isBlocking ? 12 : 9);
     this._scarfPoints[0].x = anchorX;
     this._scarfPoints[0].y = anchorY;
 
-    const windX = this.player.facingRight ? -4 : 4;
+    const moveBiasX = -Math.max(-6, Math.min(6, p.vx * 0.032)) + (p.facingRight ? -3.2 : 3.2);
+    const fallLiftY = Math.max(-3.5, Math.min(3.5, -p.vy * 0.015));
     for (let i = 1; i < this._scarfPoints.length; i++) {
       const prev = this._scarfPoints[i - 1];
       const curr = this._scarfPoints[i];
-      const wave = Math.sin(this._animTime * 10 + i * 0.9) * 1.1;
-      const targetX = prev.x + windX * 0.65;
-      const targetY = prev.y + 1.2 + wave;
-      curr.x += (targetX - curr.x) * Math.min(1, dt * 18);
-      curr.y += (targetY - curr.y) * Math.min(1, dt * 18);
+      const wave = Math.sin(this._animTime * 11 + i * 0.9) * (Math.abs(p.vx) > 20 ? 1.5 : 0.8);
+      const targetX = prev.x + moveBiasX * 0.72;
+      const targetY = prev.y + 1.0 + fallLiftY + wave;
+      curr.x += (targetX - curr.x) * Math.min(1, dt * 20);
+      curr.y += (targetY - curr.y) * Math.min(1, dt * 20);
     }
   }
 
@@ -513,12 +643,16 @@ export class GameEngine {
     }
 
     if (this.input.isJustPressed('jump')) {
-      const wasOnGround = p.onGround;
-      const jumped = p.jump();
-      if (jumped) {
-        this._scaleX = 0.78;
-        this._scaleY = 1.24;
-        this.sound.play(wasOnGround ? 'jump' : 'double_jump');
+      const jumpKind = p.jump();
+      if (jumpKind) {
+        this._scaleX = 0.76;
+        this._scaleY = 1.26;
+        if (jumpKind === 'double') {
+          this._doubleJumpFlipTimer = 0.28;
+          this.sound.play('double_jump');
+        } else {
+          this.sound.play('jump');
+        }
         this.particles.emit('mana_dust', p.x + p.width / 2, p.y + p.height, -Math.PI / 2);
       }
     }
@@ -528,8 +662,8 @@ export class GameEngine {
 
     if (this.input.isJustPressed('dash')) {
       if (p.dash()) {
-        this._scaleX = 1.28;
-        this._scaleY = 0.78;
+        this._scaleX = 1.3;
+        this._scaleY = 0.76;
         this.sound.play('dash');
         this.particles.emit('dash_afterimage', p.x + p.width / 2, p.y + p.height / 2);
       }
@@ -564,15 +698,58 @@ export class GameEngine {
       }
     }
 
+    // Unified Melee Tap = 3-Hit Combo / Hold (>= 0.19s) = Block Guard & Parry
     if (this.input.isJustPressed('melee')) {
+      this._meleePressHeld = true;
+      this._meleeHoldTime = 0;
+      if (this._meleeAnimTimer > 0) {
+        this._meleeBufferTimer = 0.22;
+      }
+    }
+
+    if (this._meleePressHeld && this.input.isHeld('melee')) {
+      this._meleeHoldTime += dt;
+      if (this._meleeHoldTime < 0.19 && !p.isBlocking) {
+        this._scaleX = 1.07;
+        this._scaleY = 0.92;
+      }
+      if (this._meleeHoldTime >= 0.19 && !p.isBlocking && !p.isDashing) {
+        this._meleeBufferTimer = 0;
+        p.setBlocking(true);
+        this.sound.play('menu_select');
+      }
+    }
+
+    if (this._meleePressHeld && (this.input.isJustReleased('melee') || !this.input.isHeld('melee'))) {
+      const wasBlocking = p.isBlocking;
+      const holdElapsed = this._meleeHoldTime;
+      this._meleePressHeld = false;
+      this._meleeHoldTime = 0;
+      p.setBlocking(false);
+
+      if (!wasBlocking && holdElapsed < 0.19) {
+        if (p.meleeAttack()) {
+          this._meleeBufferTimer = 0;
+          this._performMelee();
+        } else {
+          this._meleeBufferTimer = 0.22;
+        }
+      }
+    } else if (!this._meleePressHeld && !p.isBlocking && this._meleeBufferTimer > 0) {
       if (p.meleeAttack()) {
+        this._meleeBufferTimer = 0;
         this._performMelee();
       }
     }
 
     if (this.input.isJustPressed('ranged')) {
-      if (p.rangedAttack()) {
+      const rRes = p.rangedAttack();
+      if (rRes.fired) {
         this._performRanged();
+      } else if (rRes.reason === 'no_gun') {
+        this.onToast?.('Mode 2-Tangan aktif (Non-Ranged)! Pilih Dagger / Sword di [I] untuk pakai Gun.');
+      } else if (rRes.reason === 'no_energy') {
+        this.onToast?.('Energy habis! Tekan [R] pakai Ammo Pack atau serang Melee!');
       }
     }
 
@@ -584,67 +761,700 @@ export class GameEngine {
   private _performMelee() {
     const p = this.player;
     const weaponId = p.state.meleeWeapon.defId;
+    const weaponLv = getWeaponLevel(p.state.meleeWeapon);
     const isPogo = !p.onGround && this.input.isHeld('drop_down');
-    this._meleeAnimTimer = 0.16;
+    const comboStep = isPogo ? 1 : p.meleeCombo; // 1, 2, 3
+    const dir = p.facingRight ? 1 : -1;
+
+    this._pendingComboStrikes = [];
     this._meleeAnimIsPogo = isPogo;
-    this._scaleX = 1.12;
-    this._scaleY = 0.92;
 
-    if (weaponId === 'dual_sword') this.sound.play('dual_slash');
-    else if (weaponId === 'axe') this.sound.play('axe_hit');
-    else this.sound.play('sword_slash');
+    // Emit extra luminous glow sparks when wielding Lv.2 / Lv.3 upgraded weapon!
+    if (weaponLv >= 2) {
+      this.particles.emit('hit_spark', p.x + p.width / 2 + dir * 10, p.y + 12);
+    }
 
-    const radius = weaponId === 'axe' ? 32 : weaponId === 'dagger' ? 18 : 25;
-    const rangeW = weaponId === 'axe' ? 36 : weaponId === 'dagger' ? 19 : weaponId === 'dual_sword' ? 26 : 29;
-    const rangeH = isPogo ? 28 : 26;
-    const hx = isPogo
-      ? p.x - (rangeW - p.width) / 2
-      : p.facingRight
-        ? p.x + p.width - 2
-        : p.x - rangeW + 2;
-    const hy = isPogo ? p.y + p.height - 4 : p.y + 2;
+    const baseColor = p.lastAttackWasCounter
+      ? '#FACC15'
+      : weaponLv >= 3
+        ? '#FFFFFF'
+        : weaponLv === 2
+          ? '#00F0FF'
+          : undefined;
 
-    const color =
-      weaponId === 'axe' ? '#EF4444' : weaponId === 'dual_sword' ? '#00F0FF' : '#F97316';
+    const mkStrike = (
+      overrides: Partial<PendingComboStrike> & Pick<PendingComboStrike, 'rangeW' | 'radius' | 'color'>
+    ): PendingComboStrike => ({
+      delay: 0,
+      rangeH: isPogo ? 28 : 28,
+      damageRatio: 1.0,
+      shape: 'crescent',
+      comboStep,
+      isPogo,
+      bidirectional: false,
+      armorBreak: weaponId === 'axe' || weaponId === 'hammer' || comboStep === 3,
+      knockbackX: 75,
+      ...overrides,
+    });
+
+    if (p.lastAttackWasCounter) {
+      this._spawnFloatingText(p.x + 7, p.y - 12, 'COUNTER!', '#FACC15');
+    }
+
+    if (isPogo) {
+      this._meleeAnimDuration = 0.16;
+      this._meleeAnimTimer = 0.16;
+      this._executeMeleeStrike(
+        mkStrike({
+          rangeW: weaponId === 'spear' ? 32 : 26,
+          radius: 25,
+          color: baseColor ?? '#00F0FF',
+          sound: 'sword_slash',
+        })
+      );
+      return;
+    }
+
+    switch (weaponId) {
+      case 'dagger': {
+        if (comboStep === 1) {
+          this._meleeAnimDuration = 0.22;
+          this._meleeAnimTimer = 0.22;
+          p.vx += dir * 50;
+          this._executeMeleeStrike(
+            mkStrike({ rangeW: 20, radius: 18, color: baseColor ?? '#F97316', sound: 'sword_slash' })
+          );
+        } else if (comboStep === 2) {
+          this._meleeAnimDuration = 0.25;
+          this._meleeAnimTimer = 0.25;
+          p.vx += dir * 80;
+          this._executeMeleeStrike(
+            mkStrike({
+              rangeW: 23,
+              radius: 21,
+              shape: 'x_cut',
+              color: baseColor ?? '#00F0FF',
+              sound: 'dual_slash',
+            })
+          );
+        } else {
+          // Hit 3: Slower, readable 3x Dash Thrusts!
+          this._meleeAnimDuration = 0.42;
+          this._meleeAnimTimer = 0.42;
+          this._spawnFloatingText(p.x + 7, p.y - 11, 'THRUST DASH x3!', '#00F0FF');
+          const c = baseColor ?? '#00F0FF';
+          this._pendingComboStrikes.push(
+            mkStrike({
+              delay: 0.06,
+              rangeW: 28,
+              radius: 22,
+              damageRatio: 0.48,
+              shape: 'thrust',
+              color: c,
+              lungeVx: 205,
+              knockbackX: 35,
+              sound: 'dash',
+            }),
+            mkStrike({
+              delay: 0.18,
+              rangeW: 30,
+              radius: 24,
+              damageRatio: 0.48,
+              shape: 'thrust',
+              color: '#FACC15',
+              lungeVx: 185,
+              knockbackX: 35,
+              sound: 'spear_thrust',
+            }),
+            mkStrike({
+              delay: 0.3,
+              rangeW: 32,
+              radius: 25,
+              damageRatio: 0.56,
+              shape: 'thrust',
+              color: c,
+              lungeVx: 150,
+              knockbackX: 120,
+              sound: 'spear_thrust',
+            })
+          );
+        }
+        break;
+      }
+
+      case 'sword': {
+        if (comboStep === 1) {
+          this._meleeAnimDuration = 0.26;
+          this._meleeAnimTimer = 0.26;
+          p.vx += dir * 55;
+          this._executeMeleeStrike(
+            mkStrike({ rangeW: 30, radius: 26, color: baseColor ?? '#F97316', sound: 'sword_slash' })
+          );
+        } else if (comboStep === 2) {
+          // Hit 2: Clear sideways horizontal rotate 2-Hit!
+          this._meleeAnimDuration = 0.4;
+          this._meleeAnimTimer = 0.4;
+          this._spinMode = 'horizontal';
+          this._spinAttackDuration = 0.4;
+          this._spinAttackTimer = 0.4;
+          this._spawnFloatingText(p.x + 7, p.y - 11, 'CROSS ROTATE x2!', '#00F0FF');
+          const c = baseColor ?? '#00F0FF';
+          this._pendingComboStrikes.push(
+            mkStrike({
+              delay: 0.05,
+              rangeW: 34,
+              radius: 28,
+              damageRatio: 0.65,
+              shape: 'crescent',
+              color: c,
+              bidirectional: true,
+              lungeVx: 135,
+              sound: 'dual_slash',
+            }),
+            mkStrike({
+              delay: 0.21,
+              rangeW: 34,
+              radius: 29,
+              damageRatio: 0.68,
+              shape: 'crescent',
+              comboStep: 3,
+              color: '#FACC15',
+              bidirectional: true,
+              lungeVx: 110,
+              sound: 'dual_slash',
+            })
+          );
+        } else {
+          // Hit 3: Slower, clearly visible Vertical Somersault Spin!
+          this._meleeAnimDuration = 0.46;
+          this._meleeAnimTimer = 0.46;
+          this._spinMode = 'vertical';
+          this._spinAttackDuration = 0.46;
+          this._spinAttackTimer = 0.46;
+          if (p.onGround) {
+            p.vy = -140;
+            p.onGround = false;
+          } else {
+            p.vy = Math.min(p.vy, -90);
+          }
+          this._spawnFloatingText(p.x + 7, p.y - 12, 'VERTICAL SPIN!', '#FACC15');
+          const c = baseColor ?? '#FACC15';
+          this._pendingComboStrikes.push(
+            mkStrike({
+              delay: 0.08,
+              rangeW: 36,
+              rangeH: 36,
+              radius: 28,
+              damageRatio: 0.62,
+              shape: 'vertical_spin',
+              color: c,
+              bidirectional: true,
+              lungeVx: 145,
+              liftVy: -155,
+              knockbackX: 85,
+              sound: 'combo_spin',
+            }),
+            mkStrike({
+              delay: 0.24,
+              rangeW: 38,
+              rangeH: 38,
+              radius: 30,
+              damageRatio: 0.72,
+              shape: 'vertical_spin',
+              color: '#FFFFFF',
+              bidirectional: true,
+              lungeVx: 115,
+              liftVy: -120,
+              knockbackX: 155,
+              shake: 2.8,
+              sound: 'combo_finisher',
+            })
+          );
+        }
+        break;
+      }
+
+      case 'axe': {
+        if (comboStep === 1) {
+          this._meleeAnimDuration = 0.32;
+          this._meleeAnimTimer = 0.32;
+          p.vx += dir * 40;
+          this._executeMeleeStrike(
+            mkStrike({
+              rangeW: 36,
+              radius: 32,
+              armorBreak: true,
+              knockbackX: 135,
+              color: baseColor ?? '#EF4444',
+              sound: 'axe_hit',
+            })
+          );
+        } else if (comboStep === 2) {
+          // Hit 2: Clear slow horizontal Tornado Spin!
+          this._meleeAnimDuration = 0.48;
+          this._meleeAnimTimer = 0.48;
+          this._spinMode = 'horizontal';
+          this._spinAttackDuration = 0.48;
+          this._spinAttackTimer = 0.48;
+          this._spawnFloatingText(p.x + 7, p.y - 12, 'SPIN TORNADO!', '#F97316');
+          const c = baseColor ?? '#F97316';
+          this._pendingComboStrikes.push(
+            mkStrike({
+              delay: 0.06,
+              rangeW: 38,
+              radius: 34,
+              damageRatio: 0.48,
+              shape: 'tornado',
+              color: c,
+              bidirectional: true,
+              lungeVx: 120,
+              sound: 'combo_spin',
+            }),
+            mkStrike({
+              delay: 0.2,
+              rangeW: 38,
+              radius: 35,
+              damageRatio: 0.48,
+              shape: 'tornado',
+              color: '#EF4444',
+              bidirectional: true,
+              lungeVx: 100,
+              sound: 'axe_hit',
+            }),
+            mkStrike({
+              delay: 0.34,
+              rangeW: 40,
+              radius: 36,
+              damageRatio: 0.55,
+              shape: 'tornado',
+              color: '#FACC15',
+              bidirectional: true,
+              knockbackX: 155,
+              sound: 'combo_finisher',
+            })
+          );
+        } else {
+          // Hit 3: 3x Vertical Overhead Slam!
+          this._meleeAnimDuration = 0.52;
+          this._meleeAnimTimer = 0.52;
+          if (p.onGround) {
+            p.vy = -85;
+            p.onGround = false;
+          }
+          this._spawnFloatingText(p.x + 7, p.y - 12, '3x VERTICAL SLAM!', '#EF4444');
+          const c = baseColor ?? '#EF4444';
+          this._pendingComboStrikes.push(
+            mkStrike({
+              delay: 0.06,
+              rangeW: 38,
+              rangeH: 34,
+              radius: 34,
+              damageRatio: 0.5,
+              shape: 'vertical_chop',
+              color: c,
+              lungeVx: 95,
+              shake: 2.2,
+              sound: 'axe_hit',
+            }),
+            mkStrike({
+              delay: 0.21,
+              rangeW: 38,
+              rangeH: 34,
+              radius: 35,
+              damageRatio: 0.5,
+              shape: 'vertical_chop',
+              color: '#F97316',
+              lungeVx: 75,
+              shake: 2.5,
+              sound: 'axe_hit',
+            }),
+            mkStrike({
+              delay: 0.36,
+              rangeW: 42,
+              rangeH: 36,
+              radius: 38,
+              damageRatio: 0.62,
+              shape: 'vertical_chop',
+              color: '#FACC15',
+              knockbackX: 175,
+              shake: 3.8,
+              sound: 'combo_finisher',
+            })
+          );
+        }
+        break;
+      }
+
+      case 'spear': {
+        if (comboStep === 1) {
+          this._meleeAnimDuration = 0.28;
+          this._meleeAnimTimer = 0.28;
+          this._executeMeleeStrike(
+            mkStrike({
+              rangeW: 46,
+              radius: 27,
+              shape: 'thrust',
+              color: baseColor ?? '#00F0FF',
+              lungeVx: 75,
+              sound: 'spear_thrust',
+            })
+          );
+        } else if (comboStep === 2) {
+          this._meleeAnimDuration = 0.34;
+          this._meleeAnimTimer = 0.34;
+          if (p.onGround) {
+            p.vy = -130;
+            p.onGround = false;
+          }
+          this._spawnFloatingText(p.x + 7, p.y - 11, 'VAULT SWEEP!', '#00F0FF');
+          this._pendingComboStrikes.push(
+            mkStrike({
+              delay: 0.08,
+              rangeW: 44,
+              rangeH: 32,
+              radius: 32,
+              shape: 'crescent',
+              color: baseColor ?? '#FACC15',
+              lungeVx: 150,
+              liftVy: -150,
+              sound: 'combo_spin',
+            })
+          );
+        } else {
+          // Hit 3: Clear 3x Long-Reach Drill Thrusts!
+          this._meleeAnimDuration = 0.46;
+          this._meleeAnimTimer = 0.46;
+          this._spawnFloatingText(p.x + 7, p.y - 11, '3x SPEAR THRUST!', '#00F0FF');
+          const c = baseColor ?? '#00F0FF';
+          for (let k = 0; k < 3; k++) {
+            this._pendingComboStrikes.push(
+              mkStrike({
+                delay: 0.05 + k * 0.13,
+                rangeW: 46,
+                radius: 29,
+                damageRatio: k === 2 ? 0.62 : 0.48,
+                shape: 'thrust',
+                color: k % 2 === 0 ? c : '#FACC15',
+                lungeVx: k === 0 ? 115 : 40,
+                knockbackX: k === 2 ? 145 : 30,
+                sound: 'spear_thrust',
+              })
+            );
+          }
+        }
+        break;
+      }
+
+      case 'katana': {
+        if (comboStep === 1) {
+          // True Iaido: Brief glint inside scabbard (0.10s) -> blazing Quickdraw strike!
+          this._iaidoWindupTimer = 0.1;
+          this._meleeAnimDuration = 0.32;
+          this._meleeAnimTimer = 0.32;
+          this.sound.play('menu_select');
+          this._spawnFloatingText(p.x + 7, p.y - 10, 'IAI DRAW!', '#EF4444');
+          this._pendingComboStrikes.push(
+            mkStrike({
+              delay: 0.1,
+              rangeW: 36,
+              radius: 30,
+              shape: 'x_cut',
+              color: baseColor ?? '#EF4444',
+              lungeVx: 110,
+              sound: 'dual_slash',
+            })
+          );
+        } else if (comboStep === 2) {
+          this._meleeAnimDuration = 0.34;
+          this._meleeAnimTimer = 0.34;
+          if (p.onGround) {
+            p.vy = -125;
+            p.onGround = false;
+          }
+          this._spawnFloatingText(p.x + 7, p.y - 11, 'CROSS MOON!', '#EF4444');
+          this._pendingComboStrikes.push(
+            mkStrike({
+              delay: 0.06,
+              rangeW: 36,
+              rangeH: 34,
+              radius: 30,
+              shape: 'x_cut',
+              color: baseColor ?? '#F97316',
+              lungeVx: 125,
+              liftVy: -150,
+              sound: 'combo_spin',
+            })
+          );
+        } else {
+          // Hit 3: Iaido Flash Dash (0.15s coiled scabbard glint -> Flash Dash -> Spatial Cut!)
+          this._iaidoWindupTimer = 0.15;
+          this._meleeAnimDuration = 0.54;
+          this._meleeAnimTimer = 0.54;
+          this.sound.play('menu_select');
+          this._spawnFloatingText(p.x + 7, p.y - 12, 'IAI... FLASH!', '#FACC15');
+          this._pendingComboStrikes.push(
+            mkStrike({
+              delay: 0.15,
+              rangeW: 50,
+              radius: 35,
+              damageRatio: 0.72,
+              shape: 'x_cut',
+              color: baseColor ?? '#EF4444',
+              lungeVx: 320,
+              sound: 'dash',
+            }),
+            mkStrike({
+              delay: 0.32,
+              rangeW: 46,
+              radius: 33,
+              damageRatio: 0.78,
+              shape: 'x_cut',
+              color: '#00F0FF',
+              bidirectional: true,
+              knockbackX: 140,
+              shake: 3.2,
+              sound: 'combo_finisher',
+            })
+          );
+        }
+        break;
+      }
+
+      case 'hammer': {
+        if (comboStep === 1) {
+          this._meleeAnimDuration = 0.34;
+          this._meleeAnimTimer = 0.34;
+          this._executeMeleeStrike(
+            mkStrike({
+              rangeW: 34,
+              radius: 30,
+              armorBreak: true,
+              knockbackX: 150,
+              color: baseColor ?? '#A855F7',
+              shake: 2.2,
+              sound: 'hammer_slam',
+            })
+          );
+        } else if (comboStep === 2) {
+          this._meleeAnimDuration = 0.42;
+          this._meleeAnimTimer = 0.42;
+          this._spinMode = 'vertical';
+          this._spinAttackDuration = 0.42;
+          this._spinAttackTimer = 0.42;
+          this._spawnFloatingText(p.x + 7, p.y - 11, 'VERTICAL SLAM SPIN!', '#A855F7');
+          this._pendingComboStrikes.push(
+            mkStrike({
+              delay: 0.08,
+              rangeW: 38,
+              radius: 34,
+              damageRatio: 0.65,
+              shape: 'vertical_spin',
+              bidirectional: true,
+              color: baseColor ?? '#A855F7',
+              lungeVx: 135,
+              sound: 'combo_spin',
+            }),
+            mkStrike({
+              delay: 0.24,
+              rangeW: 38,
+              radius: 34,
+              damageRatio: 0.68,
+              shape: 'vertical_spin',
+              bidirectional: true,
+              color: '#00F0FF',
+              knockbackX: 150,
+              sound: 'axe_hit',
+            })
+          );
+        } else {
+          // Hit 3: Seismic Ground Slam + Twin Floor Shockwaves!
+          this._meleeAnimDuration = 0.5;
+          this._meleeAnimTimer = 0.5;
+          if (!p.onGround) p.vy = 240;
+          this._spawnFloatingText(p.x + 7, p.y - 12, 'SEISMIC SLAM!', '#FACC15');
+          this._pendingComboStrikes.push(
+            mkStrike({
+              delay: 0.14,
+              rangeW: 44,
+              rangeH: 36,
+              radius: 38,
+              damageRatio: 1.05,
+              shape: 'vertical_chop',
+              bidirectional: true,
+              color: baseColor ?? '#FACC15',
+              knockbackX: 185,
+              shake: 4.5,
+              sound: 'hammer_slam',
+            })
+          );
+          const dmgWave = Math.round(p.getMeleeDamage() * 0.55);
+          const floorY = p.y + p.height - 6;
+          this.projectiles.push(
+            createProjectile('player', p.x - 4, floorY, Math.PI, 210, dmgWave, {
+              color: '#A855F7',
+              trailColor: '#00F0FF',
+              life: 0.7,
+              size: 5,
+            }),
+            createProjectile('player', p.x + p.width + 4, floorY, 0, 210, dmgWave, {
+              color: '#A855F7',
+              trailColor: '#00F0FF',
+              life: 0.7,
+              size: 5,
+            })
+          );
+        }
+        break;
+      }
+
+      case 'dual_sword':
+      default: {
+        if (comboStep === 1) {
+          this._meleeAnimDuration = 0.26;
+          this._meleeAnimTimer = 0.26;
+          const c = baseColor ?? '#00F0FF';
+          this._executeMeleeStrike(
+            mkStrike({ rangeW: 28, radius: 26, damageRatio: 0.58, shape: 'x_cut', color: c, lungeVx: 70, sound: 'dual_slash' })
+          );
+          this._pendingComboStrikes.push(
+            mkStrike({ delay: 0.11, rangeW: 28, radius: 26, damageRatio: 0.58, shape: 'x_cut', color: '#A855F7', sound: 'dual_slash' })
+          );
+        } else if (comboStep === 2) {
+          this._meleeAnimDuration = 0.38;
+          this._meleeAnimTimer = 0.38;
+          this._spinMode = 'horizontal';
+          this._spinAttackDuration = 0.38;
+          this._spinAttackTimer = 0.38;
+          this._spawnFloatingText(p.x + 7, p.y - 11, 'SPIN CROSS x2!', '#00F0FF');
+          this._pendingComboStrikes.push(
+            mkStrike({
+              delay: 0.06,
+              rangeW: 32,
+              radius: 29,
+              damageRatio: 0.65,
+              shape: 'x_cut',
+              color: baseColor ?? '#00F0FF',
+              lungeVx: 185,
+              liftVy: -105,
+              sound: 'dual_slash',
+            }),
+            mkStrike({
+              delay: 0.2,
+              rangeW: 32,
+              radius: 30,
+              damageRatio: 0.68,
+              shape: 'x_cut',
+              color: '#FACC15',
+              lungeVx: 110,
+              sound: 'dual_slash',
+            })
+          );
+        } else {
+          // Hit 3: Slower 3x Phantom Whirlwind Spin!
+          this._meleeAnimDuration = 0.48;
+          this._meleeAnimTimer = 0.48;
+          this._spinMode = 'horizontal';
+          this._spinAttackDuration = 0.48;
+          this._spinAttackTimer = 0.48;
+          this._spawnFloatingText(p.x + 7, p.y - 12, 'PHANTOM SPIN x3!', '#FACC15');
+          for (let k = 0; k < 3; k++) {
+            this._pendingComboStrikes.push(
+              mkStrike({
+                delay: 0.06 + k * 0.13,
+                rangeW: 36,
+                radius: 32,
+                damageRatio: k === 2 ? 0.62 : 0.48,
+                shape: k === 1 ? 'x_cut' : 'tornado',
+                bidirectional: true,
+                color: k % 2 === 0 ? '#00F0FF' : '#A855F7',
+                lungeVx: k === 0 ? 150 : 40,
+                knockbackX: k === 2 ? 145 : 35,
+                shake: k === 2 ? 3 : 0,
+                sound: k === 2 ? 'combo_finisher' : 'dual_slash',
+              })
+            );
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  private _executeMeleeStrike(strike: PendingComboStrike) {
+    const p = this.player;
+    const weaponId = p.state.meleeWeapon.defId;
+    const dir = p.facingRight ? 1 : -1;
+
+    if (strike.lungeVx !== undefined) {
+      p.vx = dir * strike.lungeVx;
+      if (strike.lungeVx >= 250) p.grantBriefIFrames(0.14);
+    }
+    if (strike.sound) {
+      this.sound.play(strike.sound);
+    }
+    if (strike.shake) {
+      this.triggerShake(strike.shake, 0.12);
+    }
+
+    const hx = strike.isPogo
+      ? p.x - (strike.rangeW - p.width) / 2
+      : strike.bidirectional
+        ? p.x + p.width / 2 - strike.rangeW
+        : p.facingRight
+          ? p.x + p.width - 2
+          : p.x - strike.rangeW + 2;
+    const boxW = strike.bidirectional && !strike.isPogo ? strike.rangeW * 2 : strike.rangeW;
+    const hy = strike.isPogo ? p.y + p.height - 4 : p.y + p.height - strike.rangeH;
 
     this._slashes.push({
-      x: isPogo ? p.x + p.width / 2 : p.x + p.width / 2 + (p.facingRight ? 6 : -6),
-      y: isPogo ? p.y + p.height : p.y + p.height * 0.45,
-      radius,
-      isPogo,
+      x: strike.isPogo
+        ? p.x + p.width / 2
+        : strike.bidirectional
+          ? p.x + p.width / 2
+          : p.x + p.width / 2 + dir * (strike.shape === 'thrust' ? 10 : 7),
+      y: strike.isPogo ? p.y + p.height : p.y + p.height * 0.45,
+      radius: strike.radius,
+      isPogo: strike.isPogo,
       facingRight: p.facingRight,
-      comboStep: p.meleeCombo,
-      color,
-      life: 0.15,
-      maxLife: 0.15,
+      comboStep: strike.comboStep,
+      shape: strike.shape,
+      bidirectional: strike.bidirectional,
+      color: strike.color,
+      life: strike.shape === 'tornado' || strike.shape === 'vertical_spin' ? 0.28 : 0.21,
+      maxLife: strike.shape === 'tornado' || strike.shape === 'vertical_spin' ? 0.28 : 0.21,
     });
 
     this.particles.emit(
       'slash_trail',
-      hx + rangeW / 2,
-      hy + rangeH / 2,
-      isPogo ? Math.PI / 2 : p.facingRight ? 0 : Math.PI
+      hx + boxW / 2,
+      hy + strike.rangeH / 2,
+      strike.isPogo ? Math.PI / 2 : p.facingRight ? 0 : Math.PI
     );
 
     let hitSomething = false;
-    const isArmorBreak = weaponId === 'axe';
-    const baseDmg = p.getMeleeDamage();
-    const isCrit = weaponId === 'dual_sword' && Math.random() < 0.15;
-    const finalDmg = isCrit ? Math.round(baseDmg * 1.5) : baseDmg;
+    const baseDmg = p.getMeleeDamage() * strike.damageRatio;
+    const critChance = weaponId === 'dual_sword' || weaponId === 'katana' ? 0.2 : 0.08;
+    const isCrit = Math.random() < critChance;
+    const finalDmg = Math.max(1, Math.round(isCrit ? baseDmg * 1.4 : baseDmg));
 
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
-      if (_aabb(hx, hy, rangeW, rangeH, enemy.x, enemy.y, enemy.width, enemy.height)) {
+      if (_aabb(hx, hy, boxW, strike.rangeH, enemy.x, enemy.y, enemy.width, enemy.height)) {
         hitSomething = true;
-        const killed = damageEnemy(enemy, finalDmg, isArmorBreak);
-        enemy.vx = (p.facingRight ? 1 : -1) * (isArmorBreak ? 140 : 65);
+        const killed = damageEnemy(enemy, finalDmg, strike.armorBreak);
+        const pushDir =
+          strike.bidirectional && enemy.x + enemy.width / 2 < p.x + p.width / 2 ? -1 : dir;
+        enemy.vx = pushDir * strike.knockbackX;
+        if (strike.liftVy !== undefined && enemy.behavior !== 'flying_ranged') {
+          enemy.vy = Math.min(enemy.vy, strike.liftVy);
+        }
         p.onMeleeHit();
         this.particles.emit('hit_spark', enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
         this._spawnFloatingText(
           enemy.x + enemy.width / 2,
           enemy.y - 4,
-          isCrit ? `${finalDmg}!` : `${finalDmg}`,
-          isCrit ? '#FACC15' : '#FFFFFF'
+          isCrit || strike.comboStep >= 2 ? `${finalDmg}!` : `${finalDmg}`,
+          isCrit || strike.comboStep === 3 ? '#FACC15' : '#FFFFFF'
         );
         if (killed) this._onEnemyKilled(enemy);
         else this.sound.play('enemy_hit');
@@ -653,7 +1463,7 @@ export class GameEngine {
 
     if (this.boss && this.boss.hp > 0) {
       const b = this.boss;
-      if (_aabb(hx, hy, rangeW, rangeH, b.x, b.y, b.width, b.height)) {
+      if (_aabb(hx, hy, boxW, strike.rangeH, b.x, b.y, b.width, b.height)) {
         hitSomething = true;
         this._bossFlashTimer = 0.09;
         const killed = damageBoss(b, finalDmg);
@@ -670,11 +1480,11 @@ export class GameEngine {
       }
     }
 
-    if (isPogo && this.level) {
+    if (strike.isPogo && this.level) {
       for (const sp of this.level.spikes) {
-        if (_aabb(hx, hy, rangeW, rangeH, sp.x, sp.y, sp.w, sp.h)) {
+        if (_aabb(hx, hy, boxW, strike.rangeH, sp.x, sp.y, sp.w, sp.h)) {
           hitSomething = true;
-          this.particles.emit('hit_spark', hx + rangeW / 2, sp.y);
+          this.particles.emit('hit_spark', hx + boxW / 2, sp.y);
           break;
         }
       }
@@ -682,7 +1492,7 @@ export class GameEngine {
 
     if (this.level) {
       for (const cry of this.level.crystals) {
-        if (!cry.exploded && _aabb(hx, hy, rangeW, rangeH, cry.x, cry.y, cry.w, cry.h)) {
+        if (!cry.exploded && _aabb(hx, hy, boxW, strike.rangeH, cry.x, cry.y, cry.w, cry.h)) {
           hitSomething = true;
           this._detonateCrystal(cry);
         }
@@ -690,8 +1500,8 @@ export class GameEngine {
     }
 
     if (hitSomething) {
-      this.triggerHitstop(weaponId === 'axe' ? 4 : 2);
-      if (isPogo && p.pogoSlash()) {
+      this.triggerHitstop(strike.comboStep === 3 ? 3 : 2);
+      if (strike.isPogo && p.pogoSlash()) {
         this._scaleX = 0.82;
         this._scaleY = 1.22;
         this.sound.play('pogo_bounce');
@@ -702,6 +1512,7 @@ export class GameEngine {
 
   private _performRanged() {
     const p = this.player;
+    if (!p.state.rangedWeapon) return;
     const weaponId = p.state.rangedWeapon.defId;
     this._rangedAnimTimer = 0.14;
     const muzzleX = p.facingRight ? p.x + p.width + 4 : p.x - 4;
@@ -917,11 +1728,52 @@ export class GameEngine {
 
   private _damagePlayer(amount: number) {
     if (this._manaShieldTimer > 0) return;
-    const dead = this.player.takeDamage(amount);
+    const p = this.player;
+    const res = p.resolveIncomingHit(amount);
+    if (res.outcome === 'ignored') return;
+
+    if (res.outcome === 'parry') {
+      this._parryFlashTimer = 0.26;
+      this._scaleX = 1.15;
+      this._scaleY = 0.9;
+      this.sound.play('parry_flash');
+      this.triggerHitstop(5);
+      this.triggerShake(3.5, 0.14);
+      this.particles.emit('hit_spark', p.x + (p.facingRight ? 16 : -2), p.y + 12);
+      this._spawnFloatingText(p.x + 7, p.y - 10, 'PARRY! +22 EN', '#FACC15');
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        if (Math.hypot(e.x - p.x, e.y - p.y) < 48) {
+          e.vx = (e.x >= p.x ? 1 : -1) * 195;
+          e.vy = -90;
+        }
+      }
+      return;
+    }
+
+    if (res.outcome === 'blocked') {
+      this._scaleX = 0.88;
+      this._scaleY = 1.1;
+      this.sound.play('block_clang');
+      this.triggerShake(1.8, 0.08);
+      this.particles.emit('hit_spark', p.x + (p.facingRight ? 15 : -1), p.y + 12);
+      this._spawnFloatingText(
+        p.x + 7,
+        p.y - 8,
+        res.finalDamage > 0 ? `GUARD -${res.finalDamage}` : 'BLOCKED!',
+        '#00F0FF'
+      );
+      if (p.state.hp <= 0) {
+        this.sound.play('game_over');
+        this.onGameOver?.('Slayer gugur di medan tempur.');
+      }
+      return;
+    }
+
     this.sound.play('player_hit');
     this.triggerShake(4, 0.18);
-    this._spawnFloatingText(this.player.x + 7, this.player.y - 6, `-${amount}`, '#EF4444');
-    if (dead) {
+    this._spawnFloatingText(p.x + 7, p.y - 6, `-${res.finalDamage}`, '#EF4444');
+    if (p.state.hp <= 0) {
       this.sound.play('game_over');
       this.onGameOver?.('Slayer gugur di medan tempur.');
     }
@@ -1166,23 +2018,39 @@ export class GameEngine {
 
     const drops = b.def.drops;
     if (drops) {
+      // Pick random weapon from dropPool (prioritizing unowned weapons first so every clear feels fresh!)
+      let chosenWeaponId = drops.weaponId;
+      let chosenTier = drops.weaponTier;
+      let chosenLevel = 1;
+
+      if (drops.dropPool && drops.dropPool.length > 0) {
+        const ownedIds = new Set(this.player.state.weaponInventory.map((w) => w.defId));
+        const unownedPool = drops.dropPool.filter((entry) => !ownedIds.has(entry.weaponId));
+        const activePool = unownedPool.length > 0 ? unownedPool : drops.dropPool;
+        const picked = activePool[Math.floor(Math.random() * activePool.length)];
+        chosenWeaponId = picked.weaponId;
+        chosenTier = picked.weaponTier;
+        chosenLevel = picked.level ?? 1;
+      }
+
       this._groundDrops.push({
         id: `drop_${this._dropIdCounter++}`,
         kind: 'boss_relic',
         x: b.x + b.width / 2 - 8,
         y: b.y + b.height - 20,
         vy: -140,
-        label: 'BOSS RELIC DROP!',
+        label: 'BOSS RANDOM RELIC!',
         shards: drops.shards,
         ammoPacks: drops.ammoPacks,
-        weaponId: drops.weaponId,
-        weaponTier: drops.weaponTier,
+        weaponId: chosenWeaponId,
+        weaponTier: chosenTier,
+        weaponLevel: chosenLevel,
         secondaryWeaponId: drops.secondaryWeaponId,
         secondaryWeaponTier: drops.secondaryWeaponTier,
         armorId: drops.armorId,
         life: 999,
       });
-      this.onToast?.(`${b.def.name} KALAH! Ambil Boss Relic Drop yang jatuh lalu masuk Exit Gate!`);
+      this.onToast?.(`${b.def.name} KALAH! Ambil Random Boss Relic Drop lalu masuk Exit Gate!`);
     } else {
       this.player.state.shards += 150;
       this.onToast?.(`${b.def.name} DIKALAHKAN! +150 Shards! Masuk Exit Gate di kanan!`);
@@ -1297,18 +2165,28 @@ export class GameEngine {
             got.push(`+${d.ammoPacks} Ammo Pack`);
           }
           if (d.weaponId) {
-            const inst: WeaponInstance = { defId: d.weaponId, tier: d.weaponTier ?? 'rare' };
-            p.addWeaponToInventory(inst);
-            p.equipWeapon(inst);
-            got.push(WEAPONS[d.weaponId]?.name ?? d.weaponId);
+            const inst: WeaponInstance = {
+              defId: d.weaponId,
+              tier: d.weaponTier ?? 'rare',
+              level: d.weaponLevel ?? 1,
+            };
+            const res = p.addOrUpgradeWeapon(inst);
+            p.equipWeapon(res.weapon);
+            const name = WEAPONS[d.weaponId]?.name ?? d.weaponId;
+            got.push(
+              res.action === 'upgraded'
+                ? `${name} UP Lv.${res.weapon.level}!`
+                : `${name} (Lv.${res.weapon.level ?? 1})`
+            );
           }
           if (d.secondaryWeaponId) {
             const inst2: WeaponInstance = {
               defId: d.secondaryWeaponId,
               tier: d.secondaryWeaponTier ?? 'rare',
+              level: 1,
             };
-            p.addWeaponToInventory(inst2);
-            p.equipWeapon(inst2);
+            const res2 = p.addOrUpgradeWeapon(inst2);
+            p.equipWeapon(res2.weapon);
             got.push(WEAPONS[d.secondaryWeaponId]?.name ?? d.secondaryWeaponId);
           }
           if (d.armorId) {
@@ -1328,20 +2206,9 @@ export class GameEngine {
 
   public saveGear() {
     try {
-      const s = this.player.state;
-      localStorage.setItem(
-        GEAR_STORAGE_KEY,
-        JSON.stringify({
-          ammoPacks: s.ammoPacks,
-          nanoVials: s.nanoVials,
-          shards: s.shards,
-          meleeWeapon: s.meleeWeapon,
-          rangedWeapon: s.rangedWeapon,
-          armorId: s.armorId,
-          weaponInventory: s.weaponInventory,
-          armorInventory: s.armorInventory,
-        })
-      );
+      const gear = this.player.exportSavedGear();
+      localStorage.setItem(this._gearStorageKey, JSON.stringify(gear));
+      this.onGearChange?.(gear);
     } catch {
       // ignore quota errors
     }
@@ -1349,7 +2216,7 @@ export class GameEngine {
 
   private _loadSavedGear(): Partial<PlayerState> | null {
     try {
-      const raw = localStorage.getItem(GEAR_STORAGE_KEY);
+      const raw = localStorage.getItem(this._gearStorageKey);
       return raw ? (JSON.parse(raw) as Partial<PlayerState>) : null;
     } catch {
       return null;
@@ -1458,8 +2325,21 @@ export class GameEngine {
       } else {
         const p = this.player;
         if (_aabb(proj.x, proj.y, proj.width, proj.height, p.x, p.y, p.width, p.height)) {
-          this._damagePlayer(proj.damage);
-          proj.alive = false;
+          if (p.isParryWindow && this._manaShieldTimer <= 0) {
+            // Perfect Parry reflects enemy projectiles back with 2x power!
+            this._damagePlayer(proj.damage);
+            proj.source = 'player';
+            proj.vx = -proj.vx * 1.65;
+            proj.vy = -proj.vy * 1.4;
+            proj.damage = Math.round(proj.damage * 2);
+            proj.color = '#FACC15';
+            proj.trailColor = '#FFFFFF';
+            proj.hitTargets.clear();
+            proj.life = Math.max(proj.life, 1.5);
+          } else {
+            this._damagePlayer(proj.damage);
+            proj.alive = false;
+          }
         } else if (this.mode.state.mode === 'defense' && this.level.pylonPos) {
           const py = this.level.pylonPos;
           if (Math.abs(proj.x - py.x) < 14 && Math.abs(proj.y - py.y) < 24) {
@@ -1662,14 +2542,28 @@ export class GameEngine {
         );
         unlockedNames.push(`+${loot.nanoVials} Nano-Vial`);
       }
+      if (loot.upgradeWeaponId) {
+        const upRes = this.player.upgradeWeaponLevel(loot.upgradeWeaponId);
+        if (upRes.upgraded && upRes.weapon) {
+          unlockedNames.push(
+            `UPGRADE ${WEAPONS[loot.upgradeWeaponId]?.name} -> Lv.${upRes.weapon.level} (GLOW!)`
+          );
+        }
+      }
       if (loot.weaponId) {
         const inst: WeaponInstance = {
           defId: loot.weaponId,
           tier: loot.weaponTier ?? 'common',
+          level: loot.weaponLevel ?? 1,
         };
-        this.player.addWeaponToInventory(inst);
-        this.player.equipWeapon(inst);
-        unlockedNames.push(WEAPONS[loot.weaponId]?.name ?? loot.weaponId);
+        const res = this.player.addOrUpgradeWeapon(inst);
+        this.player.equipWeapon(res.weapon);
+        const wName = WEAPONS[loot.weaponId]?.name ?? loot.weaponId;
+        unlockedNames.push(
+          res.action === 'upgraded'
+            ? `${wName} UPGRADE Lv.${res.weapon.level}!`
+            : `${wName} (Lv.${res.weapon.level ?? 1})`
+        );
       }
       if (loot.armorId) {
         if (!this.player.state.armorInventory.includes(loot.armorId)) {
@@ -1759,6 +2653,10 @@ export class GameEngine {
       f.life -= dt;
       if (f.life <= 0) this._floatingTexts.splice(i, 1);
     }
+    for (let i = this._ghostTrails.length - 1; i >= 0; i--) {
+      this._ghostTrails[i].life -= dt;
+      if (this._ghostTrails[i].life <= 0) this._ghostTrails.splice(i, 1);
+    }
   }
 
   private _spawnFloatingText(x: number, y: number, text: string, color: string) {
@@ -1808,7 +2706,7 @@ export class GameEngine {
       this._renderTurrets(ctx);
       this._renderEnemies(ctx);
       this._renderBoss(ctx);
-      this._renderScarf(ctx);
+      this._renderGhostTrails(ctx);
       this._renderPlayer(ctx);
       this._renderSlashes(ctx);
       this._renderProjectiles(ctx);
@@ -2207,109 +3105,59 @@ export class GameEngine {
     }
   }
 
-  private _renderScarf(ctx: CanvasRenderingContext2D) {
-    if (this._scarfPoints.length < 2) return;
-    const armor = ARMORS[this.player.state.armorId] ?? ARMORS.recruit_mk1;
-    ctx.save();
-    ctx.strokeStyle = armor.palette.glow;
-    ctx.lineCap = 'square';
-    for (let i = 0; i < this._scarfPoints.length - 1; i++) {
-      ctx.lineWidth = Math.max(1, 3 - Math.floor(i / 2));
-      ctx.beginPath();
-      ctx.moveTo(Math.round(this._scarfPoints[i].x), Math.round(this._scarfPoints[i].y));
-      ctx.lineTo(Math.round(this._scarfPoints[i + 1].x), Math.round(this._scarfPoints[i + 1].y));
-      ctx.stroke();
+  private _renderGhostTrails(ctx: CanvasRenderingContext2D) {
+    for (const g of this._ghostTrails) {
+      const alpha = Math.max(0, (g.life / g.maxLife) * 0.45);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = g.color;
+      ctx.fillRect(Math.round(g.x - 5), Math.round(g.y - 26), 10, 14);
+      ctx.fillRect(Math.round(g.x - 4), Math.round(g.y - 12), 8, 10);
+      ctx.restore();
     }
-    ctx.restore();
   }
 
   private _renderPlayer(ctx: CanvasRenderingContext2D) {
     const p = this.player;
     const armor = ARMORS[p.state.armorId] ?? ARMORS.recruit_mk1;
-    const moving = Math.abs(p.vx) > 10 && p.onGround;
-    const runPhase = Math.floor(this._animTime * 13) % 4;
 
-    let poseKey: MCPoseName = 'idle';
-    let sy = this._scaleY;
-    let handBobY = 0;
-
-    if (this._meleeAnimTimer > 0 && p.onGround) {
-      poseKey = 'attack';
-      handBobY = 1;
-    } else if (p.isWallSliding) {
-      poseKey = 'wall';
-    } else if (!p.onGround) {
-      if (p.vy < 20) {
-        poseKey = 'jump_up';
-        handBobY = -1;
-      } else {
-        poseKey = 'fall';
-      }
-    } else if (moving) {
-      poseKey = `run_${runPhase}` as MCPoseName;
-      handBobY = runPhase === 0 || runPhase === 2 ? 1 : 0;
-      if ((runPhase === 0 || runPhase === 2) && this._lastRunStep !== runPhase) {
-        this._lastRunStep = runPhase;
-        this.particles.emit('mana_dust', p.x + p.width / 2, p.y + p.height, -Math.PI / 2);
-      }
-    } else {
-      this._lastRunStep = -1;
-      sy *= 1 + Math.sin(this._animTime * 4) * 0.025;
-      handBobY = Math.sin(this._animTime * 4) > 0.5 ? 1 : 0;
-    }
-
-    const mat = getMCPoseMatrix(armor.id, poseKey);
-
-    if (p.isInvincible && !p.isDashing && Math.floor(this._animTime * 20) % 2 === 0) {
-      ctx.globalAlpha = 0.45;
-    }
-
-    const frame = this.sprites.render(`mc_${armor.id}_${poseKey}`, mat, armor.palette, 1);
-    this.sprites.draw(
-      ctx,
-      frame,
-      p.x + p.width / 2,
-      p.y + p.height,
-      !p.facingRight,
-      this._scaleX,
-      sy
-    );
-
-    // Draw right-hand armored forearm & active weapon in front of torso
-    const shoulderX = p.x + p.width / 2 + (p.facingRight ? 2 : -2);
-    const shoulderY = p.y + 14 + handBobY;
-    if (this._meleeAnimTimer > 0) {
-      const prog = 1 - this._meleeAnimTimer / 0.16;
-      drawWeaponInHand(
-        ctx,
-        p.state.meleeWeapon.defId,
-        shoulderX,
-        shoulderY,
-        p.facingRight,
-        armor.palette,
-        prog,
-        p.meleeCombo,
-        this._meleeAnimIsPogo
-      );
-    } else {
-      const recoil = this._rangedAnimTimer > 0 ? 3 : 0;
-      const showWeapon =
-        this._rangedAnimTimer > 0 ? p.state.rangedWeapon.defId : p.state.meleeWeapon.defId;
-      drawWeaponInHand(
-        ctx,
-        showWeapon,
-        shoulderX,
-        shoulderY,
-        p.facingRight,
-        armor.palette,
-        0,
-        p.meleeCombo,
-        false,
-        recoil
-      );
-    }
-
-    ctx.globalAlpha = 1;
+    drawComplexSlayerAvatar(ctx, this.sprites, {
+      armorId: armor.id,
+      palette: armor.palette,
+      x: p.x,
+      y: p.y,
+      width: p.width,
+      height: p.height,
+      facingRight: p.facingRight,
+      vx: p.vx,
+      vy: p.vy,
+      onGround: p.onGround,
+      isWallSliding: p.isWallSliding,
+      isDashing: p.isDashing,
+      isInvincible: p.isInvincible,
+      isBlocking: p.isBlocking,
+      parryFlash: this._parryFlashTimer / 0.26,
+      counterReady: p.counterReady,
+      meleeTimer: this._meleeAnimTimer,
+      meleeDuration: this._meleeAnimDuration,
+      meleeCombo: p.meleeCombo,
+      isPogo: this._meleeAnimIsPogo,
+      rangedTimer: this._rangedAnimTimer,
+      doubleJumpFlip: this._doubleJumpFlipTimer / 0.28,
+      spinAttack: this._spinAttackTimer / Math.max(0.05, this._spinAttackDuration),
+      spinMode: this._spinMode,
+      walkPhase: this._walkCycle,
+      animTime: this._animTime,
+      scaleX: this._scaleX,
+      scaleY: this._scaleY,
+      meleeWeaponId: p.state.meleeWeapon.defId,
+      meleeWeaponLevel: getWeaponLevel(p.state.meleeWeapon),
+      rangedWeaponId: p.state.rangedWeapon?.defId ?? null,
+      rangedWeaponLevel: p.state.rangedWeapon ? getWeaponLevel(p.state.rangedWeapon) : 1,
+      hasOffhandShield: p.hasFullEnergyShield,
+      iaidoWindup: this._iaidoWindupTimer > 0,
+      scarfPoints: this._scarfPoints,
+    });
 
     if (this._manaShieldTimer > 0) {
       ctx.strokeStyle = '#00F0FF';
@@ -2323,7 +3171,7 @@ export class GameEngine {
   private _renderSlashes(ctx: CanvasRenderingContext2D) {
     for (const s of this._slashes) {
       const progress = 1 - s.life / s.maxLife;
-      const alpha = Math.max(0, 1 - progress * 0.75);
+      const alpha = Math.max(0, 1 - progress * 0.72);
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.translate(Math.round(s.x), Math.round(s.y));
@@ -2333,16 +3181,128 @@ export class GameEngine {
         ctx.scale(-1, 1);
       }
 
-      const reverse = s.comboStep % 2 === 1;
-      const angStart = reverse ? Math.PI * 0.52 : -Math.PI * 0.55;
-      const angSpan = reverse ? -Math.PI * 1.05 : Math.PI * 1.08;
+      if (s.shape === 'thrust' && !s.isPogo) {
+        // Long sharp piercing lance / dash-stab streak!
+        const len = s.radius * (0.7 + progress * 0.8);
+        ctx.fillStyle = s.color;
+        ctx.beginPath();
+        ctx.moveTo(-4, -3);
+        ctx.lineTo(len, 0);
+        ctx.lineTo(-4, 3);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(-2, 0);
+        ctx.lineTo(len + 4, 0);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
+      if (s.shape === 'vertical_spin' && !s.isPogo) {
+        // Upright vertical somersault blade-wheel slash!
+        ctx.rotate(progress * Math.PI * 2.4);
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 3.0;
+        ctx.beginPath();
+        ctx.arc(0, 0, s.radius, -Math.PI * 0.65, Math.PI * 0.72);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(0, 0, s.radius - 2, -Math.PI * 0.45, Math.PI * 0.55);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#00F0FF';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, s.radius - 6, Math.PI * 0.4, Math.PI * 1.55);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
+      if (s.shape === 'vertical_chop' && !s.isPogo) {
+        // Tall overhead vertical cleave shockwave streak!
+        ctx.fillStyle = s.color;
+        ctx.beginPath();
+        ctx.moveTo(4, -s.radius * 0.9);
+        ctx.lineTo(s.radius * 0.65, 2);
+        ctx.lineTo(8, s.radius * 0.55);
+        ctx.lineTo(0, -s.radius * 0.35);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(4, -s.radius * 0.85);
+        ctx.lineTo(s.radius * 0.6, s.radius * 0.45);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
+      if (s.shape === 'x_cut' && !s.isPogo) {
+        // Intersecting razor X-flash arcs!
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(-6, -s.radius * 0.6);
+        ctx.lineTo(s.radius * 0.9, s.radius * 0.5);
+        ctx.moveTo(-6, s.radius * 0.6);
+        ctx.lineTo(s.radius * 0.9, -s.radius * 0.5);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(-2, -s.radius * 0.45);
+        ctx.lineTo(s.radius * 0.8, s.radius * 0.4);
+        ctx.moveTo(-2, s.radius * 0.45);
+        ctx.lineTo(s.radius * 0.8, -s.radius * 0.4);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
+      if (s.shape === 'tornado' && !s.isPogo) {
+        // Full 360° swirling whirlwind tornado rings!
+        ctx.rotate(-progress * Math.PI * 1.8);
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2.8;
+        ctx.beginPath();
+        ctx.arc(0, 0, s.radius, 0.15, Math.PI * 1.45);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#FACC15';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.arc(0, 0, s.radius - 5, Math.PI + 0.15, Math.PI * 2.45);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(0, 0, s.radius + 2, 0.4, Math.PI * 1.15);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
+      const reverse = s.comboStep >= 2;
+      const angStart = reverse ? Math.PI * 0.58 : -Math.PI * 0.55;
+      const angSpan = reverse ? -Math.PI * 1.25 : Math.PI * 1.08;
       const curEnd = angStart + angSpan * Math.min(1, progress * 1.65);
       const a0 = Math.min(angStart, curEnd);
       const a1 = Math.max(angStart, curEnd);
 
-      // Bold tapered crescent blade polygon
-      const outerR = s.radius + 3;
-      const innerR = s.radius - 5;
+      const outerR = s.radius + (s.comboStep === 3 ? 6 : 3);
+      const innerR = s.radius - (s.comboStep === 3 ? 7 : 5);
       const segments = 10;
 
       ctx.fillStyle = s.color;
@@ -2359,7 +3319,6 @@ export class GameEngine {
       for (let i = segments; i >= 0; i--) {
         const t = i / segments;
         const ang = a0 + (a1 - a0) * t;
-        // Taper sharply at both tips (t=0 and t=1)
         const taper = Math.sin(t * Math.PI);
         const r = outerR - (outerR - innerR) * taper;
         ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
@@ -2367,9 +3326,8 @@ export class GameEngine {
       ctx.closePath();
       ctx.fill();
 
-      // Razor white leading crescent highlight
       ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 1.6;
+      ctx.lineWidth = s.comboStep === 3 ? 2.1 : 1.6;
       ctx.beginPath();
       ctx.arc(0, 0, outerR - 1, a0 + (a1 - a0) * 0.15, a1 - (a1 - a0) * 0.15);
       ctx.stroke();
@@ -2485,6 +3443,10 @@ export class GameEngine {
       interactPrompt: this._getInteractPrompt(),
       manaShieldTimer: this._manaShieldTimer,
       turretTimer: this._turrets[0]?.life ?? 0,
+      isBlocking: this.player.isBlocking,
+      hasFullShield: this.player.hasFullEnergyShield,
+      meleeCombo: this.player.meleeCombo,
+      counterReady: this.player.counterReady,
       boss:
         this.boss && this.boss.hp > 0
           ? {
