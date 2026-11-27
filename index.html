@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
+  <!-- Primary Meta -->
+  <title>RIFTBOUND: SLAYER CORPS — Game Edukasi Action Platformer</title>
+  <meta name="description" content="Riftbound: Slayer Corps — Game 2D Pixel Art Hack-and-Slash Action Platformer PWA dengan 24 soal pembelajaran Informatika dan pencatatan progres siswa." />
+  <meta name="keywords" content="Riftbound, Slayer Corps, Game Edukasi, Informatika, Pixel Art, PWA" />
+  <meta name="author" content="Riftbound Dev" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="RIFTBOUND: SLAYER CORPS" />
+  <meta property="og:description" content="2D Pixel Art Action Platformer + Edukasi Informatika & Catatan Progres Siswa." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="/icon-512.png" />
+
+  <!-- PWA Meta -->
+  <meta name="theme-color" content="#0B0D14" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="RIFTBOUND" />
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- Icons -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
+
+  <!-- Fonts (Pixel + Tech Monospace with offline system fallback) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet" />
+</head>
+<body class="bg-[#0B0D14] text-slate-100 antialiased overflow-hidden selection:bg-[#00F0FF]/30 selection:text-[#00F0FF]">
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker
+          .register('/sw.js')
+          .then((reg) => console.log('[PWA SW] Registered:', reg.scope))
+          .catch((err) => console.warn('[PWA SW] Registration failed:', err));
+      });
+    }
+  </script>
+</body>
+</html>
