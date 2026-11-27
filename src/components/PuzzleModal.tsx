@@ -12,6 +12,7 @@ import puzzleBank from '../data/puzzles.json';
 
 interface PuzzleModalProps {
   request: PuzzleRequest;
+  stageNumber: 1 | 2 | 3;
   answeredPuzzleIds?: string[];
   onComplete: (
     interactableId: string,
@@ -23,14 +24,17 @@ interface PuzzleModalProps {
 
 export function PuzzleModal({
   request,
+  stageNumber,
   answeredPuzzleIds = [],
   onComplete,
   onClose,
 }: PuzzleModalProps) {
   const questions = useMemo(() => {
     const all = (puzzleBank.questions ?? []) as PuzzleQuestion[];
-    const byTrigger = all.filter((q) => q.usedIn.includes(request.trigger));
-    const pool = byTrigger.length > 0 ? byTrigger : all;
+    const byStage = all.filter((q) => q.stage === stageNumber);
+    const stagePool = byStage.length > 0 ? byStage : all;
+    const byTrigger = stagePool.filter((q) => q.usedIn.includes(request.trigger));
+    const pool = byTrigger.length > 0 ? byTrigger : stagePool;
 
     // Prioritize questions the student hasn't solved yet
     const unseen = pool.filter((q) => !answeredPuzzleIds.includes(q.id));
@@ -40,7 +44,7 @@ export function PuzzleModal({
     const shuffledSeen = [...seen].sort(() => Math.random() - 0.5);
 
     return [...shuffledUnseen, ...shuffledSeen].slice(0, Math.max(1, request.questionsRequired));
-  }, [request, answeredPuzzleIds]);
+  }, [request, stageNumber, answeredPuzzleIds]);
 
   const [stepIndex, setStepIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);

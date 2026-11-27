@@ -1,5 +1,5 @@
 // ============================================================
-// RIFTBOUND: SLAYER CORPS — Title Screen + Student Login
+// RIFTBOUND: SLAYER CORPS — Title Screen + 3 Themed Stages
 // ============================================================
 
 import { useEffect, useState } from 'react';
@@ -18,6 +18,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 import type { StudentProgress } from '../types';
+import type { PlayableModeKey } from '../engine/LevelBuilder';
 import { isFirebaseConfigured } from '../services/firebase';
 import { loginOrCreateStudent } from '../services/progressService';
 
@@ -31,7 +32,7 @@ interface TitleScreenProps {
   onStudentUpdate: (profile: StudentProgress) => void;
   onOpenReport: () => void;
   onStartWithLore: () => void;
-  onStartMode: (mode: 'traverse' | 'survival' | 'defense') => void;
+  onStartMode: (mode: PlayableModeKey) => void;
 }
 
 export function TitleScreen({
@@ -115,10 +116,9 @@ export function TitleScreen({
       <div className="pointer-events-none absolute -bottom-32 right-1/4 h-80 w-80 rounded-full bg-mana-cyan/10 blur-3xl" />
 
       <main className="relative z-10 w-full max-w-4xl border-2 border-ancient-stone bg-abyss-900/95 p-6 shadow-2xl md:p-8">
-        {/* Top PWA & Firebase Bar */}
         <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-ancient-stone pb-3 text-[11px]">
           <span className="font-bold tracking-widest text-mana-cyan">
-            RIFTBOUND PWA // INFORMATIKA LEARNING EDITION
+            RIFTBOUND PWA // 3 STAGE BERTEMA (27 SOAL)
           </span>
           <div className="flex flex-wrap items-center gap-2">
             <span
@@ -160,7 +160,6 @@ export function TitleScreen({
           </div>
         </div>
 
-        {/* Hero Title */}
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center">
           <img
             src="/favicon.svg"
@@ -169,19 +168,19 @@ export function TitleScreen({
           />
           <div>
             <p className="text-[11px] font-bold tracking-widest text-slayer-orange">
-              SILKSONG AGILITY · DOOM ARSENAL · 24 SOAL INFORMATIKA
+              SILKSONG AGILITY · DOOM ARSENAL · 3 BOSS · 27 SOAL BERTEMA
             </p>
             <h1 className="mt-1 font-pixel text-xl leading-snug text-white md:text-2xl">
               RIFTBOUND: <span className="text-mana-cyan">SLAYER CORPS</span>
             </h1>
             <p className="mt-1.5 text-xs text-slate-400">
-              Buat username siswa untuk mencatat progres belajar, akurasi per materi, dan papan
-              skor secara otomatis.
+              Setiap Stage punya tema materi khusus (9 soal per Stage di Chest, Puzzle Shrine,
+              Terminal, dan Runic Pillar Boss).
             </p>
           </div>
         </div>
 
-        {/* Student Profile / Username Card */}
+        {/* Student Profile */}
         <form
           onSubmit={handleLoginSubmit}
           className="mb-5 border border-mana-cyan/50 bg-abyss-950/90 p-4"
@@ -240,75 +239,107 @@ export function TitleScreen({
         </form>
 
         {/* Primary Play Actions */}
-        <div className="mb-5 flex flex-wrap gap-3">
+        <div className="mb-4 flex flex-wrap gap-3">
           <button
             type="button"
             onClick={() => ensureStudentThenRun(onStartWithLore)}
             className="inline-flex items-center gap-2 border-2 border-slayer-orange bg-slayer-orange/20 px-5 py-3 font-pixel text-xs text-white transition hover:bg-slayer-orange/35"
           >
-            <Play className="h-4 w-4 text-loot-gold" /> MULAI (+ LORE INTRO)
+            <Play className="h-4 w-4 text-loot-gold" /> MULAI DARI STAGE 1 (+ LORE)
           </button>
           <button
             type="button"
-            onClick={() => ensureStudentThenRun(() => onStartMode('traverse'))}
+            onClick={() => ensureStudentThenRun(() => onStartMode('stage_1'))}
             className="inline-flex items-center gap-2 border border-mana-cyan/70 bg-mana-cyan/10 px-4 py-3 text-xs font-bold text-mana-cyan transition hover:bg-mana-cyan/20"
           >
-            <BookOpen className="h-4 w-4" /> Langsung Main (Skip Lore)
+            <BookOpen className="h-4 w-4" /> Langsung Main Stage 1 (Skip Lore)
           </button>
         </div>
 
-        {/* Direct Mode Cards */}
-        <div className="mb-5 grid gap-3 md:grid-cols-3">
+        {/* 3 Full Themed Stages */}
+        <div className="mb-3 grid gap-3 md:grid-cols-3">
           <button
             type="button"
-            onClick={() => ensureStudentThenRun(() => onStartMode('traverse'))}
+            onClick={() => ensureStudentThenRun(() => onStartMode('stage_1'))}
             className="border border-ancient-stone bg-abyss-950/90 p-3.5 text-left transition hover:border-loot-gold"
           >
-            <div className="mb-1 flex items-center gap-2 text-xs font-bold text-loot-gold">
-              <Compass className="h-4 w-4" /> 1. TRAVERSE (4 AREA · 4 CHEST)
+            <div className="text-[10px] font-bold text-slayer-orange">STAGE 1 · 4 AREA + BOSS</div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs font-bold text-loot-gold">
+              <Compass className="h-4 w-4 shrink-0" /> Berpikir Komputasional
             </div>
-            <p className="text-[11px] text-slate-400">
-              4 Area terhubung: Outskirts, Twin Chasm, Foundry Catwalks (Shrine 3 soal), hingga
-              Rift Sanctum (4 Encrypted Chest).
+            <p className="mt-1 text-[11px] text-slate-400">
+              Dekomposisi, Abstraksi, Pola, Flowchart &amp; Pseudocode. 4 Chest + Shrine + Boss
+              Mana Colossus.
             </p>
           </button>
 
           <button
             type="button"
-            onClick={() => ensureStudentThenRun(() => onStartMode('survival'))}
+            onClick={() => ensureStudentThenRun(() => onStartMode('stage_2'))}
+            className="border border-ancient-stone bg-abyss-950/90 p-3.5 text-left transition hover:border-mana-purple"
+          >
+            <div className="text-[10px] font-bold text-mana-purple">STAGE 2 · 4 AREA + BOSS</div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs font-bold text-mana-cyan">
+              <Compass className="h-4 w-4 shrink-0" /> Gerbang Logika
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">
+              AND, OR, NOT, XOR, NAND, NOR, XNOR &amp; De Morgan. 4 Chest + Barrier + Boss Forge
+              Titan.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => ensureStudentThenRun(() => onStartMode('stage_3'))}
             className="border border-ancient-stone bg-abyss-950/90 p-3.5 text-left transition hover:border-slayer-red"
           >
-            <div className="mb-1 flex items-center gap-2 text-xs font-bold text-slayer-red">
-              <Timer className="h-4 w-4" /> 2. SURVIVAL TIMER (45s)
+            <div className="text-[10px] font-bold text-slayer-red">STAGE 3 · 4 AREA + FINAL BOSS</div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs font-bold text-white">
+              <Compass className="h-4 w-4 shrink-0 text-loot-gold" /> Sistem Biner
             </div>
-            <p className="text-[11px] text-slate-400">
-              Arena multi-lantai dengan gelombang Mana Husk, Drone &amp; Stalker + 2 Emergency
-              Shield Terminal.
+            <p className="mt-1 text-[11px] text-slate-400">
+              Bit/Byte, Konversi Biner-Desimal, Penjumlahan Biner &amp; ASCII. 4 Chest + Final Boss
+              Aetherion.
             </p>
+          </button>
+        </div>
+
+        {/* Bonus Modes */}
+        <div className="mb-4 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => ensureStudentThenRun(() => onStartMode('survival'))}
+            className="flex items-center gap-3 border border-ancient-stone bg-abyss-950/75 p-3 text-left transition hover:border-slayer-red"
+          >
+            <Timer className="h-5 w-5 shrink-0 text-slayer-red" />
+            <div>
+              <div className="text-xs font-bold text-slayer-red">MODE BONUS: SURVIVAL TIMER (45s)</div>
+              <div className="text-[10px] text-slate-400">
+                Arena bertingkat + Emergency Shield Terminal (Tema Stage 1).
+              </div>
+            </div>
           </button>
 
           <button
             type="button"
             onClick={() => ensureStudentThenRun(() => onStartMode('defense'))}
-            className="border border-ancient-stone bg-abyss-950/90 p-3.5 text-left transition hover:border-mana-cyan"
+            className="flex items-center gap-3 border border-ancient-stone bg-abyss-950/75 p-3 text-left transition hover:border-mana-cyan"
           >
-            <div className="mb-1 flex items-center gap-2 text-xs font-bold text-mana-cyan">
-              <Shield className="h-4 w-4" /> 3. HOLD THE FORT
+            <Shield className="h-5 w-5 shrink-0 text-mana-cyan" />
+            <div>
+              <div className="text-xs font-bold text-mana-cyan">MODE BONUS: HOLD THE FORT</div>
+              <div className="text-[10px] text-slate-400">
+                Pertahankan Pylon + Barricade &amp; Repair Turret (Tema Stage 2).
+              </div>
             </div>
-            <p className="text-[11px] text-slate-400">
-              Lindungi Ancient Seal Pylon (450 HP), aktifkan 2 Barricade Node &amp; Repair Terminal
-              untuk spawn Mana Turret.
-            </p>
           </button>
         </div>
 
-        {/* Controls Footer */}
         <div className="border border-ancient-stone bg-abyss-950/80 p-3 text-[11px] text-slate-400">
           <span className="font-bold text-slate-200">Kontrol:</span>{' '}
           <code>A/D</code> Gerak · <code>Space/W</code> Jump/2x · <code>Shift</code> Dash ·{' '}
           <code>J/LMB</code> Melee · <code>S+J</code> Pogo · <code>K/RMB</code> Ranged ·{' '}
-          <code>E</code> Chest/Terminal · <code>Q</code> Heal · <code>I</code> Gear ·{' '}
-          <code>TOUCH</code> Kontrol HP
+          <code>E</code> Chest/Shrine/Pillar · <code>Q</code> Heal · <code>I</code> Gear
         </div>
       </main>
     </div>

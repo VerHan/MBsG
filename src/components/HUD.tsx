@@ -112,9 +112,12 @@ export function HUD({
           </div>
         </div>
 
-        {/* Top-Center: Area / Mode Objective / Timer / Pylon HP */}
+        {/* Top-Center: Area / Mode Objective / Timer / Pylon HP / Boss HP */}
         <div className="flex flex-col items-center gap-1.5">
           <div className="border border-ancient-stone bg-abyss-950/85 px-3 py-1.5 text-center backdrop-blur-sm">
+            <div className="text-[9px] font-bold tracking-widest text-loot-gold uppercase">
+              STAGE {hud.stageNumber} · {hud.themeTopic}
+            </div>
             <div className="text-[10px] font-bold tracking-wider text-mana-cyan uppercase">
               {hud.areaName}
             </div>
@@ -174,6 +177,47 @@ export function HUD({
               </div>
             )}
           </div>
+
+          {hud.boss && (
+            <div className="w-64 sm:w-80 border-2 border-slayer-red/80 bg-abyss-950/90 px-3 py-1.5 shadow-xl">
+              <div className="mb-0.5 flex items-center justify-between text-[10px] font-bold">
+                <span className="text-slayer-red uppercase">
+                  BOSS: {hud.boss.name}
+                  {hud.boss.stunned ? ' [STUNNED!]' : ''}
+                </span>
+                <span className="text-slate-200">
+                  {hud.boss.hp}/{hud.boss.maxHp}
+                </span>
+              </div>
+              <div className="h-2.5 w-full border border-slayer-red/60 bg-abyss-900">
+                <div
+                  className="h-full bg-gradient-to-r from-slayer-red to-mana-purple transition-all duration-100"
+                  style={{ width: `${Math.max(0, (hud.boss.hp / hud.boss.maxHp) * 100)}%` }}
+                />
+              </div>
+              {hud.boss.shieldActive && (
+                <div className="mt-1">
+                  <div className="flex justify-between text-[9px] font-bold text-mana-cyan">
+                    <span>PERISAI MANA (Gunakan Runic Pillar [E]!)</span>
+                    <span>
+                      {hud.boss.shieldHp}/{hud.boss.shieldMaxHp}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full bg-abyss-900">
+                    <div
+                      className="h-full bg-mana-cyan"
+                      style={{
+                        width: `${Math.max(
+                          0,
+                          (hud.boss.shieldHp / Math.max(1, hud.boss.shieldMaxHp)) * 100
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {areaBanner && (
             <div className="border-y-2 border-mana-cyan bg-abyss-950/90 px-6 py-2 text-center shadow-2xl">

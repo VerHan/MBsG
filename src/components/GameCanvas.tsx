@@ -3,7 +3,7 @@
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Award, BarChart3, Home, RotateCcw } from 'lucide-react';
+import { ArrowRight, Award, BarChart3, Home, RotateCcw, Trophy } from 'lucide-react';
 import type {
   ArmorId,
   GameMode,
@@ -22,16 +22,15 @@ import {
   type PuzzleRequest,
 } from '../engine/GameEngine';
 import type { InputAction } from '../engine/InputManager';
+import type { PlayableModeKey } from '../engine/LevelBuilder';
 import { HUD } from './HUD';
 import { PuzzleModal } from './PuzzleModal';
 import { InventoryModal } from './InventoryModal';
 import { PauseMenu } from './PauseMenu';
 import { TouchControls } from './TouchControls';
 
-type DemoModeKey = 'traverse' | 'survival' | 'defense';
-
 interface GameCanvasProps {
-  initialMode: DemoModeKey;
+  initialMode: PlayableModeKey;
   student: StudentProgress | null;
   onRecordPuzzleLogs: (logs: StudentAnswerLog[]) => void;
   onRecordModeClear: (mode: GameMode, kills: number, shards: number) => void;
@@ -39,7 +38,12 @@ interface GameCanvasProps {
   onExitToTitle: () => void;
 }
 
-const MODE_SEQUENCE: DemoModeKey[] = ['traverse', 'survival', 'defense'];
+const NEXT_STAGE_MAP: Partial<Record<PlayableModeKey, { next: PlayableModeKey; label: string }>> = {
+  stage_1: { next: 'stage_2', label: 'Lanjut ke STAGE 2 (Gerbang Logika)' },
+  stage_2: { next: 'stage_3', label: 'Lanjut ke STAGE 3 (Sistem Biner)' },
+  survival: { next: 'defense', label: 'Lanjut ke HOLD THE FORT' },
+  defense: { next: 'stage_1', label: 'Kembali ke STAGE 1' },
+};
 
 export function GameCanvas({
   initialMode,
@@ -52,7 +56,7 @@ export function GameCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<GameEngine | null>(null);
 
-  const [modeKey, setModeKey] = useState<DemoModeKey>(initialMode);
+  const [modeKey, setModeKey] = useState<PlayableModeKey>(initialMode);
   const [hud, setHud] = useState<HudSnapshot | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [areaBanner, setAreaBanner] = useState<{ name: string; subtitle: string } | null>(null);
@@ -74,7 +78,7 @@ export function GameCanvas({
   const puzzleStatsRef = useRef({ attempted: 0, correct: 0 });
   const toastTimerRef = useRef<number | null>(null);
   const areaTimerRef = useRef<number | null>(null);
-  const modeKeyRef = useRef<DemoModeKey>(initialMode);
+  const modeKeyRef = useRef<PlayableModeKey>(initialMode);
   modeKeyRef.current = modeKey;
 
   const showToast = useCallback((msg: string) => {
@@ -107,7 +111,10 @@ export function GameCanvas({
     engine.onPuzzleTrigger = (req) => setPuzzleReq(req);
     engine.onSegmentComplete = (_segId, kills, shards) => {
       engine.pauseForModal();
-      onRecordModeClear(modeKeyRef.current, kills, shards);
+      const k = modeKeyRef.current;
+      const recordedMode: GameMode =
+        k === 'survival' ? 'survival' : k === 'defense' ? 'defense' : 'traverse';
+      onRecordModeClear(recordedMode, kills, shards);
       setClearSummary({
         kills,
         shards,
@@ -120,7 +127,7 @@ export function GameCanvas({
       setGameOverReason(reason);
     };
 
-    engine.loadDemoMode(initialMode);
+    engine.loadPlayableMode(initialMode);
     engine.start();
 
     return () => {
@@ -133,7 +140,7 @@ export function GameCanvas({
     engineRef.current?.input.setVirtualAction(action, down);
   }, []);
 
-  const switchMode = (nextMode: DemoModeKey) => {
+  const switchMode = (nextMode: PlayableModeKey, keepGear = false) => {
     const engine = engineRef.current;
     if (!engine) return;
     setModeKey(nextMode);
@@ -143,7 +150,7 @@ export function GameCanvas({
     setPuzzleReq(null);
     setShowInventory(false);
     puzzleStatsRef.current = { attempted: 0, correct: 0 };
-    engine.loadDemoMode(nextMode);
+    engine.loadPlayableMode(nextMode, keepGear);
     engine.resumeFromModal();
   };
 
@@ -191,8 +198,8 @@ export function GameCanvas({
     showToast('Sandbox aktif: Semua 7 Senjata (Epic) & 4 Armor dibuka!');
   };
 
-  const nextModeIndex = (MODE_SEQUENCE.indexOf(modeKey) + 1) % MODE_SEQUENCE.length;
-  const nextMode = MODE_SEQUENCE[nextModeIndex];
+  const nextStageInfo = NEXT_STAGE_MAP[modeKey];
+  const isFinalVictory = modeKey === 'stage_3';
 
   return (
     <div className="relative flex h-screen w-screen items-center justify-center bg-black overflow-hidden touch-none">
@@ -233,6 +240,7 @@ export function GameCanvas({
         {puzzleReq && (
           <PuzzleModal
             request={puzzleReq}
+            stageNumber={hud?.stageNumber ?? 1}
             answeredPuzzleIds={student?.answeredPuzzleIds ?? []}
             onComplete={handlePuzzleComplete}
             onClose={() => {
@@ -263,7 +271,7 @@ export function GameCanvas({
               engineRef.current?.resume();
             }}
             onRestart={() => switchMode(modeKey)}
-            onSwitchMode={switchMode}
+            onSwitchMode={(m) => switchMode(m)}
             onExitToTitle={onExitToTitle}
           />
         )}
@@ -271,11 +279,20 @@ export function GameCanvas({
         {clearSummary && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-abyss-950/90 p-4 backdrop-blur-sm">
             <div className="w-full max-w-md border-2 border-loot-gold bg-abyss-900 p-6 text-center shadow-2xl">
-              <Award className="mx-auto mb-2 h-10 w-10 text-loot-gold" />
-              <h2 className="font-pixel text-base text-loot-gold">SECTOR CLEARED!</h2>
+              {isFinalVictory ? (
+                <Trophy className="mx-auto mb-2 h-11 w-11 text-loot-gold" />
+              ) : (
+                <Award className="mx-auto mb-2 h-10 w-10 text-loot-gold" />
+              )}
+              <h2 className="font-pixel text-base text-loot-gold">
+                {isFinalVictory ? 'MISSION ACCOMPLISHED!' : 'STAGE CLEARED!'}
+              </h2>
               <p className="mt-1 text-xs text-slate-400">
-                Siswa: <strong className="text-white">{student?.username ?? 'Guest'}</strong> ·
-                Mode <span className="uppercase text-mana-cyan">{modeKey}</span> selesai.
+                Siswa: <strong className="text-white">{student?.username ?? 'Guest'}</strong> ·{' '}
+                <span className="uppercase text-mana-cyan">
+                  {hud?.themeTopic ?? modeKey}
+                </span>{' '}
+                selesai!
               </p>
 
               <div className="my-4 grid grid-cols-2 gap-2 border border-ancient-stone bg-abyss-950 p-3 text-xs">
@@ -288,7 +305,7 @@ export function GameCanvas({
                   <div className="font-bold text-loot-gold">{clearSummary.shards}</div>
                 </div>
                 <div className="col-span-2 border-t border-ancient-stone pt-2">
-                  <div className="text-slate-400">Akurasi Puzzle Sesi Ini</div>
+                  <div className="text-slate-400">Akurasi Puzzle Stage Ini</div>
                   <div className="font-bold text-loot-green">
                     {clearSummary.puzzleAttempted > 0
                       ? `${clearSummary.puzzleCorrect}/${clearSummary.puzzleAttempted} (${Math.round(
@@ -300,13 +317,15 @@ export function GameCanvas({
               </div>
 
               <div className="flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={() => switchMode(nextMode)}
-                  className="inline-flex items-center justify-center gap-2 border border-mana-cyan bg-mana-cyan/15 py-2.5 text-xs font-bold text-mana-cyan hover:bg-mana-cyan/25"
-                >
-                  Lanjut ke Mode: {nextMode.toUpperCase()} <ArrowRight className="h-4 w-4" />
-                </button>
+                {nextStageInfo && (
+                  <button
+                    type="button"
+                    onClick={() => switchMode(nextStageInfo.next, true)}
+                    className="inline-flex items-center justify-center gap-2 border border-mana-cyan bg-mana-cyan/15 py-2.5 text-xs font-bold text-mana-cyan hover:bg-mana-cyan/25"
+                  >
+                    {nextStageInfo.label} <ArrowRight className="h-4 w-4" />
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={onOpenReport}
@@ -319,7 +338,7 @@ export function GameCanvas({
                   onClick={() => switchMode(modeKey)}
                   className="inline-flex items-center justify-center gap-2 border border-ancient-stone py-2 text-xs text-slate-300 hover:border-slate-400"
                 >
-                  <RotateCcw className="h-3.5 w-3.5" /> Main Lagi Mode Ini
+                  <RotateCcw className="h-3.5 w-3.5" /> Main Lagi Stage Ini
                 </button>
                 <button
                   type="button"

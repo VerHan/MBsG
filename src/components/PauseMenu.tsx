@@ -3,14 +3,23 @@
 // ============================================================
 
 import { Play, RotateCcw, Home, Shield, Timer, Compass } from 'lucide-react';
+import type { PlayableModeKey } from '../engine/LevelBuilder';
 
 interface PauseMenuProps {
-  currentMode: 'traverse' | 'survival' | 'defense';
+  currentMode: PlayableModeKey;
   onResume: () => void;
   onRestart: () => void;
-  onSwitchMode: (mode: 'traverse' | 'survival' | 'defense') => void;
+  onSwitchMode: (mode: PlayableModeKey) => void;
   onExitToTitle: () => void;
 }
+
+const MODE_OPTIONS: Array<{ key: PlayableModeKey; label: string; icon: 'stage' | 'survival' | 'defense' }> = [
+  { key: 'stage_1', label: 'Stage 1 (Komputasi)', icon: 'stage' },
+  { key: 'stage_2', label: 'Stage 2 (Logika)', icon: 'stage' },
+  { key: 'stage_3', label: 'Stage 3 (Biner)', icon: 'stage' },
+  { key: 'survival', label: 'Survival 45s', icon: 'survival' },
+  { key: 'defense', label: 'Hold The Fort', icon: 'defense' },
+];
 
 export function PauseMenu({
   currentMode,
@@ -21,10 +30,10 @@ export function PauseMenu({
 }: PauseMenuProps) {
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-abyss-950/85 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg border-2 border-ancient-stone bg-abyss-900 p-6 shadow-2xl">
+      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto border-2 border-ancient-stone bg-abyss-900 p-6 shadow-2xl">
         <h2 className="mb-4 font-pixel text-base text-mana-cyan">GAME PAUSED</h2>
 
-        <div className="mb-5 grid gap-2 sm:grid-cols-2">
+        <div className="mb-4 grid gap-2 sm:grid-cols-2">
           <button
             type="button"
             onClick={onResume}
@@ -37,57 +46,40 @@ export function PauseMenu({
             onClick={onRestart}
             className="flex items-center justify-center gap-2 border border-slayer-orange bg-slayer-orange/15 px-3 py-2 text-xs font-bold text-slayer-orange hover:bg-slayer-orange/25"
           >
-            <RotateCcw className="h-4 w-4" /> Ulangi Mode Ini
+            <RotateCcw className="h-4 w-4" /> Ulangi Stage/Mode Ini
           </button>
         </div>
 
-        {/* Switch Demo Mode */}
-        <div className="mb-5 border border-ancient-stone bg-abyss-950/80 p-3">
+        <div className="mb-4 border border-ancient-stone bg-abyss-950/80 p-3">
           <div className="mb-2 text-[10px] font-bold tracking-wider text-slate-400">
-            PINDAH DEMO MODE LANGSUNG
+            PILIH STAGE / MODE LANGSUNG
           </div>
-          <div className="grid grid-cols-3 gap-2 text-[11px]">
-            <button
-              type="button"
-              onClick={() => onSwitchMode('traverse')}
-              className={`flex flex-col items-center gap-1 border p-2 ${
-                currentMode === 'traverse'
-                  ? 'border-loot-gold bg-loot-gold/15 text-loot-gold'
-                  : 'border-ancient-stone text-slate-300 hover:border-mana-cyan'
-              }`}
-            >
-              <Compass className="h-4 w-4" />
-              Traverse
-            </button>
-            <button
-              type="button"
-              onClick={() => onSwitchMode('survival')}
-              className={`flex flex-col items-center gap-1 border p-2 ${
-                currentMode === 'survival'
-                  ? 'border-loot-gold bg-loot-gold/15 text-loot-gold'
-                  : 'border-ancient-stone text-slate-300 hover:border-mana-cyan'
-              }`}
-            >
-              <Timer className="h-4 w-4" />
-              Survival 45s
-            </button>
-            <button
-              type="button"
-              onClick={() => onSwitchMode('defense')}
-              className={`flex flex-col items-center gap-1 border p-2 ${
-                currentMode === 'defense'
-                  ? 'border-loot-gold bg-loot-gold/15 text-loot-gold'
-                  : 'border-ancient-stone text-slate-300 hover:border-mana-cyan'
-              }`}
-            >
-              <Shield className="h-4 w-4" />
-              Hold The Fort
-            </button>
+          <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-3">
+            {MODE_OPTIONS.map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => onSwitchMode(opt.key)}
+                className={`flex items-center justify-center gap-1.5 border p-2 ${
+                  currentMode === opt.key
+                    ? 'border-loot-gold bg-loot-gold/15 text-loot-gold font-bold'
+                    : 'border-ancient-stone text-slate-300 hover:border-mana-cyan'
+                }`}
+              >
+                {opt.icon === 'survival' ? (
+                  <Timer className="h-3.5 w-3.5 shrink-0" />
+                ) : opt.icon === 'defense' ? (
+                  <Shield className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <Compass className="h-3.5 w-3.5 shrink-0" />
+                )}
+                <span className="truncate">{opt.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Controls Reference */}
-        <div className="mb-5 border border-ancient-stone bg-abyss-950/80 p-3 text-[11px]">
+        <div className="mb-4 border border-ancient-stone bg-abyss-950/80 p-3 text-[11px]">
           <div className="mb-2 font-bold text-slate-300">KONTROL SLAYER CORPS</div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-400">
             <div><span className="text-white">A / D</span> atau ← / → : Gerak</div>
@@ -97,7 +89,7 @@ export function PauseMenu({
             <div><span className="text-white">J / Klik Kiri</span> : Melee (+Energy)</div>
             <div><span className="text-white">S + J</span> (di udara) : Pogo-Slash</div>
             <div><span className="text-white">K / Klik Kanan</span> : Ranged Weapon</div>
-            <div><span className="text-white">E</span> : Chest / Terminal / Gate</div>
+            <div><span className="text-white">E</span> : Chest / Shrine / Pillar</div>
             <div><span className="text-white">Q</span> : Nano-Vial Heal</div>
             <div><span className="text-white">F / I</span> : Adrenaline / Inventory</div>
           </div>
