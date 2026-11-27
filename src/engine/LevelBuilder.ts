@@ -104,6 +104,14 @@ export interface TorchProp {
   color: string;
 }
 
+export interface StageDecorProp {
+  type: 'arch' | 'bell' | 'banner' | 'lantern' | 'silk_web' | 'obelisk';
+  x: number;
+  y: number;
+  scale?: number;
+  color?: string;
+}
+
 export interface AreaZone {
   id: string;
   name: string;
@@ -141,6 +149,7 @@ export interface BuiltLevel {
   spikes: SpikeHazard[];
   bouncePads: BouncePad[];
   torches: TorchProp[];
+  decorProps: StageDecorProp[];
   areas: AreaZone[];
   enemies: EnemyInstance[];
   interactables: InteractableInstance[];
@@ -256,7 +265,7 @@ function _buildStage1(): BuiltLevel {
   const meta = STAGE_METADATA[1];
 
   const areas: AreaZone[] = [
-    { id: 's1_a1', name: 'AREA 1: ASHFALL OUTSKIRTS', subtitle: `Tema: ${meta.themeTopic} · Mulai dengan Dagger!`, startX: 0, endX: 1150 },
+    { id: 's1_a1', name: 'AREA 1: MOSSBELL OUTSKIRTS', subtitle: `Tema: ${meta.themeTopic} · Mulai dengan Crimson Silk-Needle!`, startX: 0, endX: 1150 },
     { id: 's1_a2', name: 'AREA 2: THE TWIN CHASM', subtitle: 'Moving Ferry, Crumbling Bridge & Wall-Jump Tower', startX: 1150, endX: 2350 },
     { id: 's1_a3', name: 'AREA 3: PERIMETER COURTYARD', subtitle: 'Crystal Traps, Armory Chest & Puzzle Shrine', startX: 2350, endX: 3650 },
     { id: 's1_a4', name: 'AREA 4: COLOSSUS SANCTUM', subtitle: 'Boss Arena — Mana Colossus (Drop Sword & Armor!)', startX: 3650, endX: worldW },
@@ -337,6 +346,27 @@ function _buildStage1(): BuiltLevel {
     { x: 4660, y: 376, color: '#FACC15' },
   ];
 
+  const decorProps: StageDecorProp[] = [
+    { type: 'arch', x: 150, y: 400, scale: 1.1, color: '#334155' },
+    { type: 'bell', x: 150, y: 330, scale: 1.0, color: '#D97706' },
+    { type: 'banner', x: 320, y: 400, color: '#E11D48' },
+    { type: 'lantern', x: 460, y: 368, color: '#4ADE80' },
+    { type: 'silk_web', x: 640, y: 400, scale: 1.0, color: '#E2E8F0' },
+    { type: 'arch', x: 930, y: 400, scale: 1.15, color: '#334155' },
+    { type: 'bell', x: 930, y: 326, scale: 1.1, color: '#B45309' },
+    { type: 'obelisk', x: 1210, y: 400, color: '#10B981' },
+    { type: 'lantern', x: 1680, y: 368, color: '#4ADE80' },
+    { type: 'banner', x: 1900, y: 170, color: '#10B981' },
+    { type: 'bell', x: 2050, y: 332, scale: 1.15, color: '#D97706' },
+    { type: 'arch', x: 2490, y: 410, scale: 1.1, color: '#334155' },
+    { type: 'silk_web', x: 2740, y: 410, scale: 1.1, color: '#CBD5E1' },
+    { type: 'obelisk', x: 3150, y: 410, color: '#4ADE80' },
+    { type: 'banner', x: 3420, y: 410, color: '#E11D48' },
+    { type: 'arch', x: 3860, y: 400, scale: 1.3, color: '#475569' },
+    { type: 'bell', x: 4120, y: 300, scale: 1.35, color: '#F59E0B' },
+    { type: 'banner', x: 4460, y: 400, color: '#E11D48' },
+  ];
+
   const enemies: EnemyInstance[] = [
     createEnemy('mana_husk', 290, 380, { patrolLeft: 180, patrolRight: 460, targetingPylon: false }),
     createEnemy('mana_husk', 690, 476, { patrolLeft: 490, patrolRight: 880, targetingPylon: false }),
@@ -362,13 +392,13 @@ function _buildStage1(): BuiltLevel {
       questionsRequired: 1,
       loot: { energyRestore: 70, ammoPacks: 1, shards: 35 },
     }),
-    // Rare Armory Chest (2 soal beruntun -> Volt Rift Spear + Ammo)
+    // Rare Armory Chest (2 soal beruntun -> Volt Rift Spear + Mossbell Warden Armor)
     createChest(1940, 146, {
       tier: 'rare',
       questionsRequired: 2,
-      loot: { weaponId: 'spear', weaponTier: 'rare', ammoPacks: 1, shards: 55 },
+      loot: { weaponId: 'spear', weaponTier: 'rare', armorId: 'moss_warden', ammoPacks: 1, shards: 55 },
     }),
-    // Epic Relic Chest (3 soal beruntun -> Dual Pistol + Vanguard Armor!)
+    // Epic Relic Chest (3 soal beruntun -> Dual Pistol + Ironbell Bastion Armor!)
     createChest(3460, 221, {
       tier: 'epic',
       questionsRequired: 3,
@@ -396,6 +426,7 @@ function _buildStage1(): BuiltLevel {
     spikes,
     bouncePads,
     torches,
+    decorProps,
     areas,
     enemies,
     interactables,
@@ -495,6 +526,22 @@ function _buildStage2(): BuiltLevel {
     { x: 4670, y: 376, color: '#FACC15' },
   ];
 
+  const decorProps: StageDecorProp[] = [
+    { type: 'arch', x: 180, y: 410, scale: 1.15, color: '#44403C' },
+    { type: 'lantern', x: 310, y: 376, color: '#F97316' },
+    { type: 'bell', x: 520, y: 334, scale: 1.1, color: '#EA580C' },
+    { type: 'banner', x: 900, y: 410, color: '#DC2626' },
+    { type: 'obelisk', x: 1200, y: 410, color: '#F59E0B' },
+    { type: 'arch', x: 1690, y: 360, scale: 1.1, color: '#44403C' },
+    { type: 'bell', x: 1900, y: 338, scale: 1.15, color: '#D97706' },
+    { type: 'lantern', x: 2220, y: 376, color: '#FB923C' },
+    { type: 'banner', x: 2470, y: 410, color: '#EA580C' },
+    { type: 'obelisk', x: 2920, y: 410, color: '#F97316' },
+    { type: 'arch', x: 3380, y: 410, scale: 1.2, color: '#44403C' },
+    { type: 'bell', x: 4120, y: 296, scale: 1.4, color: '#F97316' },
+    { type: 'banner', x: 4460, y: 400, color: '#DC2626' },
+  ];
+
   const enemies: EnemyInstance[] = [
     createEnemy('corrupted_sentinel', 350, 388, { patrolLeft: 200, patrolRight: 570, targetingPylon: false }),
     createEnemy('rift_drone', 720, 150, { targetingPylon: false }),
@@ -519,11 +566,11 @@ function _buildStage2(): BuiltLevel {
       questionsRequired: 2,
       loot: { weaponId: 'katana', weaponTier: 'rare', weaponLevel: 2, ammoPacks: 1, shards: 60 },
     }),
-    // Rare Armory Chest (2 soal -> Shotgun + Ammo)
+    // Rare Armory Chest (2 soal -> Shotgun + Gilded Silk-Dancer Armor)
     createChest(2140, 221, {
       tier: 'rare',
       questionsRequired: 2,
-      loot: { weaponId: 'shotgun', weaponTier: 'rare', ammoPacks: 1, shards: 65 },
+      loot: { weaponId: 'shotgun', weaponTier: 'rare', armorId: 'needle_dancer', ammoPacks: 1, shards: 65 },
     }),
     // Epic Relic Chest (3 soal -> Grav-Crusher Hammer + Rift-Stalker Armor)
     createChest(3380, 271, {
@@ -554,6 +601,7 @@ function _buildStage2(): BuiltLevel {
     spikes,
     bouncePads,
     torches,
+    decorProps,
     areas,
     enemies,
     interactables,
@@ -650,6 +698,22 @@ function _buildStage3(): BuiltLevel {
     { x: 4670, y: 376, color: '#FACC15' },
   ];
 
+  const decorProps: StageDecorProp[] = [
+    { type: 'arch', x: 180, y: 400, scale: 1.2, color: '#3B1E4E' },
+    { type: 'silk_web', x: 310, y: 400, scale: 1.2, color: '#F43F5E' },
+    { type: 'obelisk', x: 960, y: 400, color: '#C084FC' },
+    { type: 'banner', x: 1230, y: 400, color: '#F43F5E' },
+    { type: 'bell', x: 1820, y: 325, scale: 1.25, color: '#FACC15' },
+    { type: 'silk_web', x: 2180, y: 400, scale: 1.15, color: '#E2E8F0' },
+    { type: 'arch', x: 2520, y: 400, scale: 1.25, color: '#3B1E4E' },
+    { type: 'obelisk', x: 2910, y: 400, color: '#38BDF8' },
+    { type: 'lantern', x: 3280, y: 368, color: '#FACC15' },
+    { type: 'banner', x: 3480, y: 400, color: '#A855F7' },
+    { type: 'arch', x: 3860, y: 400, scale: 1.35, color: '#4C1D95' },
+    { type: 'bell', x: 4140, y: 292, scale: 1.45, color: '#FACC15' },
+    { type: 'silk_web', x: 4540, y: 400, scale: 1.25, color: '#F43F5E' },
+  ];
+
   const enemies: EnemyInstance[] = [
     createEnemy('mana_stalker', 260, 382, { patrolLeft: 160, patrolRight: 350, targetingPylon: false }),
     createEnemy('rift_drone', 520, 230, { targetingPylon: false }),
@@ -709,6 +773,7 @@ function _buildStage3(): BuiltLevel {
     spikes,
     bouncePads,
     torches,
+    decorProps,
     areas,
     enemies,
     interactables,
@@ -759,6 +824,13 @@ function _buildSurvivalArena(): BuiltLevel {
       { x: 150, y: 292, color: '#EF4444' },
       { x: 550, y: 131, color: '#00F0FF' },
       { x: 950, y: 292, color: '#EF4444' },
+    ],
+    decorProps: [
+      { type: 'arch', x: 200, y: 316, scale: 1.1, color: '#44403C' },
+      { type: 'bell', x: 550, y: 240, scale: 1.25, color: '#F97316' },
+      { type: 'arch', x: 900, y: 316, scale: 1.1, color: '#44403C' },
+      { type: 'banner', x: 350, y: 316, color: '#DC2626' },
+      { type: 'banner', x: 750, y: 316, color: '#DC2626' },
     ],
     areas: [
       {
@@ -821,6 +893,14 @@ function _buildDefenseArena(): BuiltLevel {
     torches: [
       { x: 300, y: 292, color: '#00F0FF' },
       { x: 860, y: 292, color: '#00F0FF' },
+    ],
+    decorProps: [
+      { type: 'obelisk', x: 140, y: 316, color: '#C084FC' },
+      { type: 'arch', x: 580, y: 316, scale: 1.3, color: '#3B1E4E' },
+      { type: 'bell', x: 580, y: 230, scale: 1.2, color: '#FACC15' },
+      { type: 'obelisk', x: 1020, y: 316, color: '#C084FC' },
+      { type: 'silk_web', x: 420, y: 316, scale: 1.0, color: '#F43F5E' },
+      { type: 'silk_web', x: 740, y: 316, scale: 1.0, color: '#F43F5E' },
     ],
     areas: [
       {

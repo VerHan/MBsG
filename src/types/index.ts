@@ -17,8 +17,10 @@ export type GameScreen =
 // ── WEAPONS ─────────────────────────────────────────────────
 export type WeaponSlot = 'melee' | 'ranged';
 export type WeaponTier = 'common' | 'rare' | 'epic';
+export type DamageType = 'slash' | 'pierce' | 'impact';
 
 export type MeleeWeaponId =
+  | 'needle'
   | 'dagger'
   | 'sword'
   | 'spear'
@@ -33,12 +35,17 @@ export interface WeaponDef {
   id: WeaponId;
   name: string;
   slot: WeaponSlot;
+  damageType: DamageType;
   baseDamage: number;
   /** Hits per attack (e.g. dual_sword = 2, shotgun = 5) */
   hitsPerAttack: number;
   attackSpeed: 'very_fast' | 'fast' | 'normal' | 'slow';
   /** Frames between attacks at 60fps */
   attackCooldown: number;
+  /** Base critical hit chance (0-1) */
+  critChance: number;
+  /** Reach rating 1-5 for arsenal comparison */
+  reachRating: 1 | 2 | 3 | 4 | 5;
   /** Energy cost per shot (ranged only, 0 for melee) */
   energyCost: number;
   specialTrait: string;
@@ -48,7 +55,7 @@ export interface WeaponDef {
 export interface WeaponInstance {
   defId: WeaponId;
   tier: WeaponTier;
-  /** Upgrade level: 1 = Base, 2 = Glowing (+22% DMG), 3 = Overcharged (+48% DMG) */
+  /** Upgrade level: 1 = Base, 2 = Glowing (+24% DMG), 3 = Overcharged (+50% DMG) */
   level?: number;
 }
 
@@ -59,16 +66,29 @@ export const TIER_DAMAGE_MULT: Record<WeaponTier, number> = {
 };
 
 // ── ARMOR ───────────────────────────────────────────────────
-export type ArmorId = 'recruit_mk1' | 'vanguard' | 'rift_stalker' | 'aether_praetor';
+export type ArmorId =
+  | 'recruit_mk1'
+  | 'moss_warden'
+  | 'vanguard'
+  | 'rift_stalker'
+  | 'needle_dancer'
+  | 'aether_praetor';
 
 export interface ArmorDef {
   id: ArmorId;
   name: string;
+  archetype: string;
   hpBonus: number;
   defPercent: number;
   speedMult: number;
   dashCdMult: number;
   energyCostMult: number;
+  /** Optional combat bonuses */
+  critBonus?: number;
+  attackSpeedMult?: number;
+  parryBonus?: number;
+  pogoBonus?: number;
+  regenInterval?: number;
   passiveDesc: string;
   /** Pixel color palette overrides for the MC sprite */
   palette: {
@@ -76,6 +96,7 @@ export interface ArmorDef {
     secondary: string;
     visor: string;
     glow: string;
+    cloak?: string;
   };
 }
 

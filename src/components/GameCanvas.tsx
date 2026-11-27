@@ -129,6 +129,13 @@ export function GameCanvas({
   }, []);
 
   useEffect(() => {
+    if (gameOverReason) document.body.dataset.state = 'gameover';
+    else if (clearSummary) document.body.dataset.state = 'clear';
+    else if (isPaused || showInventory || puzzleReq) document.body.dataset.state = 'paused';
+    else document.body.dataset.state = 'playing';
+  }, [gameOverReason, clearSummary, isPaused, showInventory, puzzleReq]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -281,7 +288,7 @@ export function GameCanvas({
     engine.player.state.shards = Math.max(engine.player.state.shards, 200);
     engine.saveGear();
     setPlayerSnapshot({ ...engine.player.state });
-    showToast('Sandbox aktif: 11 Senjata (Lv.2 Glow) + 200 Shards & 4 Armor dibuka!');
+    showToast('Sandbox aktif: 12 Senjata (Lv.2 Glow) + 200 Shards & 6 Armor dibuka!');
   };
 
   const nextStageInfo = NEXT_STAGE_MAP[modeKey];

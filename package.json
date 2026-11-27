@@ -5,7 +5,7 @@
   "description": "RIFTBOUND: SLAYER CORPS — 2D Pixel Art Hack-and-Slash Action Platformer PWA with Modular Educational Integration",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0 --port 3000",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

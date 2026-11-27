@@ -21,6 +21,7 @@ import {
 } from '../data/weapons';
 import { ARMORS } from '../data/armors';
 import { TIER_DAMAGE_MULT } from '../types';
+import { applyLoadoutEquipRule } from '../engine/combatRules';
 
 const GRAVITY = 880;
 const APEX_GRAVITY = 420;
@@ -84,11 +85,12 @@ export class Player {
 
   private _meleeTimer = 0;
   private _rangedTimer = 0;
+  private _dashThrustCooldown = 0;
   /** Current step inside 3-hit melee combo: 0 (none), 1, 2, 3 */
   public meleeCombo = 0;
   private _comboResetTimer = 0;
   private _iFrames = 0;
-  private _lastAttackType: 'melee' | 'ranged' | 'pogo' | 'dash_attack' | 'parry' | null = null;
+  private _lastAttackType: 'melee' | 'ranged' | 'pogo' | 'dash_attack' | 'parry' | 'slam' | null = null;
 
   private _isBlocking = false;
   private _parryWindowTimer = 0;
@@ -97,6 +99,7 @@ export class Player {
 
   private _adrenalineBurstTimer = 0;
   private _adrenalineActive = false;
+  private _regenTimer = 0;
 
   public state: PlayerState;
 
@@ -111,13 +114,14 @@ export class Player {
       shards: 0,
       nanoVials: 3,
       maxNanoVials: 5,
-      meleeWeapon: { defId: 'dagger', tier: 'common', level: 1 },
-      rangedWeapon: { defId: 'pistol', tier: 'common', level: 1 },
+      meleeWeapon: { defId: 'needle', tier: 'common', level: 1 },
+      rangedWeapon: null,
       armorId: 'recruit_mk1',
       styleRank: 'D',
       stylePoints: 0,
       adrenaline: 0,
       weaponInventory: [
+        { defId: 'needle', tier: 'common', level: 1 },
         { defId: 'dagger', tier: 'common', level: 1 },
         { defId: 'pistol', tier: 'common', level: 1 },
       ],
@@ -176,50 +180,35 @@ export class Player {
   }
 
   /**
-   * Equip Melee or Ranged following loadout constraints:
-   * - Equipping 2H Melee (spear/katana/axe/hammer/dual_sword) disables Ranged gun.
-   * - Equipping a Ranged gun pairs only with 1H Dagger or Sword (auto-switches melee if needed).
+   * Equip Melee or Gun following strict loadout rule:
+   * - Pure Melee weapons CANNOT equip a Gun (Right-Click / [K] = Dash Thrust).
+   * - Equipping any Gun automatically locks Melee to the short Combat Dagger.
    */
   equipWeapon(weapon: WeaponInstance): { notice?: string } {
-    const def = WEAPONS[weapon.defId];
-    if (!def) return {};
-    const normalized: WeaponInstance = {
-      defId: weapon.defId,
-      tier: weapon.tier,
-      level: getWeaponLevel(weapon),
-    };
-
-    if (def.slot === 'melee') {
-      this.state.meleeWeapon = normalized;
-      if (!isLightRangedCompatibleMelee(normalized.defId)) {
-        const hadGun = this.state.rangedWeapon !== null;
-        this.state.rangedWeapon = null;
-        return hadGun
-          ? {
-              notice: `${def.name} memakai 2 tangan — Gun dilepas (Off-hand: Energy Shield / Blade).`,
-            }
-          : {};
-      }
-      return {};
-    }
-
-    // Ranged gun equipped
-    this.state.rangedWeapon = normalized;
-    if (!isLightRangedCompatibleMelee(this.state.meleeWeapon.defId)) {
-      const fallback =
-        this.state.weaponInventory.find((w) => w.defId === 'sword') ??
-        this.state.weaponInventory.find((w) => w.defId === 'dagger') ??
-        { defId: 'dagger' as const, tier: 'common' as const, level: 1 };
-      this.state.meleeWeapon = { ...fallback, level: getWeaponLevel(fallback) };
-      return {
-        notice: `Pakai ${def.name}: Melee otomatis diganti ke ${WEAPONS[this.state.meleeWeapon.defId].name} (1-Tangan).`,
-      };
-    }
-    return {};
+    const res = applyLoadoutEquipRule(
+      {
+        meleeWeapon: this.state.meleeWeapon,
+        rangedWeapon: this.state.rangedWeapon,
+        weaponInventory: this.state.weaponInventory,
+      },
+      weapon
+    );
+    this.state.meleeWeapon = res.meleeWeapon;
+    this.state.rangedWeapon = res.rangedWeapon;
+    this.state.weaponInventory = res.weaponInventory;
+    return res.notice ? { notice: res.notice } : {};
   }
 
   unequipRanged() {
     this.state.rangedWeapon = null;
+  }
+
+  get isMeleeOnlyMode(): boolean {
+    return this.state.rangedWeapon === null;
+  }
+
+  get dashThrustCooldown(): number {
+    return this._dashThrustCooldown;
   }
 
   addOrUpgradeWeapon(incoming: WeaponInstance): {
@@ -323,12 +312,25 @@ export class Player {
     this._updateTimers(dt);
     this._updateStyleDecay(dt);
     this._updateAdrenaline(dt);
+    const armor = ARMORS[this.state.armorId];
+    if (armor?.regenInterval && this.onGround && this.state.hp > 0 && this.state.hp < this.state.maxHp) {
+      this._regenTimer += dt;
+      if (this._regenTimer >= armor.regenInterval) {
+        this._regenTimer = 0;
+        this.state.hp = Math.min(this.state.maxHp, this.state.hp + 1);
+      }
+    } else {
+      this._regenTimer = 0;
+    }
     // No passive infinite Energy trickle — Energy comes from Melee hits, Parries, Orbs & Ammo Packs!
   }
 
   private _updateTimers(dt: number) {
     if (this._meleeTimer > 0) this._meleeTimer -= dt;
     if (this._rangedTimer > 0) this._rangedTimer -= dt;
+    if (this._dashThrustCooldown > 0) {
+      this._dashThrustCooldown = Math.max(0, this._dashThrustCooldown - dt);
+    }
     if (this._dashCooldown > 0) this._dashCooldown -= dt;
     if (this._iFrames > 0) this._iFrames -= dt;
     if (this._coyoteTimer > 0) this._coyoteTimer -= dt;
@@ -347,8 +349,10 @@ export class Player {
   // ── Guard / Block & Parry ───────────────────────────────
   setBlocking(active: boolean) {
     if (active && !this._isBlocking && !this._isDashing) {
+      const armor = ARMORS[this.state.armorId];
+      const parryBonus = armor?.parryBonus ?? 0;
       this._isBlocking = true;
-      this._parryWindowTimer = this.hasFullEnergyShield ? 0.25 : 0.2;
+      this._parryWindowTimer = (this.hasFullEnergyShield ? 0.25 : 0.2) + parryBonus;
     } else if (!active && this._isBlocking) {
       this._isBlocking = false;
       this._parryWindowTimer = 0;
@@ -506,18 +510,60 @@ export class Player {
     this._counterWindowTimer = 0;
 
     this.meleeCombo = (this.meleeCombo % 3) + 1;
+    const armor = ARMORS[this.state.armorId];
+    const armorSpeedMult = armor?.attackSpeedMult ?? 1;
     const adrMult = this._adrenalineActive ? 0.72 : 1;
     const lv = getWeaponLevel(this.state.meleeWeapon);
     const lvSpeedMult = lv === 3 ? 0.86 : lv === 2 ? 0.93 : 1;
     // Deliberate, readable combo pacing so Hit 1 / 2 / 3 are visually distinct
-    const comboCooldownMult = this.meleeCombo === 3 ? 1.38 : this.meleeCombo === 2 ? 1.18 : 0.98;
-    this._meleeTimer = (def.attackCooldown / 60) * adrMult * lvSpeedMult * comboCooldownMult;
-    this._comboResetTimer = 0.95;
+    const comboCooldownMult = this.meleeCombo === 3 ? 1.35 : this.meleeCombo === 2 ? 1.15 : 0.96;
+    this._meleeTimer =
+      (def.attackCooldown / 60) * adrMult * lvSpeedMult * armorSpeedMult * comboCooldownMult;
+    this._comboResetTimer = 1.0;
 
     const variety = this._lastAttackType !== 'melee' ? STYLE_VARIETY_MULT : 1;
     const comboBonus = this.meleeCombo === 3 ? 10 : this.meleeCombo === 2 ? 7 : STYLE_COMBO_BONUS;
     this.addStylePoints(comboBonus * variety + (this.lastAttackWasCounter ? 10 : 0));
     this._lastAttackType = 'melee';
+    return true;
+  }
+
+  /** Right-Click / [K] special lunge in Melee-Only mode */
+  triggerDashThrust(): boolean {
+    if (this._dashThrustCooldown > 0) return false;
+    this.setBlocking(false);
+    const armor = ARMORS[this.state.armorId];
+    const adrMult = this._adrenalineActive ? 0.72 : 1;
+    this._dashThrustCooldown = 0.52 * (armor?.dashCdMult ?? 1) * adrMult;
+    this._meleeTimer = Math.max(this._meleeTimer, 0.22);
+    this._iFrames = Math.max(this._iFrames, 0.16);
+    const variety = this._lastAttackType !== 'dash_attack' ? STYLE_VARIETY_MULT : 1;
+    this.addStylePoints(14 * variety);
+    this._lastAttackType = 'dash_attack';
+    return true;
+  }
+
+  /** Jump-Hit Tap (Spin Vertical) — allowed anytime airborne off melee cooldown */
+  triggerAirSpin(): boolean {
+    if (this._meleeTimer > 0) return false;
+    const def = WEAPONS[this.state.meleeWeapon.defId];
+    if (!def) return false;
+    this.setBlocking(false);
+    const adrMult = this._adrenalineActive ? 0.72 : 1;
+    this._meleeTimer = Math.max(0.24, (def.attackCooldown / 60) * 1.1) * adrMult;
+    const variety = this._lastAttackType !== 'pogo' ? STYLE_VARIETY_MULT : 1;
+    this.addStylePoints(10 * variety);
+    this._lastAttackType = 'pogo';
+    return true;
+  }
+
+  /** Jump-Hit Hold (Aerial Slam) */
+  triggerAerialSlam(): boolean {
+    this.setBlocking(false);
+    this._meleeTimer = 0.28;
+    const variety = this._lastAttackType !== 'slam' ? STYLE_VARIETY_MULT : 1;
+    this.addStylePoints(16 * variety);
+    this._lastAttackType = 'slam';
     return true;
   }
 
@@ -540,7 +586,8 @@ export class Player {
     const adrMult = this._adrenalineActive ? 0.7 : 1;
     const lv = getWeaponLevel(this.state.rangedWeapon);
     const lvSpeedMult = lv === 3 ? 0.85 : lv === 2 ? 0.92 : 1;
-    this._rangedTimer = (def.attackCooldown / 60) * adrMult * lvSpeedMult;
+    const armorSpeedMult = armor?.attackSpeedMult ?? 1;
+    this._rangedTimer = (def.attackCooldown / 60) * adrMult * lvSpeedMult * armorSpeedMult;
 
     const variety = this._lastAttackType !== 'ranged' ? STYLE_VARIETY_MULT : 1;
     this.addStylePoints(STYLE_COMBO_BONUS * variety);
@@ -558,7 +605,9 @@ export class Player {
 
   pogoSlash(): boolean {
     if (this.onGround) return false;
-    this.vy = POGO_BOUNCE_VEL;
+    // Silksong Crimson Silk-Needle grants an extra crisp pogo bounce!
+    const isNeedle = this.state.meleeWeapon.defId === 'needle';
+    this.vy = isNeedle ? POGO_BOUNCE_VEL * 1.1 : POGO_BOUNCE_VEL;
     this._canDoubleJump = true;
     const variety = this._lastAttackType !== 'pogo' ? STYLE_VARIETY_MULT : 1;
     this.addStylePoints(STYLE_COMBO_BONUS * 2 * variety);
@@ -567,10 +616,11 @@ export class Player {
   }
 
   onMeleeHit() {
-    // Nerfed Energy gain on hit (4-6 EN instead of 10-16 EN) so ammo stays tactical
+    // Tactical Energy gain on hit (4-7 EN) + Recruit Cloak +15% bonus
     const def = WEAPONS[this.state.meleeWeapon.defId];
     const restoreMap: Record<string, number> = {
-      dagger: 5,
+      needle: 5,
+      dagger: 6,
       sword: 5,
       spear: 4,
       katana: 5,
@@ -578,9 +628,29 @@ export class Player {
       hammer: 6,
       dual_sword: 4,
     };
-    const base = restoreMap[def?.id ?? 'dagger'] ?? 5;
+    const base = restoreMap[def?.id ?? 'needle'] ?? 5;
     const lvBonus = getWeaponLevel(this.state.meleeWeapon) >= 3 ? 1 : 0;
-    this.state.energy = Math.min(this.state.maxEnergy, this.state.energy + base + lvBonus);
+    const armorBonus = this.state.armorId === 'recruit_mk1' ? 1 : 0;
+    this.state.energy = Math.min(this.state.maxEnergy, this.state.energy + base + lvBonus + armorBonus);
+  }
+
+  getMeleeCritChance(): number {
+    const def = WEAPONS[this.state.meleeWeapon.defId];
+    const armor = ARMORS[this.state.armorId];
+    return Math.min(0.65, (def?.critChance ?? 0.1) + (armor?.critBonus ?? 0));
+  }
+
+  getRangedCritChance(): number {
+    if (!this.state.rangedWeapon) return 0.08;
+    const def = WEAPONS[this.state.rangedWeapon.defId];
+    const armor = ARMORS[this.state.armorId];
+    return Math.min(0.6, (def?.critChance ?? 0.1) + (armor?.critBonus ?? 0));
+  }
+
+  getPogoDamageMultiplier(): number {
+    const armor = ARMORS[this.state.armorId];
+    const needleBonus = this.state.meleeWeapon.defId === 'needle' ? 0.15 : 0;
+    return 1 + (armor?.pogoBonus ?? 0) + needleBonus;
   }
 
   getMeleeDamage(): number {
@@ -632,7 +702,7 @@ export class Player {
   onKill() {
     this.addStylePoints(STYLE_KILL_BONUS);
     if (this.state.armorId === 'aether_praetor') {
-      this.state.hp = Math.min(this.state.maxHp, this.state.hp + 1);
+      this.state.hp = Math.min(this.state.maxHp, this.state.hp + 2);
     }
     if (!this._adrenalineActive) {
       this.state.adrenaline = Math.min(100, this.state.adrenaline + 8);

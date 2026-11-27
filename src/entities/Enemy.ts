@@ -230,34 +230,122 @@ function _aiSuicide(e: EnemyInstance, _dt: number, targetX: number, targetY: num
   e.vy = (dy / dist) * e.speed;
 }
 
+export interface DamageResult {
+  killed: boolean;
+  finalDamage: number;
+  shieldAbsorbed: boolean;
+  shieldBroken: boolean;
+  piercedShield: boolean;
+}
+
 /**
- * Apply damage to enemy. Returns true if enemy died.
+ * Apply damage to enemy with DamageType scaling:
+ * - 'impact': 1.35x shield damage & longer stagger
+ * - 'pierce': 40% damage bleeds directly through shields
+ * - 'slash': standard shield interaction, faster combos
+ */
+export function damageEnemyDetailed(
+  enemy: EnemyInstance,
+  amount: number,
+  isArmorBreak = false,
+  damageType: 'slash' | 'pierce' | 'impact' = 'slash'
+): DamageResult {
+  if (!enemy.alive) {
+    return {
+      killed: false,
+      finalDamage: 0,
+      shieldAbsorbed: false,
+      shieldBroken: false,
+      piercedShield: false,
+    };
+  }
+
+  let shieldBroken = false;
+  let piercedShield = false;
+
+  // Shield check (Corrupted Sentinel)
+  if (enemy.shieldHp > 0 && !isArmorBreak) {
+    const shieldDmg =
+      damageType === 'impact' ? Math.round(amount * 1.35) : amount;
+    enemy.shieldHp = Math.max(0, enemy.shieldHp - shieldDmg);
+    if (enemy.shieldHp <= 0) {
+      shieldBroken = true;
+      enemy.stunTimer = Math.max(enemy.stunTimer, 0.35);
+    }
+
+    if (damageType === 'pierce') {
+      const bleed = Math.max(1, Math.round(amount * 0.4));
+      enemy.hp -= bleed;
+      enemy.hitFlashTimer = 0.09;
+      piercedShield = true;
+      if (enemy.hp <= 0) {
+        enemy.alive = false;
+        return {
+          killed: true,
+          finalDamage: bleed,
+          shieldAbsorbed: false,
+          shieldBroken,
+          piercedShield: true,
+        };
+      }
+      return {
+        killed: false,
+        finalDamage: bleed,
+        shieldAbsorbed: !shieldBroken,
+        shieldBroken,
+        piercedShield: true,
+      };
+    }
+
+    enemy.hitFlashTimer = 0.06;
+    return {
+      killed: false,
+      finalDamage: shieldDmg,
+      shieldAbsorbed: !shieldBroken,
+      shieldBroken,
+      piercedShield: false,
+    };
+  }
+
+  // Armor break bypasses shield
+  if (isArmorBreak && enemy.shieldHp > 0) {
+    enemy.shieldHp = 0;
+    shieldBroken = true;
+  }
+
+  const finalDamage = Math.max(1, Math.round(amount));
+  enemy.hp -= finalDamage;
+  const stagger = damageType === 'impact' ? 0.2 : 0.12;
+  enemy.stunTimer = Math.max(enemy.stunTimer, enemy.behavior === 'heavy' ? stagger * 0.55 : stagger);
+  enemy.hitFlashTimer = 0.1;
+
+  if (enemy.hp <= 0) {
+    enemy.alive = false;
+    return {
+      killed: true,
+      finalDamage,
+      shieldAbsorbed: false,
+      shieldBroken,
+      piercedShield,
+    };
+  }
+  return {
+    killed: false,
+    finalDamage,
+    shieldAbsorbed: false,
+    shieldBroken,
+    piercedShield,
+  };
+}
+
+/**
+ * Backwards-compatible wrapper returning boolean killed.
  */
 export function damageEnemy(
   enemy: EnemyInstance,
   amount: number,
-  isArmorBreak = false
+  isArmorBreak = false,
+  damageType: 'slash' | 'pierce' | 'impact' = 'slash'
 ): boolean {
-  if (!enemy.alive) return false;
-
-  // Shield check (Corrupted Sentinel)
-  if (enemy.shieldHp > 0 && !isArmorBreak) {
-    enemy.shieldHp = Math.max(0, enemy.shieldHp - amount);
-    return false; // shield absorbed it
-  }
-
-  // Armor break bypasses shield
-  if (isArmorBreak) {
-    enemy.shieldHp = 0;
-  }
-
-  enemy.hp -= amount;
-  enemy.stunTimer = 0.12; // brief stagger
-  enemy.hitFlashTimer = 0.09; // crisp white flash
-
-  if (enemy.hp <= 0) {
-    enemy.alive = false;
-    return true;
-  }
-  return false;
+  return damageEnemyDetailed(enemy, amount, isArmorBreak, damageType).killed;
 }

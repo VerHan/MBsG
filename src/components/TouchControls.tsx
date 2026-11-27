@@ -34,7 +34,7 @@ function TouchBtn({ action, onAction, className = '', children }: TouchBtnProps)
         onAction(action, false);
       }}
       onPointerCancel={() => onAction(action, false)}
-      className={`touch-none select-none flex items-center justify-center border-2 backdrop-blur-sm active:scale-95 transition-transform ${className}`}
+      className={`touch-none select-none flex items-center justify-center border-2 active:scale-95 transition-transform ${className}`}
     >
       {children}
     </button>
@@ -130,11 +130,20 @@ export function TouchControls({
         <TouchBtn
           action="ranged"
           onAction={onAction}
-          className={`h-11 w-11 rounded-full border-mana-cyan/80 bg-mana-cyan/20 text-mana-cyan ${
-            canRanged ? 'active:bg-mana-cyan/40' : 'opacity-30'
+          className={`h-11 w-11 flex-col rounded-full ${
+            canRanged
+              ? 'border-mana-cyan/80 bg-mana-cyan/20 text-mana-cyan active:bg-mana-cyan/40'
+              : 'border-rose-400/80 bg-rose-500/20 text-rose-300 active:bg-rose-500/40'
           }`}
         >
-          <Crosshair className="h-4 w-4" />
+          {canRanged ? (
+            <Crosshair className="h-4 w-4" />
+          ) : (
+            <>
+              <Zap className="h-3.5 w-3.5" />
+              <span className="text-[7px] font-bold leading-none mt-0.5">THRUST</span>
+            </>
+          )}
         </TouchBtn>
         <TouchBtn
           action="dash"

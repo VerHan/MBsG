@@ -1,13 +1,14 @@
 // ============================================================
-// RIFTBOUND: SLAYER CORPS — Weapon Definitions (11 Weapons)
+// RIFTBOUND: SLAYER CORPS — Weapon Definitions (12 Weapons)
 // Loadout Rule:
-//   - Ranged Guns pair ONLY with 1-Hand Light Melee (Dagger / Sword).
-//   - Heavy/Special Melee (Spear, Katana, Axe, Hammer, Dual Sword)
-//     use both hands (Weapon + Off-hand Energy Shield / Sheath / Twin Blade)
-//     so Ranged is disabled while wielding them.
+//   - Pilih salah satu: Mode MELEE MURNI (tanpa Gun, Klik Kanan = Dash Thrust)
+//     ATAU Mode GUN + SHORT DAGGER (Gun di Klik Kanan, Dagger pendek di Klik Kiri).
+//   - Setiap senjata melee memakai kombo kondisional dinamis:
+//     3x Klik Kiri (Slash -> Spin Horizontal -> Thrust Kecil),
+//     Jump Hit Tap (Spin Vertical), Jump Hit Hold (Slam), Klik Kanan (Dash Thrust).
 // ============================================================
 
-import type { MeleeWeaponId, WeaponDef, WeaponId, WeaponInstance } from '../types';
+import type { DamageType, MeleeWeaponId, WeaponDef, WeaponId, WeaponInstance } from '../types';
 
 export const WEAPON_LEVEL_DMG_MULT: Record<number, number> = {
   1: 1.0,
@@ -20,10 +21,28 @@ export const WEAPON_UPGRADE_COST: Record<number, number> = {
   2: 80, // Lv.2 -> Lv.3 (Overcharged Aura)
 };
 
-export const LIGHT_MELEE_IDS: readonly MeleeWeaponId[] = ['dagger', 'sword'];
+export const DAMAGE_TYPE_LABEL: Record<DamageType, { label: string; detail: string; color: string }> = {
+  pierce: {
+    label: 'PIERCE',
+    detail: 'Menembus 40% perisai musuh',
+    color: '#00F0FF',
+  },
+  slash: {
+    label: 'SLASH',
+    detail: 'Crit +1.5x & kombo lincah',
+    color: '#F43F5E',
+  },
+  impact: {
+    label: 'IMPACT',
+    detail: '1.35x DMG ke perisai & stagger berat',
+    color: '#F59E0B',
+  },
+};
+
+export const LIGHT_MELEE_IDS: readonly MeleeWeaponId[] = ['dagger'];
 
 export function isLightRangedCompatibleMelee(id: WeaponId): boolean {
-  return id === 'dagger' || id === 'sword';
+  return id === 'dagger';
 }
 
 export function getWeaponLevel(inst: WeaponInstance): number {
@@ -31,161 +50,211 @@ export function getWeaponLevel(inst: WeaponInstance): number {
 }
 
 export const WEAPONS: Record<string, WeaponDef> = {
-  // ── 1-HANDED LIGHT MELEE (Bisa Dipakai Bersama Ranged Gun) ─
+  // ── MELEE WEAPONS (Mode Melee Murni — Klik Kanan: Dash Thrust) ─
+  needle: {
+    id: 'needle',
+    name: 'Crimson Silk-Needle',
+    slot: 'melee',
+    damageType: 'pierce',
+    baseDamage: 16,
+    hitsPerAttack: 1,
+    attackSpeed: 'very_fast',
+    attackCooldown: 17,
+    critChance: 0.16,
+    reachRating: 4,
+    energyCost: 0,
+    specialTrait: 'Melee Murni · Kombo Sutra cepat (Slash -> Spin H -> Thrust), Spin Vertikal udara & Dash Thrust jauh.',
+    description:
+      'Jarum tempur panjang berbenang sutra merah. Lincah di udara, Dash Thrust menembus perisai, tanpa senjata api.',
+  },
+
   dagger: {
     id: 'dagger',
-    name: 'Slayer Combat Dagger',
+    name: 'Short Combat Dagger',
     slot: 'melee',
+    damageType: 'slash',
     baseDamage: 11,
     hitsPerAttack: 1,
     attackSpeed: 'very_fast',
-    attackCooldown: 16,
+    attackCooldown: 14,
+    critChance: 0.22,
+    reachRating: 1,
     energyCost: 0,
-    specialTrait: '1-Tangan (Bisa +Gun) · Slash -> Cross Hit -> 3x Thrust Dash! +5 EN/hit.',
+    specialTrait: 'Khusus Pendamping Gun · Bilah sangat pendek (jarak super dekat) +6 EN/hit.',
     description:
-      'Belati ringan jarak dekat. Jangkauan pendek, namun sangat lincah dengan dash 3 tusukan beruntun.',
+      'Belati tempur mini khusus pengguna Gun untuk pertahanan jarak rapat dan mengisi Energy.',
   },
 
   sword: {
     id: 'sword',
     name: 'Rift Cleaver',
     slot: 'melee',
-    baseDamage: 18,
+    damageType: 'slash',
+    baseDamage: 20,
     hitsPerAttack: 1,
     attackSpeed: 'fast',
-    attackCooldown: 22,
+    attackCooldown: 21,
+    critChance: 0.14,
+    reachRating: 3,
     energyCost: 0,
-    specialTrait: '1-Tangan (Bisa +Gun) · Slash -> Muter Samping 2-Hit -> Spin Vertikal!',
+    specialTrait: 'Melee Murni · Seimbang di semua jurus: Slash lebar, Spin Horizontal 360°, Jump Slam solid.',
     description:
-      'Pedang duelist seimbang yang tetap bisa dipasangkan dengan senjata Ranged.',
+      'Pedang duelist seimbang dengan tebasan bersih dan Dash Thrust stabil.',
   },
 
-  // ── 2-HANDED / SPECIAL MELEE (Tanpa Gun — Pakai Energy Shield / Sarung / Twin) ─
   spear: {
     id: 'spear',
     name: 'Volt Rift Spear',
     slot: 'melee',
-    baseDamage: 19,
+    damageType: 'pierce',
+    baseDamage: 21,
     hitsPerAttack: 1,
     attackSpeed: 'normal',
-    attackCooldown: 25,
+    attackCooldown: 24,
+    critChance: 0.12,
+    reachRating: 5,
     energyCost: 0,
-    specialTrait: '2-Tangan (+Shield, No Gun) · Long Thrust -> Vault Spin -> 3x Drill Thrust.',
+    specialTrait: 'Melee Murni · Jangkauan Thrust & Dash Thrust terjauh, menembus 40% perisai.',
     description:
-      'Tombak jangkauan paling jauh dengan off-hand Energy Shield penuh, tanpa pistol.',
+      'Tombak jangkauan paling jauh untuk menusuk barisan musuh dengan aman.',
   },
 
   katana: {
     id: 'katana',
     name: 'Crimson Rift Katana',
     slot: 'melee',
-    baseDamage: 23,
+    damageType: 'slash',
+    baseDamage: 24,
     hitsPerAttack: 1,
     attackSpeed: 'fast',
-    attackCooldown: 24,
+    attackCooldown: 22,
+    critChance: 0.24,
+    reachRating: 4,
     energyCost: 0,
-    specialTrait: '2-Tangan Iaido (Sarung + Shield, No Gun) · Iai Draw -> Cross -> Flash Dash.',
+    specialTrait: 'Melee Murni · Tarikan Iaido kilat, peluang Critical tertinggi di Dash Thrust & Slash.',
     description:
-      'Katana dengan teknik Iaijutsu: bilah tersimpan di sarung lalu menebas kilat menembus musuh.',
+      'Katana Iaijutsu berkecepatan tinggi dengan tebasan kritikal tajam.',
   },
 
   axe: {
     id: 'axe',
     name: 'Ruinbreaker Axe',
     slot: 'melee',
-    baseDamage: 29,
+    damageType: 'impact',
+    baseDamage: 30,
     hitsPerAttack: 1,
     attackSpeed: 'slow',
-    attackCooldown: 34,
+    attackCooldown: 31,
+    critChance: 0.1,
+    reachRating: 4,
     energyCost: 0,
-    specialTrait: '2-Tangan (+Shield, No Gun) · Heavy Cleave -> Spin Tornado -> 3x Vertical Slam.',
+    specialTrait: 'Melee Murni · Penghancur perisai di Spin Horizontal & Aerial Slam berdaya hancur besar.',
     description:
-      'Kapak berat pemecah perisai dengan putaran tornado lambat-berat dan 3 hantaman vertikal.',
+      'Kapak tempur berat dengan stagger tinggi dan hantaman tanah yang meremukkan perisai.',
   },
 
   hammer: {
     id: 'hammer',
     name: 'Grav-Crusher Hammer',
     slot: 'melee',
-    baseDamage: 34,
+    damageType: 'impact',
+    baseDamage: 35,
     hitsPerAttack: 1,
     attackSpeed: 'slow',
-    attackCooldown: 36,
+    attackCooldown: 34,
+    critChance: 0.08,
+    reachRating: 3,
     energyCost: 0,
-    specialTrait: '2-Tangan (+Shield, No Gun) · Bash -> Vertical Spin -> Seismic Shock Slam!',
+    specialTrait: 'Melee Murni · Aerial Slam memicu gelombang kejut seismik kiri-kanan!',
     description:
-      'Palu gravitasi raksasa: lambat namun menghasilkan gelombang kejut tanah kiri-kanan.',
+      'Palu gravitasi raksasa: menghancurkan perisai seketika dengan Slam seismik.',
   },
 
   dual_sword: {
     id: 'dual_sword',
     name: 'Phantom Fangs',
     slot: 'melee',
+    damageType: 'slash',
     baseDamage: 15,
     hitsPerAttack: 2,
     attackSpeed: 'fast',
-    attackCooldown: 20,
+    attackCooldown: 19,
+    critChance: 0.22,
+    reachRating: 3,
     energyCost: 0,
-    specialTrait: '2-Tangan Kembar (No Gun) · Cross Hit -> Spin Cross 2x -> Whirlwind 3x.',
+    specialTrait: 'Melee Murni · Pedang kembar 2x hit cepat pada Slash, Spin Vertikal & Dash Thrust.',
     description:
-      'Sepasang pedang cyber asimetris — damage beruntun tinggi namun tanpa perisai penuh & tanpa gun.',
+      'Sepasang pedang cyber asimetris untuk kombo agresif berkecepatan tinggi.',
   },
 
-  // ── RANGED WEAPONS (Hanya Aktif Bersama Dagger / Sword) ──
+  // ── RANGED WEAPONS (Mode Gun — Melee otomatis Short Combat Dagger) ──
   pistol: {
     id: 'pistol',
     name: 'Void Repeater',
     slot: 'ranged',
+    damageType: 'pierce',
     baseDamage: 18,
     hitsPerAttack: 1,
     attackSpeed: 'fast',
     attackCooldown: 16,
+    critChance: 0.1,
+    reachRating: 4,
     energyCost: 8,
-    specialTrait: 'Pasangan Dagger/Sword. Tembakan presisi jarak jauh (8 EN).',
-    description: 'Pistol energi ringan untuk menembak musuh terbang.',
+    specialTrait: 'Mode Gun (+Short Dagger). Tembakan presisi jarak jauh (8 EN).',
+    description: 'Pistol energi ringan untuk menjatuhkan musuh terbang atau memicu kristal.',
   },
 
   dual_pistol: {
     id: 'dual_pistol',
     name: 'Storm Heralds',
     slot: 'ranged',
+    damageType: 'pierce',
     baseDamage: 12,
     hitsPerAttack: 2,
     attackSpeed: 'very_fast',
     attackCooldown: 13,
+    critChance: 0.14,
+    reachRating: 4,
     energyCost: 8,
-    specialTrait: 'Pasangan Dagger/Sword. Air-hover sebentar saat menembak (8 EN).',
-    description: 'Sepasang pistol energi dengan tembakan ganda beruntun.',
+    specialTrait: 'Mode Gun (+Short Dagger). Air-hover sebentar saat menembak ganda (8 EN).',
+    description: 'Sepasang pistol energi dengan tembakan ganda beruntun & kontrol udara.',
   },
 
   shotgun: {
     id: 'shotgun',
     name: 'Mana Breacher',
     slot: 'ranged',
-    baseDamage: 13,
+    damageType: 'impact',
+    baseDamage: 14,
     hitsPerAttack: 5,
     attackSpeed: 'slow',
-    attackCooldown: 40,
+    attackCooldown: 38,
+    critChance: 0.08,
+    reachRating: 2,
     energyCost: 24,
-    specialTrait: 'Pasangan Dagger/Sword. 5 proyektil sebar jarak dekat (24 EN).',
-    description: 'Senjata jarak dekat penghancur kerumunan musuh.',
+    specialTrait: 'Mode Gun (+Short Dagger). 5 proyektil sebar penghancur perisai (24 EN).',
+    description: 'Senjata jarak dekat penghancur kerumunan musuh dan perisai Sentinel.',
   },
 
   rifle: {
     id: 'rifle',
     name: 'Aether Lance',
     slot: 'ranged',
-    baseDamage: 38,
+    damageType: 'pierce',
+    baseDamage: 40,
     hitsPerAttack: 1,
     attackSpeed: 'normal',
     attackCooldown: 30,
+    critChance: 0.18,
+    reachRating: 5,
     energyCost: 18,
-    specialTrait: 'Pasangan Dagger/Sword. Sinar piercing menembus barisan musuh (18 EN).',
-    description: 'Senapan energi Ancient Tech berdaya tembus tinggi.',
+    specialTrait: 'Mode Gun (+Short Dagger). Sinar piercing menembus seluruh barisan musuh (18 EN).',
+    description: 'Senapan energi Ancient Tech berdaya tembus tinggi untuk garis lurus.',
   },
 };
 
 export const MELEE_WEAPON_IDS = [
+  'needle',
   'dagger',
   'sword',
   'spear',
@@ -196,5 +265,5 @@ export const MELEE_WEAPON_IDS = [
 ] as const;
 export const RANGED_WEAPON_IDS = ['pistol', 'dual_pistol', 'shotgun', 'rifle'] as const;
 
-export const DEFAULT_MELEE = 'dagger';
+export const DEFAULT_MELEE = 'needle';
 export const DEFAULT_RANGED = 'pistol';

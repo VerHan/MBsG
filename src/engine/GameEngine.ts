@@ -38,6 +38,11 @@ import {
   type Platform,
   type PlayableModeKey,
 } from './LevelBuilder';
+import {
+  getWeaponMoveProfile,
+  resolveCombatAction,
+  type CombatMoveType,
+} from './combatRules';
 import { Player } from '../entities/Player';
 import {
   breakShieldViaRunicPillar,
@@ -46,7 +51,13 @@ import {
   updateBoss,
   type BossInstance,
 } from '../entities/Boss';
-import { createEnemy, damageEnemy, updateEnemyAI, type EnemyInstance } from '../entities/Enemy';
+import {
+  createEnemy,
+  damageEnemy,
+  damageEnemyDetailed,
+  updateEnemyAI,
+  type EnemyInstance,
+} from '../entities/Enemy';
 import {
   createDualPistolBurst,
   createEnemyOrb,
@@ -84,11 +95,32 @@ interface SlashVisual {
   isPogo: boolean;
   facingRight: boolean;
   comboStep: number;
-  shape: 'crescent' | 'thrust' | 'tornado' | 'vertical_chop' | 'vertical_spin' | 'x_cut';
+  shape:
+    | 'crescent'
+    | 'spin_horizontal'
+    | 'thrust'
+    | 'dash_thrust'
+    | 'slam_impact'
+    | 'tornado'
+    | 'vertical_chop'
+    | 'vertical_spin'
+    | 'x_cut'
+    | 'silk_lash'
+    | 'needle_thread';
   bidirectional?: boolean;
   color: string;
   life: number;
   maxLife: number;
+}
+
+interface HitEffect {
+  x: number;
+  y: number;
+  color: string;
+  radius: number;
+  life: number;
+  maxLife: number;
+  kind: 'slash' | 'pierce' | 'impact' | 'parry';
 }
 
 interface PendingComboStrike {
@@ -118,6 +150,7 @@ interface FloatingText {
   color: string;
   life: number;
   maxLife: number;
+  isCrit?: boolean;
 }
 
 interface ManaTurret {
@@ -195,6 +228,9 @@ export interface HudSnapshot {
   hasFullShield: boolean;
   meleeCombo: number;
   counterReady: boolean;
+  activeMove: CombatMoveType | null;
+  isMeleeMode: boolean;
+  dashThrustReady: boolean;
   boss?: {
     name: string;
     title: string;
@@ -204,6 +240,12 @@ export interface HudSnapshot {
     shieldHp: number;
     shieldMaxHp: number;
     stunned: boolean;
+  };
+  minimap?: {
+    worldWidth: number;
+    playerX: number;
+    areas: Array<{ name: string; startX: number; endX: number }>;
+    markers: Array<{ x: number; kind: 'chest' | 'chest_open' | 'shrine' | 'boss' | 'exit' }>;
   };
 }
 
@@ -256,6 +298,10 @@ export class GameEngine {
   private _meleeAnimTimer = 0;
   private _meleeAnimDuration = 0.16;
   private _meleeAnimIsPogo = false;
+  private _activeCombatMove: CombatMoveType | null = null;
+  private _airSlamState: 'none' | 'windup' | 'dive' | 'impact' = 'none';
+  private _airSlamTimer = 0;
+  private _airSlamHitIds = new Set<string>();
   private _meleePressHeld = false;
   private _meleeHoldTime = 0;
   private _meleeBufferTimer = 0;
@@ -274,8 +320,11 @@ export class GameEngine {
   private _scarfPoints: Array<{ x: number; y: number }> = [];
   private _currentAreaId = '';
   private _slashes: SlashVisual[] = [];
+  private _hitEffects: HitEffect[] = [];
   private _pendingComboStrikes: PendingComboStrike[] = [];
   private _floatingTexts: FloatingText[] = [];
+  private _screenFlashTimer = 0;
+  private _screenFlashColor = 'rgba(239, 68, 68, 0.25)';
   private _turrets: ManaTurret[] = [];
   private _groundDrops: GroundDrop[] = [];
   private _dropIdCounter = 0;
@@ -368,9 +417,11 @@ export class GameEngine {
     this.interactables = built.interactables;
     this.projectiles = [];
     this._slashes = [];
+    this._hitEffects = [];
     this._pendingComboStrikes = [];
     this._ghostTrails = [];
     this._floatingTexts = [];
+    this._screenFlashTimer = 0;
     this._turrets = [];
     this._groundDrops = [];
     this._laserCooldown = 0;
@@ -379,6 +430,10 @@ export class GameEngine {
     this._meleePressHeld = false;
     this._meleeHoldTime = 0;
     this._meleeBufferTimer = 0;
+    this._activeCombatMove = null;
+    this._airSlamState = 'none';
+    this._airSlamTimer = 0;
+    this._airSlamHitIds.clear();
     this._spinAttackTimer = 0;
     this._iaidoWindupTimer = 0;
     this._doubleJumpFlipTimer = 0;
@@ -484,7 +539,12 @@ export class GameEngine {
     if (this._pylonDamageCooldown > 0) this._pylonDamageCooldown -= dt;
     if (this._bossContactCooldown > 0) this._bossContactCooldown -= dt;
     if (this._bossFlashTimer > 0) this._bossFlashTimer -= dt;
-    if (this._meleeAnimTimer > 0) this._meleeAnimTimer = Math.max(0, this._meleeAnimTimer - dt);
+    if (this._meleeAnimTimer > 0) {
+      this._meleeAnimTimer = Math.max(0, this._meleeAnimTimer - dt);
+      if (this._meleeAnimTimer <= 0 && this._airSlamState === 'none') {
+        this._activeCombatMove = null;
+      }
+    }
     if (this._rangedAnimTimer > 0) this._rangedAnimTimer = Math.max(0, this._rangedAnimTimer - dt);
     if (this._meleeBufferTimer > 0) this._meleeBufferTimer = Math.max(0, this._meleeBufferTimer - dt);
     if (this._spinAttackTimer > 0) this._spinAttackTimer = Math.max(0, this._spinAttackTimer - dt);
@@ -495,6 +555,32 @@ export class GameEngine {
       this._doubleJumpFlipTimer = Math.max(0, this._doubleJumpFlipTimer - dt);
     }
     if (this._parryFlashTimer > 0) this._parryFlashTimer = Math.max(0, this._parryFlashTimer - dt);
+    if (this._screenFlashTimer > 0) this._screenFlashTimer = Math.max(0, this._screenFlashTimer - dt);
+
+    // Update Aerial Slam state machine (windup hover -> meteor dive -> ground impact settle)
+    if (this._airSlamState === 'windup') {
+      this._airSlamTimer -= dt;
+      this.player.vy = -12;
+      this.player.vx *= 0.82;
+      if (this._airSlamTimer <= 0) {
+        this._airSlamState = 'dive';
+        this._activeCombatMove = 'air_slam_dive';
+        this._meleeAnimDuration = 0.2;
+        this._meleeAnimTimer = 0.2;
+        this.player.vy = 475;
+        this.sound.play('dash');
+      }
+    } else if (this._airSlamState === 'dive') {
+      this.player.vy = Math.max(this.player.vy, 455);
+      this._meleeAnimTimer = 0.12;
+      this._checkAirSlamDiveHits();
+    } else if (this._airSlamState === 'impact') {
+      this._airSlamTimer -= dt;
+      if (this._airSlamTimer <= 0) {
+        this._airSlamState = 'none';
+        this._activeCombatMove = null;
+      }
+    }
 
     // Continuous smooth stride cycle + turn-around skid dust
     if (this.player.onGround && Math.abs(this.player.vx) > 12) {
@@ -523,19 +609,28 @@ export class GameEngine {
     }
     this._prevFacingRight = this.player.facingRight;
 
-    // Emit dynamic ghost afterimages on spin attack, dash, or double-jump flip
-    if (
-      (this.player.isDashing || this._spinAttackTimer > 0 || this._doubleJumpFlipTimer > 0) &&
-      Math.random() < 0.72
-    ) {
+    // Emit dynamic ghost afterimages on dash thrust, vertical spin, air slam dive, dash, or double-jump flip
+    const isHighSpeedMove =
+      this.player.isDashing ||
+      this._activeCombatMove === 'dash_thrust' ||
+      this._activeCombatMove === 'spin_vertical' ||
+      this._airSlamState === 'dive' ||
+      this._doubleJumpFlipTimer > 0;
+    if (isHighSpeedMove && Math.random() < 0.78) {
       const armor = ARMORS[this.player.state.armorId] ?? ARMORS.recruit_mk1;
+      const trailProfile = getWeaponMoveProfile(this.player.state.meleeWeapon.defId);
       this._ghostTrails.push({
         x: this.player.x + this.player.width / 2,
         y: this.player.y + this.player.height,
         facingRight: this.player.facingRight,
         life: 0.14,
         maxLife: 0.14,
-        color: this._spinAttackTimer > 0 ? '#FACC15' : armor.palette.glow,
+        color:
+          this._activeCombatMove === 'dash_thrust' || this._airSlamState === 'dive'
+            ? trailProfile.trailColor
+            : this._activeCombatMove === 'spin_vertical'
+              ? '#FACC15'
+              : armor.palette.glow,
       });
     }
 
@@ -698,25 +793,51 @@ export class GameEngine {
       }
     }
 
-    // Unified Melee Tap = 3-Hit Combo / Hold (>= 0.19s) = Block Guard & Parry
-    if (this.input.isJustPressed('melee')) {
+    // Unified Stickman Combat Controls:
+    // - Ground Tap LMB/[J] 3x: Hit 1 Standard Slash -> Hit 2 Spin Horizontal -> Hit 3 Mini Thrust
+    // - Ground Hold LMB/[J] (>=0.20s): Block Guard & Parry
+    // - Airborne Tap LMB/[J]: Spin Vertical (ONLY on Jump Hit!)
+    // - Airborne Hold LMB/[J] (>=0.16s): Aerial Slam (Windup -> Dive -> Impact!)
+    // - RMB/[K]: Dash Thrust (Melee Mode) OR Fire Gun (Gun + Short Dagger Mode)
+    const inAirSlam = this._airSlamState === 'windup' || this._airSlamState === 'dive';
+
+    if (this.input.isJustPressed('melee') && !inAirSlam) {
       this._meleePressHeld = true;
       this._meleeHoldTime = 0;
-      if (this._meleeAnimTimer > 0) {
+      if (p.onGround && this._meleeAnimTimer > 0) {
         this._meleeBufferTimer = 0.22;
       }
     }
 
-    if (this._meleePressHeld && this.input.isHeld('melee')) {
+    if (this._meleePressHeld && this.input.isHeld('melee') && !inAirSlam) {
       this._meleeHoldTime += dt;
-      if (this._meleeHoldTime < 0.19 && !p.isBlocking) {
-        this._scaleX = 1.07;
-        this._scaleY = 0.92;
-      }
-      if (this._meleeHoldTime >= 0.19 && !p.isBlocking && !p.isDashing) {
-        this._meleeBufferTimer = 0;
-        p.setBlocking(true);
-        this.sound.play('menu_select');
+      if (!p.onGround) {
+        // Jump-Hit Hold -> Aerial Slam!
+        if (this._meleeHoldTime >= 0.16 && this._airSlamState === 'none') {
+          const action = resolveCombatAction({
+            onGround: false,
+            isHold: true,
+            isRightClick: false,
+            hasGun: !p.isMeleeOnlyMode,
+            comboStep: 1,
+          });
+          this._meleePressHeld = false;
+          this._meleeHoldTime = 0;
+          this._meleeBufferTimer = 0;
+          if (action === 'air_slam_windup' && p.triggerAerialSlam()) {
+            this._startAirSlam();
+          }
+        }
+      } else {
+        if (this._meleeHoldTime < 0.2 && !p.isBlocking) {
+          this._scaleX = 1.07;
+          this._scaleY = 0.92;
+        }
+        if (this._meleeHoldTime >= 0.2 && !p.isBlocking && !p.isDashing) {
+          this._meleeBufferTimer = 0;
+          p.setBlocking(true);
+          this.sound.play('menu_select');
+        }
       }
     }
 
@@ -727,29 +848,80 @@ export class GameEngine {
       this._meleeHoldTime = 0;
       p.setBlocking(false);
 
-      if (!wasBlocking && holdElapsed < 0.19) {
-        if (p.meleeAttack()) {
-          this._meleeBufferTimer = 0;
-          this._performMelee();
+      if (!wasBlocking && !inAirSlam && holdElapsed < 0.2) {
+        if (!p.onGround) {
+          // Jump-Hit Tap -> Spin Vertical!
+          const action = resolveCombatAction({
+            onGround: false,
+            isHold: false,
+            isRightClick: false,
+            hasGun: !p.isMeleeOnlyMode,
+            comboStep: 1,
+          });
+          if (action === 'spin_vertical' && p.triggerAirSpin()) {
+            this._meleeBufferTimer = 0;
+            this._performCombatMove('spin_vertical');
+          }
         } else {
-          this._meleeBufferTimer = 0.22;
+          if (p.meleeAttack()) {
+            this._meleeBufferTimer = 0;
+            const action = resolveCombatAction({
+              onGround: true,
+              isHold: false,
+              isRightClick: false,
+              hasGun: !p.isMeleeOnlyMode,
+              comboStep: p.meleeCombo,
+            });
+            if (action !== 'ranged_fire') {
+              this._performCombatMove(action);
+            }
+          } else {
+            this._meleeBufferTimer = 0.22;
+          }
         }
       }
-    } else if (!this._meleePressHeld && !p.isBlocking && this._meleeBufferTimer > 0) {
+    } else if (
+      !this._meleePressHeld &&
+      !p.isBlocking &&
+      !inAirSlam &&
+      p.onGround &&
+      this._meleeBufferTimer > 0
+    ) {
       if (p.meleeAttack()) {
         this._meleeBufferTimer = 0;
-        this._performMelee();
+        const action = resolveCombatAction({
+          onGround: true,
+          isHold: false,
+          isRightClick: false,
+          hasGun: !p.isMeleeOnlyMode,
+          comboStep: p.meleeCombo,
+        });
+        if (action !== 'ranged_fire') {
+          this._performCombatMove(action);
+        }
       }
     }
 
-    if (this.input.isJustPressed('ranged')) {
-      const rRes = p.rangedAttack();
-      if (rRes.fired) {
-        this._performRanged();
-      } else if (rRes.reason === 'no_gun') {
-        this.onToast?.('Mode 2-Tangan aktif (Non-Ranged)! Pilih Dagger / Sword di [I] untuk pakai Gun.');
-      } else if (rRes.reason === 'no_energy') {
-        this.onToast?.('Energy habis! Tekan [R] pakai Ammo Pack atau serang Melee!');
+    if (this.input.isJustPressed('ranged') && !inAirSlam) {
+      const rightAction = resolveCombatAction({
+        onGround: p.onGround,
+        isHold: false,
+        isRightClick: true,
+        hasGun: p.state.rangedWeapon !== null,
+        comboStep: 1,
+      });
+
+      if (rightAction === 'ranged_fire') {
+        const rRes = p.rangedAttack();
+        if (rRes.fired) {
+          this._performRanged();
+        } else if (rRes.reason === 'no_energy') {
+          this.onToast?.('Energy habis! Tekan [R] pakai Ammo Pack atau serang Dagger!');
+        }
+      } else if (rightAction === 'dash_thrust') {
+        if (p.triggerDashThrust()) {
+          this._performCombatMove('dash_thrust');
+        }
       }
     }
 
@@ -758,625 +930,280 @@ export class GameEngine {
     }
   }
 
-  private _performMelee() {
+  private _startAirSlam() {
+    this._airSlamState = 'windup';
+    this._airSlamTimer = 0.11;
+    this._airSlamHitIds.clear();
+    this._activeCombatMove = 'air_slam_windup';
+    this._meleeAnimDuration = 0.11;
+    this._meleeAnimTimer = 0.11;
+    this._pendingComboStrikes = [];
+    this.player.vy = -20;
+    this._scaleX = 0.84;
+    this._scaleY = 1.22;
+    this.sound.play('menu_select');
+  }
+
+  private _checkAirSlamDiveHits() {
+    const p = this.player;
+    const weaponId = p.state.meleeWeapon.defId;
+    const profile = getWeaponMoveProfile(weaponId);
+    const dmgType = WEAPONS[weaponId]?.damageType ?? 'impact';
+    const diveDmg = Math.max(1, Math.round(p.getMeleeDamage() * 0.65));
+
+    const hx = p.x - 10;
+    const hy = p.y + 4;
+    const hw = p.width + 20;
+    const hh = p.height + 12;
+
+    for (const enemy of this.enemies) {
+      if (!enemy.alive || this._airSlamHitIds.has(enemy.id)) continue;
+      if (_aabb(hx, hy, hw, hh, enemy.x, enemy.y, enemy.width, enemy.height)) {
+        this._airSlamHitIds.add(enemy.id);
+        const res = damageEnemyDetailed(enemy, diveDmg, true, dmgType);
+        enemy.vy = Math.max(enemy.vy, 180);
+        p.onMeleeHit();
+        const cx = enemy.x + enemy.width / 2;
+        const cy = enemy.y + enemy.height / 2;
+        this.particles.emit('hit_spark', cx, cy);
+        this._spawnHitEffect(cx, cy, profile.trailColor, 14, 'impact');
+        this._spawnFloatingText(cx, enemy.y - 4, `${diveDmg}`, '#FACC15');
+        if (res.killed) this._onEnemyKilled(enemy);
+        else this.sound.play('enemy_hit');
+      }
+    }
+  }
+
+  private _triggerAirSlamImpact() {
     const p = this.player;
     const weaponId = p.state.meleeWeapon.defId;
     const weaponLv = getWeaponLevel(p.state.meleeWeapon);
-    const isPogo = !p.onGround && this.input.isHeld('drop_down');
-    const comboStep = isPogo ? 1 : p.meleeCombo; // 1, 2, 3
+    const profile = getWeaponMoveProfile(weaponId);
+
+    this._airSlamState = 'impact';
+    this._airSlamTimer = 0.26;
+    this._activeCombatMove = 'air_slam_impact';
+    this._meleeAnimDuration = 0.26;
+    this._meleeAnimTimer = 0.26;
+    this._meleeAnimIsPogo = false;
+    this._scaleX = 1.32;
+    this._scaleY = 0.72;
+
+    const color = weaponLv >= 3 ? '#FACC15' : weaponLv === 2 ? '#00F0FF' : profile.trailColor;
+    const slamRangeW = Math.round(46 * Math.max(0.75, profile.reachScale));
+
+    this._spawnFloatingText(p.x + 7, p.y - 12, 'SLAM!', '#FACC15', true);
+    this._executeMeleeStrike({
+      delay: 0,
+      rangeW: slamRangeW,
+      rangeH: 38,
+      radius: Math.round(38 * Math.max(0.8, profile.reachScale)),
+      damageRatio: 1.58,
+      shape: 'slam_impact',
+      color,
+      comboStep: 3,
+      isPogo: false,
+      bidirectional: true,
+      armorBreak: true,
+      knockbackX: 185,
+      liftVy: -165,
+      shake: 4.6,
+      sound: 'hammer_slam',
+    });
+
+    this.particles.emit('mana_dust', p.x + p.width / 2 - 12, p.y + p.height, -Math.PI * 0.75);
+    this.particles.emit('mana_dust', p.x + p.width / 2 + 12, p.y + p.height, -Math.PI * 0.25);
+
+    // Hammer bonus: twin seismic floor shockwaves on Aerial Slam!
+    if (weaponId === 'hammer') {
+      const dmgWave = Math.round(p.getMeleeDamage() * 0.6);
+      const floorY = p.y + p.height - 6;
+      this.projectiles.push(
+        createProjectile('player', p.x - 4, floorY, Math.PI, 220, dmgWave, {
+          color: '#A855F7',
+          trailColor: '#00F0FF',
+          life: 0.7,
+          size: 5,
+        }),
+        createProjectile('player', p.x + p.width + 4, floorY, 0, 220, dmgWave, {
+          color: '#A855F7',
+          trailColor: '#00F0FF',
+          life: 0.7,
+          size: 5,
+        })
+      );
+    }
+  }
+
+  /**
+   * Unified conditional Stickman Combat Moveset across ALL melee weapons:
+   * - standard_slash (Hit 1)
+   * - spin_horizontal (Hit 2)
+   * - mini_thrust (Hit 3)
+   * - spin_vertical (Jump-Hit Tap ONLY)
+   * - dash_thrust (Right-Click / [K] in Melee Mode)
+   */
+  private _performCombatMove(move: CombatMoveType) {
+    const p = this.player;
+    const weaponId = p.state.meleeWeapon.defId;
+    const weaponLv = getWeaponLevel(p.state.meleeWeapon);
+    const profile = getWeaponMoveProfile(weaponId);
     const dir = p.facingRight ? 1 : -1;
 
     this._pendingComboStrikes = [];
-    this._meleeAnimIsPogo = isPogo;
+    this._activeCombatMove = move;
+    this._meleeAnimIsPogo = move === 'spin_vertical';
+    this._iaidoWindupTimer = 0;
 
-    // Emit extra luminous glow sparks when wielding Lv.2 / Lv.3 upgraded weapon!
     if (weaponLv >= 2) {
-      this.particles.emit('hit_spark', p.x + p.width / 2 + dir * 10, p.y + 12);
+      this.particles.emit('hit_spark', p.x + p.width / 2 + dir * 9, p.y + 12);
     }
 
-    const baseColor = p.lastAttackWasCounter
+    const color = p.lastAttackWasCounter
       ? '#FACC15'
       : weaponLv >= 3
         ? '#FFFFFF'
         : weaponLv === 2
           ? '#00F0FF'
-          : undefined;
-
-    const mkStrike = (
-      overrides: Partial<PendingComboStrike> & Pick<PendingComboStrike, 'rangeW' | 'radius' | 'color'>
-    ): PendingComboStrike => ({
-      delay: 0,
-      rangeH: isPogo ? 28 : 28,
-      damageRatio: 1.0,
-      shape: 'crescent',
-      comboStep,
-      isPogo,
-      bidirectional: false,
-      armorBreak: weaponId === 'axe' || weaponId === 'hammer' || comboStep === 3,
-      knockbackX: 75,
-      ...overrides,
-    });
+          : profile.trailColor;
 
     if (p.lastAttackWasCounter) {
       this._spawnFloatingText(p.x + 7, p.y - 12, 'COUNTER!', '#FACC15');
     }
 
-    if (isPogo) {
-      this._meleeAnimDuration = 0.16;
-      this._meleeAnimTimer = 0.16;
-      this._executeMeleeStrike(
-        mkStrike({
-          rangeW: weaponId === 'spear' ? 32 : 26,
-          radius: 25,
-          color: baseColor ?? '#00F0FF',
-          sound: 'sword_slash',
-        })
-      );
-      return;
-    }
-
-    switch (weaponId) {
-      case 'dagger': {
-        if (comboStep === 1) {
-          this._meleeAnimDuration = 0.22;
-          this._meleeAnimTimer = 0.22;
-          p.vx += dir * 50;
-          this._executeMeleeStrike(
-            mkStrike({ rangeW: 20, radius: 18, color: baseColor ?? '#F97316', sound: 'sword_slash' })
-          );
-        } else if (comboStep === 2) {
-          this._meleeAnimDuration = 0.25;
-          this._meleeAnimTimer = 0.25;
-          p.vx += dir * 80;
-          this._executeMeleeStrike(
-            mkStrike({
-              rangeW: 23,
-              radius: 21,
-              shape: 'x_cut',
-              color: baseColor ?? '#00F0FF',
-              sound: 'dual_slash',
-            })
-          );
-        } else {
-          // Hit 3: Slower, readable 3x Dash Thrusts!
-          this._meleeAnimDuration = 0.42;
-          this._meleeAnimTimer = 0.42;
-          this._spawnFloatingText(p.x + 7, p.y - 11, 'THRUST DASH x3!', '#00F0FF');
-          const c = baseColor ?? '#00F0FF';
-          this._pendingComboStrikes.push(
-            mkStrike({
-              delay: 0.06,
-              rangeW: 28,
-              radius: 22,
-              damageRatio: 0.48,
-              shape: 'thrust',
-              color: c,
-              lungeVx: 205,
-              knockbackX: 35,
-              sound: 'dash',
-            }),
-            mkStrike({
-              delay: 0.18,
-              rangeW: 30,
-              radius: 24,
-              damageRatio: 0.48,
-              shape: 'thrust',
-              color: '#FACC15',
-              lungeVx: 185,
-              knockbackX: 35,
-              sound: 'spear_thrust',
-            }),
-            mkStrike({
-              delay: 0.3,
-              rangeW: 32,
-              radius: 25,
-              damageRatio: 0.56,
-              shape: 'thrust',
-              color: c,
-              lungeVx: 150,
-              knockbackX: 120,
-              sound: 'spear_thrust',
-            })
-          );
-        }
+    switch (move) {
+      case 'standard_slash': {
+        // Hit 1: Crisp Stickman Standard Slash (Dagger stays ultra-short ~17px)
+        const dur = Math.max(0.18, 0.24 * profile.speedScale);
+        this._meleeAnimDuration = dur;
+        this._meleeAnimTimer = dur;
+        p.vx += dir * (weaponId === 'dagger' ? 35 : 62);
+        this._executeMeleeStrike({
+          delay: 0,
+          rangeW: Math.round(30 * profile.reachScale),
+          rangeH: 28,
+          radius: Math.round(25 * profile.reachScale),
+          damageRatio: 1.0,
+          shape: weaponId === 'needle' ? 'silk_lash' : 'crescent',
+          color,
+          comboStep: 1,
+          isPogo: false,
+          bidirectional: false,
+          armorBreak: profile.heavy,
+          knockbackX: profile.heavy ? 120 : 68,
+          shake: profile.heavy ? 1.8 : 0,
+          sound: profile.heavy ? 'axe_hit' : 'sword_slash',
+        });
         break;
       }
 
-      case 'sword': {
-        if (comboStep === 1) {
-          this._meleeAnimDuration = 0.26;
-          this._meleeAnimTimer = 0.26;
-          p.vx += dir * 55;
-          this._executeMeleeStrike(
-            mkStrike({ rangeW: 30, radius: 26, color: baseColor ?? '#F97316', sound: 'sword_slash' })
-          );
-        } else if (comboStep === 2) {
-          // Hit 2: Clear sideways horizontal rotate 2-Hit!
-          this._meleeAnimDuration = 0.4;
-          this._meleeAnimTimer = 0.4;
-          this._spinMode = 'horizontal';
-          this._spinAttackDuration = 0.4;
-          this._spinAttackTimer = 0.4;
-          this._spawnFloatingText(p.x + 7, p.y - 11, 'CROSS ROTATE x2!', '#00F0FF');
-          const c = baseColor ?? '#00F0FF';
-          this._pendingComboStrikes.push(
-            mkStrike({
-              delay: 0.05,
-              rangeW: 34,
-              radius: 28,
-              damageRatio: 0.65,
-              shape: 'crescent',
-              color: c,
-              bidirectional: true,
-              lungeVx: 135,
-              sound: 'dual_slash',
-            }),
-            mkStrike({
-              delay: 0.21,
-              rangeW: 34,
-              radius: 29,
-              damageRatio: 0.68,
-              shape: 'crescent',
-              comboStep: 3,
-              color: '#FACC15',
-              bidirectional: true,
-              lungeVx: 110,
-              sound: 'dual_slash',
-            })
-          );
-        } else {
-          // Hit 3: Slower, clearly visible Vertical Somersault Spin!
-          this._meleeAnimDuration = 0.46;
-          this._meleeAnimTimer = 0.46;
-          this._spinMode = 'vertical';
-          this._spinAttackDuration = 0.46;
-          this._spinAttackTimer = 0.46;
-          if (p.onGround) {
-            p.vy = -140;
-            p.onGround = false;
-          } else {
-            p.vy = Math.min(p.vy, -90);
-          }
-          this._spawnFloatingText(p.x + 7, p.y - 12, 'VERTICAL SPIN!', '#FACC15');
-          const c = baseColor ?? '#FACC15';
-          this._pendingComboStrikes.push(
-            mkStrike({
-              delay: 0.08,
-              rangeW: 36,
-              rangeH: 36,
-              radius: 28,
-              damageRatio: 0.62,
-              shape: 'vertical_spin',
-              color: c,
-              bidirectional: true,
-              lungeVx: 145,
-              liftVy: -155,
-              knockbackX: 85,
-              sound: 'combo_spin',
-            }),
-            mkStrike({
-              delay: 0.24,
-              rangeW: 38,
-              rangeH: 38,
-              radius: 30,
-              damageRatio: 0.72,
-              shape: 'vertical_spin',
-              color: '#FFFFFF',
-              bidirectional: true,
-              lungeVx: 115,
-              liftVy: -120,
-              knockbackX: 155,
-              shake: 2.8,
-              sound: 'combo_finisher',
-            })
-          );
-        }
+      case 'spin_horizontal': {
+        // Hit 2: Dynamic 360° Waist Spin Horizontal (front + back coverage!)
+        const dur = Math.max(0.24, 0.34 * profile.speedScale);
+        this._meleeAnimDuration = dur;
+        this._meleeAnimTimer = dur;
+        this._executeMeleeStrike({
+          delay: 0,
+          rangeW: Math.round(31 * profile.reachScale),
+          rangeH: 26,
+          radius: Math.round(28 * profile.reachScale),
+          damageRatio: 1.08,
+          shape: 'spin_horizontal',
+          color,
+          comboStep: 2,
+          isPogo: false,
+          bidirectional: true,
+          armorBreak: profile.heavy,
+          lungeVx: weaponId === 'dagger' ? 55 : 105,
+          knockbackX: profile.heavy ? 130 : 82,
+          shake: profile.heavy ? 2.2 : 1.0,
+          sound: 'combo_spin',
+        });
         break;
       }
 
-      case 'axe': {
-        if (comboStep === 1) {
-          this._meleeAnimDuration = 0.32;
-          this._meleeAnimTimer = 0.32;
-          p.vx += dir * 40;
-          this._executeMeleeStrike(
-            mkStrike({
-              rangeW: 36,
-              radius: 32,
-              armorBreak: true,
-              knockbackX: 135,
-              color: baseColor ?? '#EF4444',
-              sound: 'axe_hit',
-            })
-          );
-        } else if (comboStep === 2) {
-          // Hit 2: Clear slow horizontal Tornado Spin!
-          this._meleeAnimDuration = 0.48;
-          this._meleeAnimTimer = 0.48;
-          this._spinMode = 'horizontal';
-          this._spinAttackDuration = 0.48;
-          this._spinAttackTimer = 0.48;
-          this._spawnFloatingText(p.x + 7, p.y - 12, 'SPIN TORNADO!', '#F97316');
-          const c = baseColor ?? '#F97316';
-          this._pendingComboStrikes.push(
-            mkStrike({
-              delay: 0.06,
-              rangeW: 38,
-              radius: 34,
-              damageRatio: 0.48,
-              shape: 'tornado',
-              color: c,
-              bidirectional: true,
-              lungeVx: 120,
-              sound: 'combo_spin',
-            }),
-            mkStrike({
-              delay: 0.2,
-              rangeW: 38,
-              radius: 35,
-              damageRatio: 0.48,
-              shape: 'tornado',
-              color: '#EF4444',
-              bidirectional: true,
-              lungeVx: 100,
-              sound: 'axe_hit',
-            }),
-            mkStrike({
-              delay: 0.34,
-              rangeW: 40,
-              radius: 36,
-              damageRatio: 0.55,
-              shape: 'tornado',
-              color: '#FACC15',
-              bidirectional: true,
-              knockbackX: 155,
-              sound: 'combo_finisher',
-            })
-          );
-        } else {
-          // Hit 3: 3x Vertical Overhead Slam!
-          this._meleeAnimDuration = 0.52;
-          this._meleeAnimTimer = 0.52;
-          if (p.onGround) {
-            p.vy = -85;
-            p.onGround = false;
-          }
-          this._spawnFloatingText(p.x + 7, p.y - 12, '3x VERTICAL SLAM!', '#EF4444');
-          const c = baseColor ?? '#EF4444';
-          this._pendingComboStrikes.push(
-            mkStrike({
-              delay: 0.06,
-              rangeW: 38,
-              rangeH: 34,
-              radius: 34,
-              damageRatio: 0.5,
-              shape: 'vertical_chop',
-              color: c,
-              lungeVx: 95,
-              shake: 2.2,
-              sound: 'axe_hit',
-            }),
-            mkStrike({
-              delay: 0.21,
-              rangeW: 38,
-              rangeH: 34,
-              radius: 35,
-              damageRatio: 0.5,
-              shape: 'vertical_chop',
-              color: '#F97316',
-              lungeVx: 75,
-              shake: 2.5,
-              sound: 'axe_hit',
-            }),
-            mkStrike({
-              delay: 0.36,
-              rangeW: 42,
-              rangeH: 36,
-              radius: 38,
-              damageRatio: 0.62,
-              shape: 'vertical_chop',
-              color: '#FACC15',
-              knockbackX: 175,
-              shake: 3.8,
-              sound: 'combo_finisher',
-            })
-          );
-        }
+      case 'mini_thrust': {
+        // Hit 3: Coiled Step-In Mini Thrust Finisher
+        const dur = Math.max(0.22, 0.3 * profile.speedScale);
+        this._meleeAnimDuration = dur;
+        this._meleeAnimTimer = dur;
+        this._executeMeleeStrike({
+          delay: 0,
+          rangeW: Math.round(37 * profile.reachScale),
+          rangeH: 24,
+          radius: Math.round(29 * profile.reachScale),
+          damageRatio: 1.18,
+          shape: weaponId === 'needle' ? 'needle_thread' : 'thrust',
+          color: weaponLv >= 2 ? '#FACC15' : color,
+          comboStep: 3,
+          isPogo: false,
+          bidirectional: false,
+          armorBreak: true,
+          lungeVx: weaponId === 'dagger' ? 95 : 165,
+          knockbackX: 138,
+          shake: 2.4,
+          sound: 'spear_thrust',
+        });
         break;
       }
 
-      case 'spear': {
-        if (comboStep === 1) {
-          this._meleeAnimDuration = 0.28;
-          this._meleeAnimTimer = 0.28;
-          this._executeMeleeStrike(
-            mkStrike({
-              rangeW: 46,
-              radius: 27,
-              shape: 'thrust',
-              color: baseColor ?? '#00F0FF',
-              lungeVx: 75,
-              sound: 'spear_thrust',
-            })
-          );
-        } else if (comboStep === 2) {
-          this._meleeAnimDuration = 0.34;
-          this._meleeAnimTimer = 0.34;
-          if (p.onGround) {
-            p.vy = -130;
-            p.onGround = false;
-          }
-          this._spawnFloatingText(p.x + 7, p.y - 11, 'VAULT SWEEP!', '#00F0FF');
-          this._pendingComboStrikes.push(
-            mkStrike({
-              delay: 0.08,
-              rangeW: 44,
-              rangeH: 32,
-              radius: 32,
-              shape: 'crescent',
-              color: baseColor ?? '#FACC15',
-              lungeVx: 150,
-              liftVy: -150,
-              sound: 'combo_spin',
-            })
-          );
-        } else {
-          // Hit 3: Clear 3x Long-Reach Drill Thrusts!
-          this._meleeAnimDuration = 0.46;
-          this._meleeAnimTimer = 0.46;
-          this._spawnFloatingText(p.x + 7, p.y - 11, '3x SPEAR THRUST!', '#00F0FF');
-          const c = baseColor ?? '#00F0FF';
-          for (let k = 0; k < 3; k++) {
-            this._pendingComboStrikes.push(
-              mkStrike({
-                delay: 0.05 + k * 0.13,
-                rangeW: 46,
-                radius: 29,
-                damageRatio: k === 2 ? 0.62 : 0.48,
-                shape: 'thrust',
-                color: k % 2 === 0 ? c : '#FACC15',
-                lungeVx: k === 0 ? 115 : 40,
-                knockbackX: k === 2 ? 145 : 30,
-                sound: 'spear_thrust',
-              })
-            );
-          }
-        }
+      case 'spin_vertical': {
+        // Jump-Hit Tap ONLY: Acrobatic 360° Vertical Somersault Blade Wheel (+ Pogo Bounce!)
+        const dur = Math.max(0.24, 0.32 * profile.speedScale);
+        this._meleeAnimDuration = dur;
+        this._meleeAnimTimer = dur;
+        p.vy = Math.min(p.vy, -105);
+        this._executeMeleeStrike({
+          delay: 0,
+          rangeW: Math.round(29 * profile.reachScale),
+          rangeH: Math.round(36 * Math.max(0.75, profile.reachScale)),
+          radius: Math.round(26 * Math.max(0.72, profile.reachScale)),
+          damageRatio: 1.12,
+          shape: 'vertical_spin',
+          color,
+          comboStep: 2,
+          isPogo: true,
+          bidirectional: true,
+          armorBreak: profile.heavy,
+          knockbackX: 90,
+          shake: 1.5,
+          sound: 'combo_spin',
+        });
         break;
       }
 
-      case 'katana': {
-        if (comboStep === 1) {
-          // True Iaido: Brief glint inside scabbard (0.10s) -> blazing Quickdraw strike!
-          this._iaidoWindupTimer = 0.1;
-          this._meleeAnimDuration = 0.32;
-          this._meleeAnimTimer = 0.32;
-          this.sound.play('menu_select');
-          this._spawnFloatingText(p.x + 7, p.y - 10, 'IAI DRAW!', '#EF4444');
-          this._pendingComboStrikes.push(
-            mkStrike({
-              delay: 0.1,
-              rangeW: 36,
-              radius: 30,
-              shape: 'x_cut',
-              color: baseColor ?? '#EF4444',
-              lungeVx: 110,
-              sound: 'dual_slash',
-            })
-          );
-        } else if (comboStep === 2) {
-          this._meleeAnimDuration = 0.34;
-          this._meleeAnimTimer = 0.34;
-          if (p.onGround) {
-            p.vy = -125;
-            p.onGround = false;
-          }
-          this._spawnFloatingText(p.x + 7, p.y - 11, 'CROSS MOON!', '#EF4444');
-          this._pendingComboStrikes.push(
-            mkStrike({
-              delay: 0.06,
-              rangeW: 36,
-              rangeH: 34,
-              radius: 30,
-              shape: 'x_cut',
-              color: baseColor ?? '#F97316',
-              lungeVx: 125,
-              liftVy: -150,
-              sound: 'combo_spin',
-            })
-          );
-        } else {
-          // Hit 3: Iaido Flash Dash (0.15s coiled scabbard glint -> Flash Dash -> Spatial Cut!)
-          this._iaidoWindupTimer = 0.15;
-          this._meleeAnimDuration = 0.54;
-          this._meleeAnimTimer = 0.54;
-          this.sound.play('menu_select');
-          this._spawnFloatingText(p.x + 7, p.y - 12, 'IAI... FLASH!', '#FACC15');
-          this._pendingComboStrikes.push(
-            mkStrike({
-              delay: 0.15,
-              rangeW: 50,
-              radius: 35,
-              damageRatio: 0.72,
-              shape: 'x_cut',
-              color: baseColor ?? '#EF4444',
-              lungeVx: 320,
-              sound: 'dash',
-            }),
-            mkStrike({
-              delay: 0.32,
-              rangeW: 46,
-              radius: 33,
-              damageRatio: 0.78,
-              shape: 'x_cut',
-              color: '#00F0FF',
-              bidirectional: true,
-              knockbackX: 140,
-              shake: 3.2,
-              sound: 'combo_finisher',
-            })
-          );
-        }
+      case 'dash_thrust': {
+        // Right-Click / [K] in Melee Mode: High-Speed Horizontal Piercing Bullet Lunge!
+        const dur = 0.28;
+        this._meleeAnimDuration = dur;
+        this._meleeAnimTimer = dur;
+        p.vy = Math.min(0, p.vy) * 0.2;
+        this._scaleX = 1.28;
+        this._scaleY = 0.8;
+        this._spawnFloatingText(p.x + 7, p.y - 11, 'DASH THRUST!', color, true);
+        this.particles.emit('dash_afterimage', p.x + p.width / 2, p.y + p.height / 2);
+        this._executeMeleeStrike({
+          delay: 0,
+          rangeW: Math.round(50 * profile.reachScale),
+          rangeH: 26,
+          radius: Math.round(38 * profile.reachScale),
+          damageRatio: 1.42,
+          shape: 'dash_thrust',
+          color,
+          comboStep: 3,
+          isPogo: false,
+          bidirectional: false,
+          armorBreak: true,
+          lungeVx: weaponId === 'dagger' ? 245 : 365,
+          knockbackX: 165,
+          shake: 3.0,
+          sound: 'dash',
+        });
         break;
       }
 
-      case 'hammer': {
-        if (comboStep === 1) {
-          this._meleeAnimDuration = 0.34;
-          this._meleeAnimTimer = 0.34;
-          this._executeMeleeStrike(
-            mkStrike({
-              rangeW: 34,
-              radius: 30,
-              armorBreak: true,
-              knockbackX: 150,
-              color: baseColor ?? '#A855F7',
-              shake: 2.2,
-              sound: 'hammer_slam',
-            })
-          );
-        } else if (comboStep === 2) {
-          this._meleeAnimDuration = 0.42;
-          this._meleeAnimTimer = 0.42;
-          this._spinMode = 'vertical';
-          this._spinAttackDuration = 0.42;
-          this._spinAttackTimer = 0.42;
-          this._spawnFloatingText(p.x + 7, p.y - 11, 'VERTICAL SLAM SPIN!', '#A855F7');
-          this._pendingComboStrikes.push(
-            mkStrike({
-              delay: 0.08,
-              rangeW: 38,
-              radius: 34,
-              damageRatio: 0.65,
-              shape: 'vertical_spin',
-              bidirectional: true,
-              color: baseColor ?? '#A855F7',
-              lungeVx: 135,
-              sound: 'combo_spin',
-            }),
-            mkStrike({
-              delay: 0.24,
-              rangeW: 38,
-              radius: 34,
-              damageRatio: 0.68,
-              shape: 'vertical_spin',
-              bidirectional: true,
-              color: '#00F0FF',
-              knockbackX: 150,
-              sound: 'axe_hit',
-            })
-          );
-        } else {
-          // Hit 3: Seismic Ground Slam + Twin Floor Shockwaves!
-          this._meleeAnimDuration = 0.5;
-          this._meleeAnimTimer = 0.5;
-          if (!p.onGround) p.vy = 240;
-          this._spawnFloatingText(p.x + 7, p.y - 12, 'SEISMIC SLAM!', '#FACC15');
-          this._pendingComboStrikes.push(
-            mkStrike({
-              delay: 0.14,
-              rangeW: 44,
-              rangeH: 36,
-              radius: 38,
-              damageRatio: 1.05,
-              shape: 'vertical_chop',
-              bidirectional: true,
-              color: baseColor ?? '#FACC15',
-              knockbackX: 185,
-              shake: 4.5,
-              sound: 'hammer_slam',
-            })
-          );
-          const dmgWave = Math.round(p.getMeleeDamage() * 0.55);
-          const floorY = p.y + p.height - 6;
-          this.projectiles.push(
-            createProjectile('player', p.x - 4, floorY, Math.PI, 210, dmgWave, {
-              color: '#A855F7',
-              trailColor: '#00F0FF',
-              life: 0.7,
-              size: 5,
-            }),
-            createProjectile('player', p.x + p.width + 4, floorY, 0, 210, dmgWave, {
-              color: '#A855F7',
-              trailColor: '#00F0FF',
-              life: 0.7,
-              size: 5,
-            })
-          );
-        }
+      default:
         break;
-      }
-
-      case 'dual_sword':
-      default: {
-        if (comboStep === 1) {
-          this._meleeAnimDuration = 0.26;
-          this._meleeAnimTimer = 0.26;
-          const c = baseColor ?? '#00F0FF';
-          this._executeMeleeStrike(
-            mkStrike({ rangeW: 28, radius: 26, damageRatio: 0.58, shape: 'x_cut', color: c, lungeVx: 70, sound: 'dual_slash' })
-          );
-          this._pendingComboStrikes.push(
-            mkStrike({ delay: 0.11, rangeW: 28, radius: 26, damageRatio: 0.58, shape: 'x_cut', color: '#A855F7', sound: 'dual_slash' })
-          );
-        } else if (comboStep === 2) {
-          this._meleeAnimDuration = 0.38;
-          this._meleeAnimTimer = 0.38;
-          this._spinMode = 'horizontal';
-          this._spinAttackDuration = 0.38;
-          this._spinAttackTimer = 0.38;
-          this._spawnFloatingText(p.x + 7, p.y - 11, 'SPIN CROSS x2!', '#00F0FF');
-          this._pendingComboStrikes.push(
-            mkStrike({
-              delay: 0.06,
-              rangeW: 32,
-              radius: 29,
-              damageRatio: 0.65,
-              shape: 'x_cut',
-              color: baseColor ?? '#00F0FF',
-              lungeVx: 185,
-              liftVy: -105,
-              sound: 'dual_slash',
-            }),
-            mkStrike({
-              delay: 0.2,
-              rangeW: 32,
-              radius: 30,
-              damageRatio: 0.68,
-              shape: 'x_cut',
-              color: '#FACC15',
-              lungeVx: 110,
-              sound: 'dual_slash',
-            })
-          );
-        } else {
-          // Hit 3: Slower 3x Phantom Whirlwind Spin!
-          this._meleeAnimDuration = 0.48;
-          this._meleeAnimTimer = 0.48;
-          this._spinMode = 'horizontal';
-          this._spinAttackDuration = 0.48;
-          this._spinAttackTimer = 0.48;
-          this._spawnFloatingText(p.x + 7, p.y - 12, 'PHANTOM SPIN x3!', '#FACC15');
-          for (let k = 0; k < 3; k++) {
-            this._pendingComboStrikes.push(
-              mkStrike({
-                delay: 0.06 + k * 0.13,
-                rangeW: 36,
-                radius: 32,
-                damageRatio: k === 2 ? 0.62 : 0.48,
-                shape: k === 1 ? 'x_cut' : 'tornado',
-                bidirectional: true,
-                color: k % 2 === 0 ? '#00F0FF' : '#A855F7',
-                lungeVx: k === 0 ? 150 : 40,
-                knockbackX: k === 2 ? 145 : 35,
-                shake: k === 2 ? 3 : 0,
-                sound: k === 2 ? 'combo_finisher' : 'dual_slash',
-              })
-            );
-          }
-        }
-        break;
-      }
     }
   }
 
@@ -1396,32 +1223,55 @@ export class GameEngine {
       this.triggerShake(strike.shake, 0.12);
     }
 
-    const hx = strike.isPogo
-      ? p.x - (strike.rangeW - p.width) / 2
-      : strike.bidirectional
+    const hx =
+      strike.bidirectional
         ? p.x + p.width / 2 - strike.rangeW
-        : p.facingRight
-          ? p.x + p.width - 2
-          : p.x - strike.rangeW + 2;
-    const boxW = strike.bidirectional && !strike.isPogo ? strike.rangeW * 2 : strike.rangeW;
-    const hy = strike.isPogo ? p.y + p.height - 4 : p.y + p.height - strike.rangeH;
+        : strike.isPogo
+          ? p.x - (strike.rangeW - p.width) / 2
+          : p.facingRight
+            ? p.x + p.width - 2
+            : p.x - strike.rangeW + 2;
+    const boxW = strike.bidirectional ? strike.rangeW * 2 : strike.rangeW;
+    const hy =
+      strike.shape === 'vertical_spin'
+        ? p.y + p.height / 2 - strike.rangeH / 2
+        : strike.isPogo
+          ? p.y + p.height - 4
+          : p.y + p.height - strike.rangeH;
+
+    const slashLife =
+      strike.shape === 'spin_horizontal' ||
+      strike.shape === 'vertical_spin' ||
+      strike.shape === 'slam_impact'
+        ? 0.28
+        : strike.shape === 'dash_thrust'
+          ? 0.24
+          : 0.2;
 
     this._slashes.push({
-      x: strike.isPogo
-        ? p.x + p.width / 2
-        : strike.bidirectional
+      x:
+        strike.bidirectional || strike.shape === 'vertical_spin'
           ? p.x + p.width / 2
-          : p.x + p.width / 2 + dir * (strike.shape === 'thrust' ? 10 : 7),
-      y: strike.isPogo ? p.y + p.height : p.y + p.height * 0.45,
+          : strike.isPogo
+            ? p.x + p.width / 2
+            : p.x + p.width / 2 + dir * (strike.shape === 'thrust' || strike.shape === 'dash_thrust' ? 10 : 7),
+      y:
+        strike.shape === 'slam_impact'
+          ? p.y + p.height - 2
+          : strike.shape === 'vertical_spin'
+            ? p.y + p.height * 0.5
+            : strike.isPogo
+              ? p.y + p.height
+              : p.y + p.height * 0.48,
       radius: strike.radius,
-      isPogo: strike.isPogo,
+      isPogo: strike.isPogo && strike.shape !== 'vertical_spin',
       facingRight: p.facingRight,
       comboStep: strike.comboStep,
       shape: strike.shape,
       bidirectional: strike.bidirectional,
       color: strike.color,
-      life: strike.shape === 'tornado' || strike.shape === 'vertical_spin' ? 0.28 : 0.21,
-      maxLife: strike.shape === 'tornado' || strike.shape === 'vertical_spin' ? 0.28 : 0.21,
+      life: slashLife,
+      maxLife: slashLife,
     });
 
     this.particles.emit(
@@ -1432,16 +1282,20 @@ export class GameEngine {
     );
 
     let hitSomething = false;
-    const baseDmg = p.getMeleeDamage() * strike.damageRatio;
-    const critChance = weaponId === 'dual_sword' || weaponId === 'katana' ? 0.2 : 0.08;
+    const weaponDef = WEAPONS[weaponId];
+    const dmgType = weaponDef?.damageType ?? 'slash';
+    const pogoMult = strike.isPogo ? p.getPogoDamageMultiplier() : 1;
+    const baseDmg = p.getMeleeDamage() * strike.damageRatio * pogoMult;
+    const critChance = p.getMeleeCritChance();
     const isCrit = Math.random() < critChance;
-    const finalDmg = Math.max(1, Math.round(isCrit ? baseDmg * 1.4 : baseDmg));
+    const critMult = dmgType === 'slash' ? 1.5 : 1.35;
+    const finalDmg = Math.max(1, Math.round(isCrit ? baseDmg * critMult : baseDmg));
 
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
       if (_aabb(hx, hy, boxW, strike.rangeH, enemy.x, enemy.y, enemy.width, enemy.height)) {
         hitSomething = true;
-        const killed = damageEnemy(enemy, finalDmg, strike.armorBreak);
+        const dmgRes = damageEnemyDetailed(enemy, finalDmg, strike.armorBreak, dmgType);
         const pushDir =
           strike.bidirectional && enemy.x + enemy.width / 2 < p.x + p.width / 2 ? -1 : dir;
         enemy.vx = pushDir * strike.knockbackX;
@@ -1449,14 +1303,24 @@ export class GameEngine {
           enemy.vy = Math.min(enemy.vy, strike.liftVy);
         }
         p.onMeleeHit();
-        this.particles.emit('hit_spark', enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+        const hitX = enemy.x + enemy.width / 2;
+        const hitY = enemy.y + enemy.height / 2;
+        this.particles.emit('hit_spark', hitX, hitY);
+        this._spawnHitEffect(hitX, hitY, isCrit ? '#FACC15' : strike.color, isCrit ? 18 : 13, dmgType);
         this._spawnFloatingText(
-          enemy.x + enemy.width / 2,
+          hitX,
           enemy.y - 4,
-          isCrit || strike.comboStep >= 2 ? `${finalDmg}!` : `${finalDmg}`,
-          isCrit || strike.comboStep === 3 ? '#FACC15' : '#FFFFFF'
+          isCrit ? `${finalDmg}!` : `${finalDmg}`,
+          isCrit ? '#FACC15' : dmgType === 'pierce' ? '#FB7185' : '#FFFFFF',
+          isCrit || strike.comboStep === 3
         );
-        if (killed) this._onEnemyKilled(enemy);
+        if (dmgRes.shieldBroken) {
+          this._spawnFloatingText(hitX, enemy.y - 14, 'BREAK!', '#F97316', true);
+          this.triggerShake(3.2, 0.14);
+        } else if (dmgRes.piercedShield) {
+          this._spawnFloatingText(hitX, enemy.y - 13, 'PIERCE', '#FDA4AF', false);
+        }
+        if (dmgRes.killed) this._onEnemyKilled(enemy);
         else this.sound.play('enemy_hit');
       }
     }
@@ -1468,12 +1332,16 @@ export class GameEngine {
         this._bossFlashTimer = 0.09;
         const killed = damageBoss(b, finalDmg);
         p.onMeleeHit();
-        this.particles.emit('hit_spark', b.x + b.width / 2, b.y + b.height / 2);
+        const bHitX = b.x + b.width / 2;
+        const bHitY = b.y + b.height / 2;
+        this.particles.emit('hit_spark', bHitX, bHitY);
+        this._spawnHitEffect(bHitX, bHitY, isCrit ? '#FACC15' : strike.color, 20, dmgType);
         this._spawnFloatingText(
-          b.x + b.width / 2,
+          bHitX,
           b.y - 8,
-          b.shieldActive ? `SHIELD -${finalDmg}` : `${finalDmg}`,
-          b.shieldActive ? '#00F0FF' : '#FACC15'
+          b.shieldActive ? `SHIELD -${finalDmg}` : isCrit ? `${finalDmg} CRIT!` : `${finalDmg}`,
+          b.shieldActive ? '#00F0FF' : '#FACC15',
+          isCrit
         );
         if (killed) this._onBossDefeated();
         else this.sound.play('enemy_hit');
@@ -1485,6 +1353,7 @@ export class GameEngine {
         if (_aabb(hx, hy, boxW, strike.rangeH, sp.x, sp.y, sp.w, sp.h)) {
           hitSomething = true;
           this.particles.emit('hit_spark', hx + boxW / 2, sp.y);
+          this._spawnHitEffect(hx + boxW / 2, sp.y, '#00F0FF', 12, 'pierce');
           break;
         }
       }
@@ -1500,7 +1369,10 @@ export class GameEngine {
     }
 
     if (hitSomething) {
-      this.triggerHitstop(strike.comboStep === 3 ? 3 : 2);
+      this.triggerHitstop(isCrit || strike.comboStep === 3 ? 3 : 2);
+      if (!strike.isPogo && strike.lungeVx === undefined && p.onGround) {
+        p.vx -= dir * 24;
+      }
       if (strike.isPogo && p.pogoSlash()) {
         this._scaleX = 0.82;
         this._scaleY = 1.22;
@@ -1678,7 +1550,10 @@ export class GameEngine {
     }
 
     if (landed) {
-      if (!wasOnGround) {
+      if (this._airSlamState === 'dive' || this._airSlamState === 'windup') {
+        p.onLand();
+        this._triggerAirSlamImpact();
+      } else if (!wasOnGround) {
         p.onLand();
         this._scaleX = 1.22;
         this._scaleY = 0.8;
@@ -1734,16 +1609,21 @@ export class GameEngine {
 
     if (res.outcome === 'parry') {
       this._parryFlashTimer = 0.26;
+      this._screenFlashColor = 'rgba(250, 204, 21, 0.28)';
+      this._screenFlashTimer = 0.18;
       this._scaleX = 1.15;
       this._scaleY = 0.9;
       this.sound.play('parry_flash');
       this.triggerHitstop(5);
       this.triggerShake(3.5, 0.14);
-      this.particles.emit('hit_spark', p.x + (p.facingRight ? 16 : -2), p.y + 12);
-      this._spawnFloatingText(p.x + 7, p.y - 10, 'PARRY! +22 EN', '#FACC15');
+      const px = p.x + (p.facingRight ? 16 : -2);
+      const py = p.y + 12;
+      this.particles.emit('hit_spark', px, py);
+      this._spawnHitEffect(px, py, '#FACC15', 22, 'parry');
+      this._spawnFloatingText(p.x + 7, p.y - 10, 'PARRY! +22 EN', '#FACC15', true);
       for (const e of this.enemies) {
         if (!e.alive) continue;
-        if (Math.hypot(e.x - p.x, e.y - p.y) < 48) {
+        if (Math.hypot(e.x - p.x, e.y - p.y) < 52) {
           e.vx = (e.x >= p.x ? 1 : -1) * 195;
           e.vy = -90;
         }
@@ -1756,13 +1636,32 @@ export class GameEngine {
       this._scaleY = 1.1;
       this.sound.play('block_clang');
       this.triggerShake(1.8, 0.08);
-      this.particles.emit('hit_spark', p.x + (p.facingRight ? 15 : -1), p.y + 12);
-      this._spawnFloatingText(
-        p.x + 7,
-        p.y - 8,
-        res.finalDamage > 0 ? `GUARD -${res.finalDamage}` : 'BLOCKED!',
-        '#00F0FF'
-      );
+      const bx = p.x + (p.facingRight ? 15 : -1);
+      const by = p.y + 12;
+      this.particles.emit('hit_spark', bx, by);
+      this._spawnHitEffect(bx, by, '#00F0FF', 15, 'impact');
+
+      // Ironbell Bastion (vanguard) passive: Block shockwave damages & knocks back nearby foes
+      if (p.state.armorId === 'vanguard') {
+        this._spawnFloatingText(p.x + 7, p.y - 14, 'BELL SHOCKWAVE!', '#FACC15', true);
+        for (const e of this.enemies) {
+          if (!e.alive) continue;
+          if (Math.hypot(e.x - p.x, e.y - p.y) < 68) {
+            const shock = damageEnemyDetailed(e, 14, true, 'impact');
+            e.vx = (e.x >= p.x ? 1 : -1) * 175;
+            e.vy = -75;
+            this._spawnHitEffect(e.x + e.width / 2, e.y + e.height / 2, '#FACC15', 14, 'impact');
+            if (shock.killed) this._onEnemyKilled(e);
+          }
+        }
+      } else {
+        this._spawnFloatingText(
+          p.x + 7,
+          p.y - 8,
+          res.finalDamage > 0 ? `GUARD -${res.finalDamage}` : 'BLOCKED!',
+          '#00F0FF'
+        );
+      }
       if (p.state.hp <= 0) {
         this.sound.play('game_over');
         this.onGameOver?.('Slayer gugur di medan tempur.');
@@ -1770,9 +1669,14 @@ export class GameEngine {
       return;
     }
 
+    this._screenFlashColor = 'rgba(239, 68, 68, 0.30)';
+    this._screenFlashTimer = 0.2;
     this.sound.play('player_hit');
     this.triggerShake(4, 0.18);
-    this._spawnFloatingText(p.x + 7, p.y - 6, `-${res.finalDamage}`, '#EF4444');
+    if (p.state.armorId === 'vanguard') {
+      p.vx *= 0.5;
+    }
+    this._spawnFloatingText(p.x + 7, p.y - 6, `-${res.finalDamage}`, '#EF4444', true);
     if (p.state.hp <= 0) {
       this.sound.play('game_over');
       this.onGameOver?.('Slayer gugur di medan tempur.');
@@ -2284,14 +2188,32 @@ export class GameEngine {
       }
 
       if (proj.source === 'player') {
+        const rDef = this.player.state.rangedWeapon
+          ? WEAPONS[this.player.state.rangedWeapon.defId]
+          : null;
+        const rDmgType = rDef?.damageType ?? 'pierce';
         for (const e of this.enemies) {
           if (!e.alive || proj.hitTargets.has(e.id)) continue;
           if (_aabb(proj.x, proj.y, proj.width, proj.height, e.x, e.y, e.width, e.height)) {
             proj.hitTargets.add(e.id);
-            const killed = damageEnemy(e, proj.damage, false);
+            const isCrit = Math.random() < this.player.getRangedCritChance();
+            const rDmg = isCrit ? Math.round(proj.damage * 1.4) : proj.damage;
+            const dmgRes = damageEnemyDetailed(e, rDmg, false, rDmgType);
             this.particles.emit('hit_spark', proj.x, proj.y);
-            this._spawnFloatingText(e.x + e.width / 2, e.y - 4, `${proj.damage}`, '#FACC15');
-            if (killed) this._onEnemyKilled(e);
+            this._spawnHitEffect(proj.x, proj.y, isCrit ? '#FACC15' : proj.color, isCrit ? 15 : 10, rDmgType);
+            this._spawnFloatingText(
+              e.x + e.width / 2,
+              e.y - 4,
+              isCrit ? `${rDmg}!` : `${rDmg}`,
+              isCrit ? '#FACC15' : '#FFFFFF',
+              isCrit
+            );
+            if (dmgRes.shieldBroken) {
+              this._spawnFloatingText(e.x + e.width / 2, e.y - 13, 'BREAK!', '#F97316', true);
+            } else if (dmgRes.piercedShield) {
+              this._spawnFloatingText(e.x + e.width / 2, e.y - 13, 'PIERCE', '#FDA4AF', false);
+            }
+            if (dmgRes.killed) this._onEnemyKilled(e);
             else this.sound.play('enemy_hit');
 
             if (!proj.piercing) {
@@ -2647,9 +2569,14 @@ export class GameEngine {
       this._slashes[i].life -= dt;
       if (this._slashes[i].life <= 0) this._slashes.splice(i, 1);
     }
+    for (let i = this._hitEffects.length - 1; i >= 0; i--) {
+      this._hitEffects[i].life -= dt;
+      if (this._hitEffects[i].life <= 0) this._hitEffects.splice(i, 1);
+    }
     for (let i = this._floatingTexts.length - 1; i >= 0; i--) {
       const f = this._floatingTexts[i];
       f.y += f.vy * dt;
+      f.vy *= Math.pow(0.25, dt);
       f.life -= dt;
       if (f.life <= 0) this._floatingTexts.splice(i, 1);
     }
@@ -2659,8 +2586,28 @@ export class GameEngine {
     }
   }
 
-  private _spawnFloatingText(x: number, y: number, text: string, color: string) {
-    this._floatingTexts.push({ x, y, vy: -28, text, color, life: 0.65, maxLife: 0.65 });
+  private _spawnHitEffect(
+    x: number,
+    y: number,
+    color: string,
+    radius: number,
+    kind: HitEffect['kind']
+  ) {
+    const dur = kind === 'parry' ? 0.24 : 0.16;
+    this._hitEffects.push({ x, y, color, radius, life: dur, maxLife: dur, kind });
+  }
+
+  private _spawnFloatingText(x: number, y: number, text: string, color: string, isCrit = false) {
+    this._floatingTexts.push({
+      x,
+      y,
+      vy: isCrit ? -38 : -28,
+      text,
+      color,
+      life: isCrit ? 0.78 : 0.65,
+      maxLife: isCrit ? 0.78 : 0.65,
+      isCrit,
+    });
   }
 
   private _updateCamera(dt: number) {
@@ -2693,6 +2640,7 @@ export class GameEngine {
     ctx.translate(cx, cy);
 
     if (this.level) {
+      this._renderDecorProps(ctx);
       this._renderTorches(ctx);
       this._renderPlatforms(ctx, this.level.platforms);
       this._renderMovingAndCrumbling(ctx);
@@ -2709,6 +2657,7 @@ export class GameEngine {
       this._renderGhostTrails(ctx);
       this._renderPlayer(ctx);
       this._renderSlashes(ctx);
+      this._renderHitEffects(ctx);
       this._renderProjectiles(ctx);
       this.particles.render(ctx);
       this._renderFloatingTexts(ctx);
@@ -2716,11 +2665,193 @@ export class GameEngine {
 
     ctx.restore();
 
+    this._renderForeground(ctx);
+
     if (this.player.isAdrenalineActive) {
       ctx.strokeStyle = 'rgba(249, 115, 22, 0.55)';
       ctx.lineWidth = 4;
       ctx.strokeRect(2, 2, GAME_WIDTH - 4, GAME_HEIGHT - 4);
     }
+  }
+
+  private _renderDecorProps(ctx: CanvasRenderingContext2D) {
+    if (!this.level) return;
+    const t = this._animTime;
+    const minVisX = this.camera.x - 90;
+    const maxVisX = this.camera.x + GAME_WIDTH + 90;
+
+    for (let i = 0; i < this.level.decorProps.length; i++) {
+      const prop = this.level.decorProps[i];
+      if (prop.x < minVisX || prop.x > maxVisX) continue;
+      const sc = prop.scale ?? 1;
+
+      ctx.save();
+      ctx.translate(Math.round(prop.x), Math.round(prop.y));
+
+      if (prop.type === 'arch') {
+        const w = Math.round(48 * sc);
+        const h = Math.round(74 * sc);
+        ctx.fillStyle = prop.color ?? '#2D3446';
+        // Twin gothic pillars
+        ctx.fillRect(-w / 2, -h, 8, h);
+        ctx.fillRect(w / 2 - 8, -h, 8, h);
+        // Pointed arch crown
+        ctx.beginPath();
+        ctx.moveTo(-w / 2, -h);
+        ctx.lineTo(0, -h - 22 * sc);
+        ctx.lineTo(w / 2, -h);
+        ctx.lineTo(w / 2 - 8, -h + 8);
+        ctx.lineTo(0, -h - 10 * sc);
+        ctx.lineTo(-w / 2 + 8, -h + 8);
+        ctx.closePath();
+        ctx.fill();
+        // Highlight inner bevel
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        ctx.fillRect(-w / 2 + 1, -h, 2, h);
+        ctx.fillRect(w / 2 - 3, -h, 2, h);
+      } else if (prop.type === 'bell') {
+        const sway = Math.sin(t * 1.4 + i * 1.7) * 0.06;
+        ctx.rotate(sway);
+        // Chain up
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(-1, -48 * sc, 2, 48 * sc);
+        // Bell dome
+        const bw = Math.round(20 * sc);
+        const bh = Math.round(22 * sc);
+        ctx.fillStyle = prop.color ?? '#D97706';
+        ctx.fillRect(-bw / 2 + 3, 0, bw - 6, 4);
+        ctx.fillRect(-bw / 2 + 1, 4, bw - 2, bh - 8);
+        ctx.fillRect(-bw / 2 - 2, bh - 4, bw + 4, 4);
+        // Specular highlight + clapper
+        ctx.fillStyle = 'rgba(255,255,255,0.28)';
+        ctx.fillRect(-bw / 2 + 3, 4, 2, bh - 8);
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(-2, bh, 4, 4);
+      } else if (prop.type === 'banner') {
+        const flutter = Math.sin(t * 4.2 + i) * 2.5;
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(-1, -44, 2, 44);
+        ctx.fillRect(-10, -44, 20, 2);
+        ctx.fillStyle = prop.color ?? '#E11D48';
+        ctx.beginPath();
+        ctx.moveTo(-8, -42);
+        ctx.lineTo(8, -42);
+        ctx.lineTo(7 + flutter, -12);
+        ctx.lineTo(flutter * 0.8, -18);
+        ctx.lineTo(-7 + flutter, -12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.55)';
+        ctx.fillRect(-1, -38, 2, 16);
+      } else if (prop.type === 'lantern') {
+        const glow = 0.2 + 0.08 * Math.sin(t * 7 + i);
+        const col = prop.color ?? '#4ADE80';
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(-1, 0, 2, 32);
+        ctx.fillRect(-5, 0, 10, 2);
+        ctx.fillStyle = col;
+        ctx.globalAlpha = glow;
+        ctx.beginPath();
+        ctx.arc(0, 6, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(-3, 2, 6, 8);
+        ctx.fillStyle = col;
+        ctx.fillRect(-2, 4, 4, 5);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(-1, 5, 2, 2);
+      } else if (prop.type === 'silk_web') {
+        const col = prop.color ?? '#E2E8F0';
+        ctx.strokeStyle = col;
+        ctx.globalAlpha = 0.24;
+        ctx.lineWidth = 1;
+        const r = 34 * sc;
+        for (let a = 0; a < 5; a++) {
+          const ang = -Math.PI + (a / 4) * Math.PI;
+          ctx.beginPath();
+          ctx.moveTo(0, -r * 0.9);
+          ctx.lineTo(Math.cos(ang) * r, -r * 0.9 + Math.sin(ang) * r + r * 0.9);
+          ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.8, -r * 0.35);
+        ctx.quadraticCurveTo(0, -r * 0.1, r * 0.8, -r * 0.35);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (prop.type === 'obelisk') {
+        const pulse = 0.55 + 0.45 * Math.sin(t * 3.2 + i);
+        ctx.fillStyle = '#1E293B';
+        ctx.beginPath();
+        ctx.moveTo(-7, 0);
+        ctx.lineTo(-5, -36);
+        ctx.lineTo(0, -44);
+        ctx.lineTo(5, -36);
+        ctx.lineTo(7, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = prop.color ?? '#38BDF8';
+        ctx.globalAlpha = pulse;
+        ctx.fillRect(-1, -34, 2, 22);
+        ctx.fillRect(-3, -24, 6, 2);
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.restore();
+    }
+  }
+
+  private _renderForeground(ctx: CanvasRenderingContext2D) {
+    if (!this.level) return;
+    const theme = this.level.parallaxTheme;
+    const fgShift = -(this.camera.x * 1.22);
+    const spacing = 290;
+    const startIdx = Math.floor(-fgShift / spacing) - 1;
+    const endIdx = startIdx + Math.ceil(GAME_WIDTH / spacing) + 3;
+
+    ctx.save();
+    for (let idx = startIdx; idx <= endIdx; idx++) {
+      const fx = Math.round(idx * spacing + fgShift);
+      // Dark foreground silhouetted pillars / hanging vines at viewport edges
+      ctx.fillStyle =
+        theme === 'ruins'
+          ? 'rgba(5, 11, 10, 0.58)'
+          : theme === 'foundry'
+            ? 'rgba(14, 7, 6, 0.55)'
+            : 'rgba(10, 4, 18, 0.56)';
+      ctx.fillRect(fx, 0, 14, 46);
+      ctx.fillRect(fx + 3, 46, 8, 16);
+      // Hanging foreground moss / chain / silk strand
+      const sway = Math.sin(this._animTime * 2.1 + idx) * 2;
+      ctx.fillRect(fx + 6 + sway * 0.4, 62, 2, 24);
+      // Subtle bottom foreground rock silhouette
+      ctx.fillRect(fx + 120, GAME_HEIGHT - 14, 34, 14);
+      ctx.fillRect(fx + 126, GAME_HEIGHT - 20, 20, 6);
+    }
+
+    // Subtle Silksong radial atmospheric vignette
+    const vig = ctx.createRadialGradient(
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2,
+      GAME_HEIGHT * 0.42,
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2,
+      GAME_WIDTH * 0.68
+    );
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, 'rgba(4, 6, 12, 0.46)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    // Damage / Parry screen-edge flash
+    if (this._screenFlashTimer > 0) {
+      ctx.globalAlpha = Math.min(1, this._screenFlashTimer / 0.2);
+      ctx.strokeStyle = this._screenFlashColor;
+      ctx.lineWidth = 10;
+      ctx.strokeRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
   }
 
   private _renderTorches(ctx: CanvasRenderingContext2D) {
@@ -2756,26 +2887,68 @@ export class GameEngine {
   }
 
   private _renderPlatforms(ctx: CanvasRenderingContext2D, platforms: Platform[]) {
+    const theme = this.level?.parallaxTheme ?? 'ruins';
+    const bodyCol = theme === 'ruins' ? '#162022' : theme === 'foundry' ? '#201818' : '#1A1328';
+    const topCapCol = theme === 'ruins' ? '#2D5A47' : theme === 'foundry' ? '#57362A' : '#4C2A6A';
+    const trimCol = theme === 'ruins' ? '#4ADE80' : theme === 'foundry' ? '#F97316' : '#F43F5E';
+    const brickLineCol = theme === 'ruins' ? '#0D1416' : theme === 'foundry' ? '#140E0E' : '#100A1B';
+
     for (const plat of platforms) {
       if (plat.kind === 'wall') {
-        ctx.fillStyle = '#232733';
+        ctx.fillStyle = bodyCol;
         ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
-        ctx.fillStyle = '#4A3F35';
+        ctx.fillStyle = topCapCol;
         ctx.fillRect(plat.x, plat.y, 2, plat.h);
         ctx.fillRect(plat.x + plat.w - 2, plat.y, 2, plat.h);
+        ctx.fillStyle = brickLineCol;
+        for (let wy = plat.y + 14; wy < plat.y + plat.h; wy += 16) {
+          ctx.fillRect(plat.x + 2, wy, plat.w - 4, 1);
+        }
       } else if (plat.oneWay) {
-        ctx.fillStyle = '#4A3F35';
+        ctx.fillStyle = topCapCol;
         ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
-        ctx.fillStyle = '#00F0FF';
+        ctx.fillStyle = trimCol;
         ctx.fillRect(plat.x, plat.y, plat.w, 2);
+        // Decorative underside struts
+        ctx.fillStyle = brickLineCol;
+        for (let sx = plat.x + 12; sx < plat.x + plat.w - 8; sx += 24) {
+          ctx.fillRect(sx, plat.y + 3, 3, plat.h - 3);
+        }
       } else {
-        ctx.fillStyle = '#191D28';
+        ctx.fillStyle = bodyCol;
         ctx.fillRect(plat.x, plat.y, plat.w, plat.h);
-        ctx.fillStyle = '#2E3446';
-        ctx.fillRect(plat.x, plat.y, plat.w, 4);
-        ctx.fillStyle = '#4A3F35';
-        for (let bx = plat.x; bx < plat.x + plat.w; bx += 18) {
-          ctx.fillRect(bx, plat.y + 4, 1, Math.min(12, plat.h - 4));
+        // Stone / Forge / Obsidian top cap
+        ctx.fillStyle = topCapCol;
+        ctx.fillRect(plat.x, plat.y, plat.w, 5);
+        ctx.fillStyle = trimCol;
+        ctx.globalAlpha = 0.65;
+        ctx.fillRect(plat.x, plat.y, plat.w, 1);
+        ctx.globalAlpha = 1;
+        // Carved stone brick joints
+        ctx.fillStyle = brickLineCol;
+        for (let bx = plat.x; bx < plat.x + plat.w; bx += 20) {
+          ctx.fillRect(bx, plat.y + 5, 1, Math.min(14, plat.h - 5));
+        }
+        if (plat.h > 20) {
+          ctx.fillRect(plat.x, plat.y + 18, plat.w, 1);
+        }
+        // Biome top edge details (hanging moss tufts / ember rivets / crimson runes)
+        if (theme === 'ruins') {
+          ctx.fillStyle = '#34D399';
+          for (let mx = plat.x + 8; mx < plat.x + plat.w - 8; mx += 28) {
+            ctx.fillRect(mx, plat.y + 4, 5, 3);
+            ctx.fillRect(mx + 2, plat.y + 7, 2, 3);
+          }
+        } else if (theme === 'foundry') {
+          ctx.fillStyle = '#F59E0B';
+          for (let rx = plat.x + 10; rx < plat.x + plat.w - 10; rx += 32) {
+            ctx.fillRect(rx, plat.y + 2, 2, 2);
+          }
+        } else {
+          ctx.fillStyle = '#E879F9';
+          for (let kx = plat.x + 14; kx < plat.x + plat.w - 14; kx += 36) {
+            ctx.fillRect(kx, plat.y + 7, 4, 1);
+          }
         }
       }
     }
@@ -3121,6 +3294,13 @@ export class GameEngine {
     const p = this.player;
     const armor = ARMORS[p.state.armorId] ?? ARMORS.recruit_mk1;
 
+    const combatMoveProgress =
+      this._activeCombatMove === 'air_slam_dive'
+        ? 0.5
+        : this._activeCombatMove && this._meleeAnimDuration > 0
+          ? 1 - this._meleeAnimTimer / Math.max(0.05, this._meleeAnimDuration)
+          : 0;
+
     drawComplexSlayerAvatar(ctx, this.sprites, {
       armorId: armor.id,
       palette: armor.palette,
@@ -3157,6 +3337,8 @@ export class GameEngine {
       hasOffhandShield: p.hasFullEnergyShield,
       iaidoWindup: this._iaidoWindupTimer > 0,
       scarfPoints: this._scarfPoints,
+      combatMove: this._activeCombatMove,
+      combatMoveProgress,
     });
 
     if (this._manaShieldTimer > 0) {
@@ -3181,22 +3363,182 @@ export class GameEngine {
         ctx.scale(-1, 1);
       }
 
-      if (s.shape === 'thrust' && !s.isPogo) {
-        // Long sharp piercing lance / dash-stab streak!
-        const len = s.radius * (0.7 + progress * 0.8);
+      if (s.shape === 'needle_thread') {
+        // Silksong piercing needle beam + sinusoidal woven silk filament
+        const len = s.radius * (0.85 + progress * 0.85);
         ctx.fillStyle = s.color;
         ctx.beginPath();
-        ctx.moveTo(-4, -3);
-        ctx.lineTo(len, 0);
-        ctx.lineTo(-4, 3);
+        ctx.moveTo(-6, -2.5);
+        ctx.lineTo(len + 6, 0);
+        ctx.lineTo(-6, 2.5);
         ctx.closePath();
         ctx.fill();
 
         ctx.strokeStyle = '#FFFFFF';
         ctx.lineWidth = 1.6;
         ctx.beginPath();
-        ctx.moveTo(-2, 0);
+        ctx.moveTo(-4, 0);
+        ctx.lineTo(len + 9, 0);
+        ctx.stroke();
+
+        // Woven silk filament wave around needle line
+        ctx.strokeStyle = '#FDA4AF';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let x = -4; x <= len + 2; x += 4) {
+          const wy = Math.sin(x * 0.35 + progress * 10) * (3.2 * (1 - progress * 0.4));
+          if (x === -4) ctx.moveTo(x, wy);
+          else ctx.lineTo(x, wy);
+        }
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
+      if (s.shape === 'silk_lash' && !s.isPogo) {
+        // Silksong signature sweeping crimson & ivory double-layered crescent + trailing silk ribbon
+        const reverse = s.comboStep === 2;
+        const angStart = reverse ? Math.PI * 0.62 : -Math.PI * 0.62;
+        const angSpan = reverse ? -Math.PI * 1.32 : Math.PI * 1.32;
+        const curEnd = angStart + angSpan * Math.min(1, progress * 1.8);
+        const a0 = Math.min(angStart, curEnd);
+        const a1 = Math.max(angStart, curEnd);
+
+        const outerR = s.radius + 5;
+        const innerR = s.radius - 4;
+        const segs = 12;
+
+        ctx.fillStyle = s.color;
+        ctx.beginPath();
+        for (let i = 0; i <= segs; i++) {
+          const t = i / segs;
+          const ang = a0 + (a1 - a0) * t;
+          const r = outerR * (0.95 + 0.08 * Math.sin(t * Math.PI));
+          if (i === 0) ctx.moveTo(Math.cos(ang) * r, Math.sin(ang) * r);
+          else ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+        }
+        for (let i = segs; i >= 0; i--) {
+          const t = i / segs;
+          const ang = a0 + (a1 - a0) * t;
+          const r = outerR - (outerR - innerR) * Math.sin(t * Math.PI);
+          ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Crisp ivory-white leading edge
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.9;
+        ctx.beginPath();
+        ctx.arc(0, 0, outerR, a0 + (a1 - a0) * 0.1, a1 - (a1 - a0) * 0.08);
+        ctx.stroke();
+
+        // Trailing delicate silk thread ribbon
+        ctx.strokeStyle = '#FDA4AF';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(0, 0, innerR - 3, a0, a1);
+        ctx.stroke();
+
+        ctx.restore();
+        continue;
+      }
+
+      if (s.shape === 'spin_horizontal') {
+        // Dynamic 360° perspective-tilted horizontal waist ribbon slash (front + back!)
+        const rx = s.radius * (0.95 + progress * 0.22);
+        const ry = Math.max(6, s.radius * 0.28);
+        const rot = progress * Math.PI * 1.9;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 3.2;
+        ctx.beginPath();
+        ctx.ellipse(0, 1, rx, ry, 0, rot - Math.PI * 0.85, rot + Math.PI * 0.65);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, rx + 2, ry * 0.85, 0, rot - Math.PI * 0.45, rot + Math.PI * 0.55);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.ellipse(0, 2, rx * 0.78, ry * 0.72, 0, rot + Math.PI * 0.2, rot + Math.PI * 1.4);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
+      if (s.shape === 'dash_thrust') {
+        // High-velocity stickman bullet-lance thrust + twin sonic shock cones!
+        const len = s.radius * (0.85 + progress * 0.75);
+        ctx.fillStyle = s.color;
+        ctx.beginPath();
+        ctx.moveTo(-14, -4.5);
+        ctx.lineTo(len + 10, 0);
+        ctx.lineTo(-14, 4.5);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.moveTo(-10, 0);
+        ctx.lineTo(len + 14, 0);
+        ctx.stroke();
+
+        // Sonic air-break rings around lance
+        for (let r = 0; r < 2; r++) {
+          const ringX = len * (0.28 + r * 0.34);
+          const ringH = (8 - r * 2.5) * (1 + progress * 0.55);
+          ctx.strokeStyle = r === 0 ? '#FFFFFF' : s.color;
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.ellipse(ringX, 0, 2.5, ringH, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+        continue;
+      }
+
+      if (s.shape === 'slam_impact') {
+        // Ground-crushing twin shockwave pillars + expanding floor ring!
+        const spread = s.radius * (0.45 + progress * 0.9);
+        const h = s.radius * 0.8 * (1 - progress * 0.55);
+        ctx.fillStyle = s.color;
+        ctx.beginPath();
+        ctx.moveTo(-spread, 2);
+        ctx.quadraticCurveTo(-spread * 0.45, -h, 0, -h * 0.35);
+        ctx.quadraticCurveTo(spread * 0.45, -h, spread, 2);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, spread, Math.max(3, 7 * (1 - progress * 0.4)), 0, Math.PI, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
+      if (s.shape === 'thrust' && !s.isPogo) {
+        // Crisp step-in mini-thrust cone + speed lines
+        const len = s.radius * (0.75 + progress * 0.78);
+        ctx.fillStyle = s.color;
+        ctx.beginPath();
+        ctx.moveTo(-6, -3.2);
         ctx.lineTo(len + 4, 0);
+        ctx.lineTo(-6, 3.2);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        ctx.moveTo(-4, 0);
+        ctx.lineTo(len + 7, 0);
         ctx.stroke();
         ctx.restore();
         continue;
@@ -3336,6 +3678,42 @@ export class GameEngine {
     }
   }
 
+  private _renderHitEffects(ctx: CanvasRenderingContext2D) {
+    for (const h of this._hitEffects) {
+      const p = 1 - h.life / h.maxLife;
+      const alpha = Math.max(0, 1 - p);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(Math.round(h.x), Math.round(h.y));
+
+      // Expanding Silksong impact ring
+      ctx.strokeStyle = h.color;
+      ctx.lineWidth = h.kind === 'impact' || h.kind === 'parry' ? 2.2 : 1.4;
+      ctx.beginPath();
+      ctx.arc(0, 0, Math.max(2, h.radius * (0.35 + p * 0.95)), 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Sharp white diamond cross-flash
+      const arm = h.radius * (0.75 + p * 0.65);
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = h.kind === 'parry' ? 2.2 : 1.4;
+      ctx.beginPath();
+      if (h.kind === 'pierce') {
+        ctx.moveTo(-arm * 1.2, 0);
+        ctx.lineTo(arm * 1.2, 0);
+        ctx.moveTo(0, -arm * 0.45);
+        ctx.lineTo(0, arm * 0.45);
+      } else {
+        ctx.moveTo(-arm, -arm * 0.35);
+        ctx.lineTo(arm, arm * 0.35);
+        ctx.moveTo(-arm * 0.35, arm);
+        ctx.lineTo(arm * 0.35, -arm);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   private _renderProjectiles(ctx: CanvasRenderingContext2D) {
     for (const proj of this.projectiles) {
       ctx.fillStyle = proj.trailColor;
@@ -3356,12 +3734,20 @@ export class GameEngine {
   }
 
   private _renderFloatingTexts(ctx: CanvasRenderingContext2D) {
-    ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'center';
     for (const f of this._floatingTexts) {
-      ctx.globalAlpha = Math.max(0, f.life / f.maxLife);
+      const lifeRatio = Math.max(0, f.life / f.maxLife);
+      ctx.globalAlpha = Math.min(1, lifeRatio * 1.4);
+      ctx.font = f.isCrit ? 'bold 10px monospace' : 'bold 8px monospace';
+      const fx = Math.round(f.x);
+      const fy = Math.round(f.y);
+      ctx.fillStyle = '#070910';
+      ctx.fillText(f.text, fx - 1, fy);
+      ctx.fillText(f.text, fx + 1, fy);
+      ctx.fillText(f.text, fx, fy - 1);
+      ctx.fillText(f.text, fx, fy + 1);
       ctx.fillStyle = f.color;
-      ctx.fillText(f.text, Math.round(f.x), Math.round(f.y));
+      ctx.fillText(f.text, fx, fy);
     }
     ctx.globalAlpha = 1;
   }
@@ -3447,6 +3833,9 @@ export class GameEngine {
       hasFullShield: this.player.hasFullEnergyShield,
       meleeCombo: this.player.meleeCombo,
       counterReady: this.player.counterReady,
+      activeMove: this._activeCombatMove,
+      isMeleeMode: this.player.isMeleeOnlyMode,
+      dashThrustReady: this.player.dashThrustCooldown <= 0,
       boss:
         this.boss && this.boss.hp > 0
           ? {
@@ -3458,6 +3847,37 @@ export class GameEngine {
               shieldHp: this.boss.shieldHp,
               shieldMaxHp: this.boss.shieldMaxHp,
               stunned: this.boss.stunTimer > 0,
+            }
+          : undefined,
+      minimap:
+        this.level && this.mode.state.mode === 'traverse'
+          ? {
+              worldWidth: this.level.worldWidth,
+              playerX: this.player.x + this.player.width / 2,
+              areas: this.level.areas.map((a) => ({
+                name: a.name,
+                startX: a.startX,
+                endX: a.endX,
+              })),
+              markers: [
+                ...this.interactables
+                  .map((it): { x: number; kind: 'chest' | 'chest_open' | 'shrine' | 'boss' | 'exit' } | null => {
+                    if (it.data.kind === 'chest') {
+                      return { x: it.x, kind: it.data.opened ? 'chest_open' : 'chest' };
+                    }
+                    if (it.data.kind === 'generic' && it.data.subType === 'puzzle_shrine') {
+                      return { x: it.x, kind: 'shrine' };
+                    }
+                    if (it.data.kind === 'gate' && it.data.gateType === 'exit') {
+                      return { x: it.x, kind: 'exit' };
+                    }
+                    return null;
+                  })
+                  .filter((m): m is NonNullable<typeof m> => m !== null),
+                ...(this.level.bossSpawn
+                  ? [{ x: this.level.bossSpawn.x, kind: 'boss' as const }]
+                  : []),
+              ],
             }
           : undefined,
     });

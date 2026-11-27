@@ -7,6 +7,7 @@
 // ============================================================
 
 import type { ArmorId, BossId, EnemyId, WeaponId } from '../types';
+import { sampleStickmanCombatPose, type CombatMoveType } from './combatRules';
 
 export interface SpriteFrame {
   canvas: OffscreenCanvas;
@@ -21,6 +22,7 @@ export interface SpritePalette {
   secondary: string;
   visor: string;
   glow: string;
+  cloak?: string;
   skin?: string;
 }
 
@@ -188,10 +190,46 @@ const HELM_PRAETOR: PixelKey[][] = [
   [null,null,null,null,null, 'B', 'B', 'B', 'B',null,null,null,null,null,null,null],
 ];
 
+// 5. Mossbell Warden — Leaf-Crested Bell Hood + Verdant Visor
+const HELM_MOSS_WARDEN: PixelKey[][] = [
+  [null,null,null,null, 'B', 'G', 'G', 'B',null,null,null,null,null,null,null,null], // bell leaf stem
+  [null,null,null, 'B', 'P', 'P', 'P', 'P', 'B',null,null,null,null,null,null,null],
+  [null,null, 'B', 'P', 'S', 'P', 'G', 'P', 'P', 'B',null,null,null,null,null,null],
+  [null, 'B', 'P', 'P', 'P', 'S', 'P', 'P', 'S', 'P', 'B',null,null,null,null,null],
+  [null, 'B', 'S', 'P', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'B',null,null,null,null],
+  [null, 'B', 'P', 'B', 'V', 'V', 'G', 'V', 'V', 'G', 'V', 'V', 'B',null,null,null],
+  [null, 'B', 'P', 'B', 'B', 'V', 'V', 'V', 'V', 'V', 'V', 'B',null,null,null,null],
+  [null, 'B', 'S', 'P', 'B', 'B', 'B', 'B', 'B', 'B', 'B',null,null,null,null,null],
+  [null,null, 'B', 'P', 'S', 'G', 'P', 'S', 'G', 'P', 'B',null,null,null,null,null],
+  [null,null, 'B', 'S', 'S', 'P', 'S', 'S', 'P', 'S', 'B',null,null,null,null,null],
+  [null,null,null, 'B', 'S', 'S', 'S', 'S', 'S', 'B',null,null,null,null,null,null],
+  [null,null,null,null, 'B', 'B', 'B', 'B', 'B',null,null,null,null,null,null,null],
+  [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],
+];
+
+// 6. Gilded Silk-Dancer — Twin Swept Silksong Mask Horns + Crimson Slit Visor
+const HELM_NEEDLE_DANCER: PixelKey[][] = [
+  [ 'B', 'P', 'B',null,null,null,null,null,null,null,null, 'B', 'P', 'B',null,null], // tall curved ivory horns
+  [null, 'B', 'P', 'B',null,null,null,null,null,null, 'B', 'P', 'B',null,null,null],
+  [null, 'B', 'P', 'P', 'B',null, 'B', 'G', 'B',null, 'B', 'P', 'P', 'B',null,null],
+  [null,null, 'B', 'P', 'P', 'B', 'P', 'P', 'P', 'B', 'P', 'P', 'B',null,null,null],
+  [null,null, 'B', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'B',null,null,null],
+  [null,null, 'B', 'S', 'P', 'B', 'V', 'V', 'B', 'P', 'V', 'V', 'B',null,null,null], // dark crimson eyes
+  [null,null, 'B', 'P', 'P', 'B', 'V', 'G', 'B', 'P', 'V', 'G', 'B',null,null,null],
+  [null,null, 'B', 'S', 'P', 'P', 'B', 'B', 'P', 'P', 'B', 'B', 'B',null,null,null],
+  [null,null,null, 'B', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'B',null,null,null,null],
+  [null,null,null, 'B', 'S', 'P', 'P', 'S', 'P', 'P', 'B',null,null,null,null,null],
+  [null,null,null,null, 'B', 'S', 'P', 'P', 'S', 'B',null,null,null,null,null,null],
+  [null,null,null,null,null, 'B', 'G', 'G', 'B',null,null,null,null,null,null,null],
+  [null,null,null,null,null,null, 'B', 'B',null,null,null,null,null,null,null,null],
+];
+
 const ARMOR_HELMS: Record<ArmorId, PixelKey[][]> = {
   recruit_mk1: HELM_RECRUIT,
+  moss_warden: HELM_MOSS_WARDEN,
   vanguard: HELM_VANGUARD,
   rift_stalker: HELM_STALKER,
+  needle_dancer: HELM_NEEDLE_DANCER,
   aether_praetor: HELM_PRAETOR,
 };
 
@@ -257,10 +295,42 @@ const CHEST_PRAETOR: PixelKey[][] = [
   [null,null,null, 'B', 'B', 'B',null,null,null,null, 'B', 'B', 'B',null,null,null],
 ];
 
+const CHEST_MOSS_WARDEN: PixelKey[][] = [
+  [null,null, 'B', 'G', 'S', 'S', 'S', 'S', 'S', 'G', 'B',null,null,null,null,null],
+  [null, 'B', 'P', 'P', 'G', 'P', 'P', 'P', 'G', 'P', 'P', 'B',null,null,null,null],
+  [ 'B', 'P', 'S', 'P', 'P', 'P', 'G', 'G', 'P', 'P', 'S', 'P', 'B',null,null,null],
+  [ 'B', 'P', 'P', 'S', 'P', 'G', 'V', 'V', 'G', 'P', 'S', 'P', 'B',null,null,null],
+  [null, 'B', 'P', 'P', 'S', 'P', 'G', 'G', 'P', 'S', 'P', 'B',null,null,null,null],
+  [null,null, 'B', 'P', 'P', 'S', 'P', 'P', 'S', 'P', 'B',null,null,null,null,null],
+  [null,null, 'B', 'S', 'P', 'P', 'G', 'G', 'P', 'S', 'B',null,null,null,null,null],
+  [null,null, 'B', 'P', 'S', 'P', 'P', 'P', 'S', 'P', 'B',null,null,null,null,null],
+  [null,null,null, 'B', 'S', 'B', 'G', 'G', 'B', 'S', 'B',null,null,null,null,null],
+  [null,null,null, 'B', 'S', 'S', 'S', 'S', 'S', 'S', 'B',null,null,null,null,null],
+  [null,null, 'B', 'G', 'P', 'B',null,null, 'B', 'P', 'G', 'B',null,null,null,null],
+  [null,null,null, 'B', 'B',null,null,null,null, 'B', 'B',null,null,null,null,null],
+];
+
+const CHEST_NEEDLE_DANCER: PixelKey[][] = [
+  [null,null,null, 'B', 'V', 'V', 'V', 'V', 'V', 'V', 'B',null,null,null,null,null], // crimson silk shawl
+  [null,null, 'B', 'V', 'V', 'G', 'V', 'V', 'G', 'V', 'V', 'B',null,null,null,null],
+  [null, 'B', 'V', 'V', 'V', 'V', 'G', 'G', 'V', 'V', 'V', 'V', 'B',null,null,null],
+  [null, 'B', 'V', 'S', 'V', 'V', 'P', 'P', 'V', 'V', 'S', 'V', 'B',null,null,null],
+  [null,null, 'B', 'V', 'V', 'S', 'P', 'P', 'S', 'V', 'V', 'B',null,null,null,null],
+  [null,null,null, 'B', 'S', 'P', 'G', 'G', 'P', 'S', 'B',null,null,null,null,null],
+  [null,null,null, 'B', 'P', 'S', 'P', 'P', 'S', 'P', 'B',null,null,null,null,null],
+  [null,null,null, 'B', 'V', 'P', 'S', 'S', 'P', 'V', 'B',null,null,null,null,null],
+  [null,null,null, 'B', 'G', 'B', 'V', 'V', 'B', 'G', 'B',null,null,null,null,null],
+  [null,null, 'B', 'V', 'V', 'S', 'S', 'S', 'S', 'V', 'V', 'B',null,null,null,null],
+  [null,null, 'B', 'V', 'B',null,null,null,null, 'B', 'V', 'B',null,null,null,null],
+  [null,null,null, 'B',null,null,null,null,null,null, 'B',null,null,null,null,null],
+];
+
 const ARMOR_CHESTS: Record<ArmorId, PixelKey[][]> = {
   recruit_mk1: CHEST_RECRUIT,
+  moss_warden: CHEST_MOSS_WARDEN,
   vanguard: CHEST_VANGUARD,
   rift_stalker: CHEST_STALKER,
+  needle_dancer: CHEST_NEEDLE_DANCER,
   aether_praetor: CHEST_PRAETOR,
 };
 
@@ -300,6 +370,9 @@ export interface AvatarRenderState {
   hasOffhandShield: boolean;
   iaidoWindup: boolean;
   scarfPoints: Array<{ x: number; y: number }>;
+  /** Active stickman combat move & normalized [0..1] progress */
+  combatMove?: CombatMoveType | null;
+  combatMoveProgress?: number;
 }
 
 function drawLimbSegment(
@@ -365,36 +438,37 @@ export function drawComplexSlayerAvatar(
   const bottomY = s.y + s.height;
   const pal = s.palette;
 
-  // ── 1. Multi-layer Flowing Cloak Behind Hero ────────────
+  // ── 1. Multi-layer Flowing Silksong Cloak Behind Hero ────
   if (s.scarfPoints.length >= 2) {
     ctx.save();
-    // Outer cloak outline/cloth
+    const cloakPrimary = pal.cloak ?? pal.primary;
+    const cloakShade = pal.secondary;
     ctx.lineCap = 'round';
     for (let i = 0; i < s.scarfPoints.length - 1; i++) {
       const p0 = s.scarfPoints[i];
       const p1 = s.scarfPoints[i + 1];
-      const w = Math.max(2, 6 - i);
+      const w = Math.max(2.5, 7.5 - i * 0.9);
       ctx.strokeStyle = '#0B0D14';
-      ctx.lineWidth = w + 1.5;
+      ctx.lineWidth = w + 1.8;
       ctx.beginPath();
       ctx.moveTo(p0.x, p0.y);
       ctx.lineTo(p1.x, p1.y);
       ctx.stroke();
 
-      ctx.strokeStyle = i % 2 === 0 ? pal.secondary : pal.primary;
+      ctx.strokeStyle = i % 2 === 0 ? cloakPrimary : cloakShade;
       ctx.lineWidth = w;
       ctx.beginPath();
       ctx.moveTo(p0.x, p0.y);
       ctx.lineTo(p1.x, p1.y);
       ctx.stroke();
     }
-    // Glowing trim line along edge of cloak
+    // Luminous woven trim line along hem of cloak
     ctx.strokeStyle = pal.glow;
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = 1.25;
     ctx.beginPath();
     ctx.moveTo(s.scarfPoints[0].x, s.scarfPoints[0].y + 1);
     for (let i = 1; i < s.scarfPoints.length; i++) {
-      ctx.lineTo(s.scarfPoints[i].x, s.scarfPoints[i].y + 1.5);
+      ctx.lineTo(s.scarfPoints[i].x, s.scarfPoints[i].y + 1.6);
     }
     ctx.stroke();
     ctx.restore();
@@ -406,26 +480,27 @@ export function drawComplexSlayerAvatar(
   const idleBob = Math.sin(s.animTime * 4) * 0.7;
   const runBob = moving ? Math.abs(Math.sin(s.walkPhase)) * 1.8 : 0;
 
+  const activePose =
+    s.combatMove && !s.isBlocking
+      ? sampleStickmanCombatPose(s.combatMove, s.combatMoveProgress ?? 0)
+      : null;
+
   let bodyTilt = 0;
   let headTilt = 0;
   let crouchY = 0;
 
-  if (s.isDashing) {
+  if (activePose) {
+    bodyTilt = activePose.torsoTilt;
+    headTilt = activePose.headTilt;
+    crouchY = activePose.crouchY;
+  } else if (s.isDashing) {
     bodyTilt = 0.42;
     headTilt = -0.18;
     crouchY = 2;
-  } else if (s.spinAttack > 0) {
-    // Hit 2 dynamic spinning cyclone uppercut
-    bodyTilt = 0;
-    crouchY = -1;
   } else if (s.isBlocking) {
     bodyTilt = -0.1;
     headTilt = 0.14;
     crouchY = 3.2;
-  } else if (s.meleeTimer > 0) {
-    const t = 1 - s.meleeTimer / Math.max(0.05, s.meleeDuration);
-    bodyTilt = s.meleeCombo === 3 ? -0.25 + t * 0.65 : 0.28 * Math.sin(t * Math.PI);
-    crouchY = s.meleeCombo === 3 ? 2 * t : 1;
   } else if (s.isWallSliding) {
     bodyTilt = -0.16;
     headTilt = 0.1;
@@ -446,7 +521,16 @@ export function drawComplexSlayerAvatar(
   let fKneeX = 2, fKneeY = hipY + 5, fFootX = 3, fFootY = -1;
   let offArmAngle = 0.25;
 
-  if (s.isDashing) {
+  if (activePose) {
+    fKneeX = activePose.frontKnee.x;
+    fKneeY = activePose.frontKnee.y;
+    fFootX = activePose.frontFoot.x;
+    fFootY = activePose.frontFoot.y;
+    bKneeX = activePose.backKnee.x;
+    bKneeY = activePose.backKnee.y;
+    bFootX = activePose.backFoot.x;
+    bFootY = activePose.backFoot.y;
+  } else if (s.isDashing) {
     bKneeX = -7; bKneeY = hipY + 3; bFootX = -11; bFootY = -4;
     fKneeX = 4; fKneeY = hipY + 2; fFootX = 1; fFootY = -2;
     offArmAngle = -0.9;
@@ -456,29 +540,19 @@ export function drawComplexSlayerAvatar(
     offArmAngle = -1.2;
   } else if (!s.onGround) {
     if (s.vy < 0) {
-      // Rising tuck
       fKneeX = 5; fKneeY = hipY + 3; fFootX = 3; fFootY = hipY + 8;
       bKneeX = -4; bKneeY = hipY + 5; bFootX = -6; bFootY = hipY + 10;
       offArmAngle = -0.65;
     } else {
-      // Falling brace
       fKneeX = 4; fKneeY = hipY + 5; fFootX = 5; fFootY = hipY + 10;
       bKneeX = -3; bKneeY = hipY + 4; bFootX = -5; bFootY = hipY + 9;
       offArmAngle = -0.95;
     }
   } else if (s.isBlocking) {
-    // Low anchored martial guard stance
     fKneeX = 5; fKneeY = hipY + 4; fFootX = 6; fFootY = -1;
     bKneeX = -4; bKneeY = hipY + 5; bFootX = -6; bFootY = -1;
     offArmAngle = -0.15;
-  } else if (s.meleeTimer > 0) {
-    // Wide lunging stance during combo hits
-    const stride = s.meleeCombo === 3 ? 7 : 5.5;
-    fKneeX = stride - 1; fKneeY = hipY + 4; fFootX = stride; fFootY = -1;
-    bKneeX = -stride + 1; bKneeY = hipY + 5; bFootX = -stride - 1; bFootY = -1;
-    offArmAngle = s.meleeCombo === 2 ? -0.35 : -0.75;
   } else if (moving) {
-    // Smooth sinusoidal running gait
     const sF = Math.sin(s.walkPhase);
     const cF = Math.cos(s.walkPhase);
     const sB = Math.sin(s.walkPhase + Math.PI);
@@ -499,7 +573,6 @@ export function drawComplexSlayerAvatar(
 
     offArmAngle = -sF * 0.85 * speedRatio;
   } else {
-    // Idle breathing readiness
     fKneeX = 3; fKneeY = hipY + 5; fFootX = 3; fFootY = -1;
     bKneeX = -2; bKneeY = hipY + 5; bFootX = -3; bFootY = -1;
     offArmAngle = 0.25 + Math.sin(s.animTime * 4) * 0.08;
@@ -511,24 +584,23 @@ export function drawComplexSlayerAvatar(
     ctx.globalAlpha = 0.48;
   }
 
-  ctx.scale(s.facingRight ? s.scaleX : -s.scaleX, s.scaleY);
+  const totalScaleX = s.scaleX * (activePose?.squashX ?? 1);
+  const totalScaleY = s.scaleY * (activePose?.squashY ?? 1);
+  ctx.scale(s.facingRight ? totalScaleX : -totalScaleX, totalScaleY);
 
-  // Acrobatic flip (Double Jump) OR Horizontal / Vertical Spin Attack
-  if (s.doubleJumpFlip > 0) {
+  if (activePose && activePose.bodyOffsetX !== 0) {
+    ctx.translate(activePose.bodyOffsetX, 0);
+  }
+
+  // Acrobatic flip (Double Jump) OR Stickman Vertical Spin Somersault
+  if (activePose && activePose.bodyRotation !== 0) {
+    ctx.translate(0, -14);
+    ctx.rotate(activePose.bodyRotation);
+    ctx.translate(0, 14);
+  } else if (s.doubleJumpFlip > 0) {
     ctx.translate(0, -14);
     ctx.rotate((1 - s.doubleJumpFlip) * Math.PI * 2);
     ctx.translate(0, 14);
-  } else if (s.spinAttack > 0) {
-    if (s.spinMode === 'horizontal') {
-      const hCos = Math.cos((1 - s.spinAttack) * Math.PI * 4);
-      const safeScaleX = Math.abs(hCos) < 0.2 ? (hCos >= 0 ? 0.2 : -0.2) : hCos;
-      ctx.scale(safeScaleX, 1);
-    } else {
-      // Crisp 2x vertical forward somersault wheel spin!
-      ctx.translate(0, -14);
-      ctx.rotate((1 - s.spinAttack) * Math.PI * 4);
-      ctx.translate(0, 14);
-    }
   }
 
   // ── 2. Armor-Specific Complex Back Aura / Thrusters / Halo ──
@@ -579,6 +651,30 @@ export function drawComplexSlayerAvatar(
     ctx.moveTo(-3, Math.round(-24 + crouchY));
     ctx.lineTo(-10, Math.round(-20 + crouchY - flutter));
     ctx.stroke();
+  } else if (s.armorId === 'moss_warden') {
+    // Swaying moss-bell charm + glowing spore wisps on back
+    const sway = Math.sin(s.animTime * 7) * 1.6;
+    ctx.fillStyle = '#0B0D14';
+    ctx.fillRect(Math.round(-7 + sway * 0.4), Math.round(-19 + crouchY), 5, 6);
+    ctx.fillStyle = '#FACC15';
+    ctx.fillRect(Math.round(-6 + sway * 0.4), Math.round(-18 + crouchY), 3, 4);
+    ctx.fillStyle = '#4ADE80';
+    ctx.fillRect(Math.round(-9 + sway), Math.round(-23 + crouchY), 2, 2);
+  } else if (s.armorId === 'needle_dancer') {
+    // Twin gilded crimson silk ribbons trailing behind mask horns
+    const wave = Math.sin(s.animTime * 14) * 2.4;
+    ctx.strokeStyle = '#F43F5E';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-3, Math.round(-23 + crouchY));
+    ctx.quadraticCurveTo(-9, Math.round(-21 + crouchY + wave), -15, Math.round(-18 + crouchY - wave * 0.6));
+    ctx.stroke();
+    ctx.strokeStyle = '#FACC15';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-4, Math.round(-21 + crouchY));
+    ctx.quadraticCurveTo(-10, Math.round(-18 + crouchY - wave), -14, Math.round(-15 + crouchY + wave * 0.5));
+    ctx.stroke();
   }
 
   // ── 3. Back Articulated Leg ─────────────────────────────
@@ -586,7 +682,6 @@ export function drawComplexSlayerAvatar(
 
   // ── 4. Off-Hand Left Arm / Buckler / Cyber Fang / Katana Scabbard ─
   if (s.meleeWeaponId === 'katana') {
-    // Sleek Iaido Saya (Scabbard) worn at left hip behind torso
     ctx.save();
     ctx.translate(-3, -10 + crouchY);
     ctx.rotate(-0.32);
@@ -595,12 +690,11 @@ export function drawComplexSlayerAvatar(
     ctx.fillStyle = '#1E293B';
     ctx.fillRect(-9, 0, 14, 2);
     ctx.fillStyle = '#EF4444';
-    ctx.fillRect(-2, 0, 5, 2); // crimson sageo cord wrap
+    ctx.fillRect(-2, 0, 5, 2);
     ctx.fillStyle = '#FACC15';
-    ctx.fillRect(-10, 0, 2, 2); // golden kojiri tip
-    ctx.fillRect(5, -1, 2, 4); // koi-guchi mouth
-    if (s.iaidoWindup || (s.meleeTimer <= 0 && !s.isBlocking)) {
-      // Sheathed katana hilt protruding from scabbard mouth + glowing draw glint!
+    ctx.fillRect(-10, 0, 2, 2);
+    ctx.fillRect(5, -1, 2, 4);
+    if (s.iaidoWindup || (!activePose && s.meleeTimer <= 0 && !s.isBlocking)) {
       ctx.fillStyle = '#FACC15';
       ctx.fillRect(7, -2, 1, 5);
       ctx.fillStyle = '#EF4444';
@@ -615,52 +709,96 @@ export function drawComplexSlayerAvatar(
     ctx.restore();
   }
 
-  ctx.save();
-  ctx.translate(2, -17 + crouchY);
-  const offDualAngle =
-    s.meleeWeaponId === 'dual_sword' && s.meleeTimer > 0
-      ? -1.2 + (1 - s.meleeTimer / Math.max(0.05, s.meleeDuration)) * 2.5
-      : offArmAngle;
-  ctx.rotate(offDualAngle);
-  // Arm & gauntlet
-  ctx.fillStyle = '#0B0D14';
-  ctx.fillRect(-1, -1, 7, 4);
-  ctx.fillStyle = pal.secondary;
-  ctx.fillRect(0, 0, 5, 2);
-  ctx.fillStyle = pal.glow;
-  ctx.fillRect(4, 0, 2, 2);
+  const handShoulderX = 2 + Math.sin(bodyTilt) * 5;
+  const handShoulderY = -17 + crouchY;
 
-  if (s.meleeWeaponId === 'dual_sword') {
-    // Cool redesigned Off-Hand Twin Phantom Kukri Fang (reverse/forward cyber silhouette!)
-    if (s.meleeWeaponLevel >= 2) {
-      ctx.shadowColor = '#A855F7';
-      ctx.shadowBlur = s.meleeWeaponLevel === 3 ? 9 : 5;
-    }
-    ctx.fillStyle = '#FACC15';
-    ctx.fillRect(5, -3, 2, 6); // gold winged guard
-    ctx.fillStyle = '#1E1B4B';
-    ctx.fillRect(7, -2, 11, 3); // dark blade body
-    ctx.fillStyle = '#A855F7';
-    ctx.fillRect(8, -3, 9, 1); // purple plasma ridge
-    ctx.fillStyle = '#00F0FF';
-    ctx.fillRect(8, 0, 12, 1); // razor cyan edge
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillRect(15, -2, 4, 2); // wicked tip glint
-  } else if (s.hasOffhandShield) {
-    // Full Armored Wrist Energy Shield Emitter on 2H Melee builds
-    ctx.fillStyle = '#0B0D14';
-    ctx.fillRect(4, -5, 4, 10);
-    ctx.fillStyle = pal.primary;
-    ctx.fillRect(5, -4, 2, 8);
-    ctx.fillStyle = '#00F0FF';
-    ctx.fillRect(6, -3, 2, 6);
-  } else if (s.isBlocking) {
-    ctx.fillStyle = '#0B0D14';
-    ctx.fillRect(5, -4, 3, 8);
+  const drawStickmanMainArm = () => {
+    if (!activePose) return;
+    const ex = handShoulderX + activePose.elbow.x;
+    const ey = handShoulderY + activePose.elbow.y;
+    const hx = handShoulderX + activePose.hand.x;
+    const hy = handShoulderY + activePose.hand.y;
+
+    // Articulated 2-bone stickman upper arm + forearm with glowing elbow joint
+    drawLimbSegment(ctx, handShoulderX, handShoulderY, ex, ey, 2.8, '#0B0D14', pal.primary);
+    drawLimbSegment(ctx, ex, ey, hx, hy, 2.6, '#0B0D14', pal.secondary);
     ctx.fillStyle = pal.glow;
-    ctx.fillRect(6, -3, 1, 6);
+    ctx.fillRect(Math.round(ex - 1), Math.round(ey - 1), 2, 2);
+    ctx.fillStyle = '#0B0D14';
+    ctx.fillRect(Math.round(hx - 2), Math.round(hy - 2), 4, 4);
+    ctx.fillStyle = pal.primary;
+    ctx.fillRect(Math.round(hx - 1), Math.round(hy - 1), 2, 2);
+
+    ctx.save();
+    ctx.translate(hx, hy);
+    ctx.rotate(activePose.weaponAngle);
+    drawWeaponPixelArt(ctx, s.meleeWeaponId, s.meleeWeaponLevel, s.animTime);
+    ctx.restore();
+  };
+
+  if (activePose) {
+    // Articulated 2-bone off-hand arm for expressive stickman counter-balance
+    const oShX = -1 + Math.sin(bodyTilt) * 4;
+    const oShY = -17 + crouchY;
+    const oEx = oShX + activePose.offElbow.x;
+    const oEy = oShY + activePose.offElbow.y;
+    const oHx = oShX + activePose.offHand.x;
+    const oHy = oShY + activePose.offHand.y;
+    drawLimbSegment(ctx, oShX, oShY, oEx, oEy, 2.4, '#0B0D14', pal.secondary);
+    drawLimbSegment(ctx, oEx, oEy, oHx, oHy, 2.2, '#0B0D14', pal.secondary);
+    ctx.fillStyle = pal.glow;
+    ctx.fillRect(Math.round(oHx - 1), Math.round(oHy - 1), 2, 2);
+
+    if (s.meleeWeaponId === 'dual_sword') {
+      const offAng = Math.atan2(oHy - oEy, oHx - oEx);
+      ctx.save();
+      ctx.translate(oHx, oHy);
+      ctx.rotate(offAng);
+      drawOffhandTwinBlade(ctx, s.meleeWeaponLevel);
+      ctx.restore();
+    }
+    // Back half of horizontal spin draws main weapon behind torso for crisp 3D depth!
+    if (activePose.weaponBehindTorso) {
+      drawStickmanMainArm();
+    }
+  } else {
+    ctx.save();
+    ctx.translate(2, -17 + crouchY);
+    ctx.rotate(offArmAngle);
+    ctx.fillStyle = '#0B0D14';
+    ctx.fillRect(-1, -1, 7, 4);
+    ctx.fillStyle = pal.secondary;
+    ctx.fillRect(0, 0, 5, 2);
+    ctx.fillStyle = pal.glow;
+    ctx.fillRect(4, 0, 2, 2);
+
+    if (s.meleeWeaponId === 'dual_sword') {
+      ctx.save();
+      ctx.translate(5, 0);
+      drawOffhandTwinBlade(ctx, s.meleeWeaponLevel);
+      ctx.restore();
+    } else if (s.hasOffhandShield) {
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(4, -5, 4, 10);
+      ctx.fillStyle = pal.primary;
+      ctx.fillRect(5, -4, 2, 8);
+      ctx.fillStyle = '#00F0FF';
+      ctx.fillRect(6, -3, 2, 6);
+    } else if (s.meleeWeaponId === 'needle') {
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(4, -3, 4, 6);
+      ctx.fillStyle = '#FFF1F2';
+      ctx.fillRect(5, -2, 2, 4);
+      ctx.fillStyle = '#F43F5E';
+      ctx.fillRect(5, -1, 2, 2);
+    } else if (s.isBlocking) {
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(5, -4, 3, 8);
+      ctx.fillStyle = pal.glow;
+      ctx.fillRect(6, -3, 1, 6);
+    }
+    ctx.restore();
   }
-  ctx.restore();
 
   // ── 5. Tilted Torso + Armor Chestplate Matrix ───────────
   ctx.save();
@@ -685,11 +823,9 @@ export function drawComplexSlayerAvatar(
   // ── 7. Front Articulated Leg ────────────────────────────
   drawArmoredLeg(ctx, 1, hipY, fKneeX, fKneeY, fFootX, fFootY, pal.primary, pal.secondary, pal.glow);
 
-  // ── 8. Front Right Arm + Pauldron + Active Weapon (With Lv.2/Lv.3 Glow!) ─
-  const handShoulderX = 2 + Math.sin(bodyTilt) * 6;
-  const handShoulderY = -17 + crouchY;
+  // ── 8. Front Right Arm + Active Weapon ──────────────────
   const isKatanaSheathed =
-    s.meleeWeaponId === 'katana' && (s.iaidoWindup || (s.meleeTimer <= 0 && !s.isBlocking));
+    s.meleeWeaponId === 'katana' && (s.iaidoWindup || (!activePose && s.meleeTimer <= 0 && !s.isBlocking));
 
   if (s.isBlocking) {
     drawWeaponInHand(
@@ -708,24 +844,10 @@ export function drawComplexSlayerAvatar(
       s.animTime,
       false
     );
-  } else if (s.meleeTimer > 0 && !s.iaidoWindup) {
-    const prog = 1 - s.meleeTimer / Math.max(0.05, s.meleeDuration);
-    drawWeaponInHand(
-      ctx,
-      s.meleeWeaponId,
-      handShoulderX,
-      handShoulderY,
-      true,
-      pal,
-      prog,
-      s.meleeCombo,
-      s.isPogo,
-      0,
-      false,
-      s.meleeWeaponLevel,
-      s.animTime,
-      false
-    );
+  } else if (activePose) {
+    if (!activePose.weaponBehindTorso) {
+      drawStickmanMainArm();
+    }
   } else {
     const recoil = s.rangedTimer > 0 ? 3 : 0;
     const useRangedPose = s.rangedTimer > 0 && s.rangedWeaponId !== null;
@@ -821,6 +943,7 @@ export function getMCPoseMatrix(armorId: ArmorId, _pose: MCPoseName): PixelKey[]
 }
 
 const WEAPON_GLOW_COLOR: Record<WeaponId, string> = {
+  needle: '#F43F5E',
   dagger: '#00F0FF',
   sword: '#F97316',
   spear: '#00F0FF',
@@ -873,7 +996,29 @@ export function drawWeaponInHand(
     ctx.rotate(-1.05);
   } else if (swingProgress > 0) {
     if (isPogo) {
-      ctx.rotate(Math.PI * 0.5 + (-0.9 + swingProgress * 1.8));
+      if (weaponId === 'needle') {
+        // Iconic Silksong diagonal dive-needle thrust
+        const poke = Math.sin(swingProgress * Math.PI) * 7;
+        ctx.rotate(Math.PI * 0.42);
+        ctx.translate(poke, 0);
+      } else {
+        ctx.rotate(Math.PI * 0.5 + (-0.9 + swingProgress * 1.8));
+      }
+    } else if (weaponId === 'needle') {
+      if (comboStep === 3) {
+        // Gossamer 3x rapid silk-weave thrusts
+        const poke = Math.abs(Math.sin(swingProgress * Math.PI * 3)) * 9;
+        ctx.translate(poke, Math.sin(swingProgress * Math.PI * 6) * 1.4);
+        ctx.rotate(Math.sin(swingProgress * Math.PI * 3) * 0.22);
+      } else if (comboStep === 2) {
+        // Thread Lunge: deep forward needle pierce
+        const poke = Math.sin(swingProgress * Math.PI) * 10;
+        ctx.translate(poke, -0.5);
+        ctx.rotate(0.05);
+      } else {
+        // Silk Lash: whippy sweeping slash
+        ctx.rotate(-1.35 + swingProgress * 2.55);
+      }
     } else if (weaponId === 'dagger') {
       if (comboStep === 3) {
         const poke = Math.abs(Math.sin(swingProgress * Math.PI * 3)) * 6;
@@ -954,21 +1099,49 @@ export function drawWeaponInHand(
   ctx.fillRect(5, -1, 2, 3);
 
   ctx.translate(6, 0);
+  drawWeaponPixelArt(ctx, weaponId, weaponLevel, animTime);
+  ctx.restore();
+}
 
-  // Weapon Upgrade Lv.2 / Lv.3 Glowing Aura Halo
+function drawOffhandTwinBlade(ctx: CanvasRenderingContext2D, weaponLevel: number) {
+  if (weaponLevel >= 2) {
+    ctx.shadowColor = '#A855F7';
+    ctx.shadowBlur = weaponLevel === 3 ? 9 : 5;
+  }
+  ctx.fillStyle = '#FACC15';
+  ctx.fillRect(0, -3, 2, 6);
+  ctx.fillStyle = '#1E1B4B';
+  ctx.fillRect(2, -2, 11, 3);
+  ctx.fillStyle = '#A855F7';
+  ctx.fillRect(3, -3, 9, 1);
+  ctx.fillStyle = '#00F0FF';
+  ctx.fillRect(3, 0, 12, 1);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(10, -2, 4, 2);
+}
+
+/** Shared pixel-art renderer for all 12 weapons anchored at the hand grip (0, 0) */
+export function drawWeaponPixelArt(
+  ctx: CanvasRenderingContext2D,
+  weaponId: WeaponId,
+  weaponLevel = 1,
+  animTime = 0
+) {
   const glowColor = WEAPON_GLOW_COLOR[weaponId] ?? '#00F0FF';
   if (weaponLevel >= 2) {
     const pulse = 0.65 + 0.35 * Math.sin(animTime * 9);
     ctx.shadowColor = glowColor;
     ctx.shadowBlur = weaponLevel === 3 ? 11 : 6;
     const glowLen =
-      weaponId === 'spear'
-        ? 22
-        : weaponId === 'sword' || weaponId === 'katana'
-          ? 17
-          : weaponId === 'axe' || weaponId === 'hammer'
-            ? 16
-            : 12;
+      weaponId === 'dagger'
+        ? 6
+        : weaponId === 'spear' || weaponId === 'needle'
+          ? 22
+          : weaponId === 'sword' || weaponId === 'katana'
+            ? 17
+            : weaponId === 'axe' || weaponId === 'hammer'
+              ? 16
+              : 12;
     ctx.fillStyle =
       weaponLevel === 3
         ? `rgba(255, 255, 255, ${0.28 + pulse * 0.2})`
@@ -977,13 +1150,42 @@ export function drawWeaponInHand(
   }
 
   switch (weaponId) {
+    case 'needle': {
+      const threadWave = Math.sin(animTime * 14) * 2.2;
+      ctx.strokeStyle = weaponLevel >= 2 ? '#FFF1F2' : '#FDA4AF';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-4, 0);
+      ctx.quadraticCurveTo(-9, threadWave, -14, -threadWave * 0.6);
+      ctx.stroke();
+
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(-5, -2, 4, 4);
+      ctx.fillStyle = '#E2E8F0';
+      ctx.fillRect(-4, -1, 2, 2);
+      ctx.fillStyle = '#F43F5E';
+      ctx.fillRect(-1, -3, 2, 6);
+      ctx.fillStyle = '#CBD5E1';
+      ctx.fillRect(1, -1, 14, 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(1, -1, 18, 1);
+      ctx.fillStyle = weaponLevel >= 2 ? '#F43F5E' : '#FB7185';
+      ctx.fillRect(3, 0, 12, 1);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(18, -1, 3, 1);
+      break;
+    }
+
     case 'dagger':
-      ctx.fillStyle = weaponLevel >= 2 ? '#E2E8F0' : '#475569';
+      // Ultra-short tactical backup blade (visibly compact close-range Gun sidearm!)
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(-2, -2, 3, 4);
+      ctx.fillStyle = weaponLevel >= 2 ? '#FACC15' : '#64748B';
       ctx.fillRect(-1, -2, 2, 4);
       ctx.fillStyle = weaponLevel >= 3 ? '#FFFFFF' : '#CBD5E1';
-      ctx.fillRect(1, -1, 9, 2);
-      ctx.fillStyle = weaponLevel >= 2 ? '#00F0FF' : '#F97316';
-      ctx.fillRect(3, 0, 6, 1);
+      ctx.fillRect(1, -1, 5, 2);
+      ctx.fillStyle = weaponLevel >= 2 ? '#00F0FF' : '#38BDF8';
+      ctx.fillRect(2, 0, 4, 1);
       break;
 
     case 'sword':
@@ -998,7 +1200,6 @@ export function drawWeaponInHand(
       break;
 
     case 'spear':
-      // Long tactical polearm shaft + energized lance tip
       ctx.fillStyle = '#78350F';
       ctx.fillRect(-5, -1, 19, 2);
       ctx.fillStyle = '#FACC15';
@@ -1010,7 +1211,6 @@ export function drawWeaponInHand(
       break;
 
     case 'katana':
-      // Sleek curved Rift Katana with gold tsuba
       ctx.fillStyle = '#1E293B';
       ctx.fillRect(-2, -1, 3, 2);
       ctx.fillStyle = '#FACC15';
@@ -1024,7 +1224,6 @@ export function drawWeaponInHand(
       break;
 
     case 'dual_sword':
-      // Sleek Main-Hand Aether Kukri Fang (stepped cyber silhouette + glowing edge + gold hilt)
       ctx.fillStyle = '#0B0D14';
       ctx.fillRect(-1, -4, 3, 8);
       ctx.fillStyle = '#FACC15';
@@ -1032,11 +1231,11 @@ export function drawWeaponInHand(
       ctx.fillStyle = '#1E1B4B';
       ctx.fillRect(2, -2, 13, 3);
       ctx.fillStyle = '#A855F7';
-      ctx.fillRect(3, 1, 9, 1); // violet under-ridge
+      ctx.fillRect(3, 1, 9, 1);
       ctx.fillStyle = weaponLevel >= 2 ? '#FFFFFF' : '#00F0FF';
-      ctx.fillRect(2, -2, 14, 1); // razor plasma edge
+      ctx.fillRect(2, -2, 14, 1);
       ctx.fillStyle = '#00F0FF';
-      ctx.fillRect(11, -3, 4, 2); // hooked kukri tip
+      ctx.fillRect(11, -3, 4, 2);
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(14, -3, 2, 2);
       break;
@@ -1053,7 +1252,6 @@ export function drawWeaponInHand(
       break;
 
     case 'hammer':
-      // Massive Grav-Crusher Warhammer
       ctx.fillStyle = '#475569';
       ctx.fillRect(-2, -1, 12, 2);
       ctx.fillStyle = '#0B0D14';
@@ -1109,14 +1307,12 @@ export function drawWeaponInHand(
       break;
   }
 
-  // Lv.3 Animated Glint Sparkle gliding along blade
   if (weaponLevel >= 3) {
-    const sparkX = 4 + Math.round(((animTime * 22) % 10));
+    const maxSpark = weaponId === 'dagger' ? 4 : 10;
+    const sparkX = 2 + Math.round((animTime * 22) % maxSpark);
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(sparkX, -1, 2, 2);
   }
-
-  ctx.restore();
 }
 
 // ── CHEST & PYLON SPRITES ───────────────────────────────────

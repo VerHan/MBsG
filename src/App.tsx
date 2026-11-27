@@ -22,11 +22,20 @@ import type { PlayableModeKey } from './engine/LevelBuilder';
 type Screen = 'title' | 'lore' | 'playing';
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('title');
+  const [screen, setScreen] = useState<Screen>(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('autostart') === '1') {
+      return 'playing';
+    }
+    return 'title';
+  });
   const [selectedMode, setSelectedMode] = useState<PlayableModeKey>('stage_1');
   const [student, setStudent] = useState<StudentProgress | null>(() => getActiveStudentLocal());
   const [showReport, setShowReport] = useState(false);
   const [, setConfigTick] = useState(0);
+
+  useEffect(() => {
+    document.body.dataset.state = screen;
+  }, [screen]);
 
   const studentRef = useRef<StudentProgress | null>(student);
   useEffect(() => {

@@ -48,6 +48,7 @@ export class InputManager {
   private _keysDown = new Set<string>();
   private _mouseDown = new Set<number>();
   private _virtualDown = new Set<InputAction>();
+  private _latchedActions = new Set<InputAction>();
 
   private _bindings: KeyBinding[];
   private _enabled = true;
@@ -69,6 +70,11 @@ export class InputManager {
       if (['Space', 'Tab', 'ArrowUp', 'ArrowDown'].includes(e.code)) {
         e.preventDefault();
       }
+      if (!this._keysDown.has(e.code)) {
+        for (const b of this._bindings) {
+          if (b.keys.includes(e.code)) this._latchedActions.add(b.action);
+        }
+      }
       this._keysDown.add(e.code);
     });
 
@@ -79,6 +85,11 @@ export class InputManager {
     canvas.addEventListener('mousedown', (e) => {
       if (!this._enabled) return;
       e.preventDefault();
+      if (!this._mouseDown.has(e.button)) {
+        for (const b of this._bindings) {
+          if (b.mouse === e.button) this._latchedActions.add(b.action);
+        }
+      }
       this._mouseDown.add(e.button);
     });
 
@@ -98,14 +109,19 @@ export class InputManager {
       this._keysDown.clear();
       this._mouseDown.clear();
       this._virtualDown.clear();
+      this._latchedActions.clear();
     });
   }
 
   /** Set virtual button state from mobile TouchControls */
   setVirtualAction(action: InputAction, down: boolean) {
     if (!this._enabled && down) return;
-    if (down) this._virtualDown.add(action);
-    else this._virtualDown.delete(action);
+    if (down) {
+      if (!this._virtualDown.has(action)) this._latchedActions.add(action);
+      this._virtualDown.add(action);
+    } else {
+      this._virtualDown.delete(action);
+    }
   }
 
   update() {
@@ -128,8 +144,17 @@ export class InputManager {
         }
       }
 
+      const latched = this._latchedActions.has(binding.action);
+      if (latched) {
+        this._latchedActions.delete(binding.action);
+        if (!isHeld && !wasHeld) {
+          // Ensure rapid sub-frame taps are visible for one fixed tick
+          isHeld = true;
+        }
+      }
+
       this._held.set(binding.action, isHeld);
-      this._justPressed.set(binding.action, isHeld && !wasHeld);
+      this._justPressed.set(binding.action, (isHeld && !wasHeld) || (latched && !wasHeld));
       this._justReleased.set(binding.action, !isHeld && wasHeld);
     }
   }
@@ -152,6 +177,7 @@ export class InputManager {
       this._keysDown.clear();
       this._mouseDown.clear();
       this._virtualDown.clear();
+      this._latchedActions.clear();
     }
   }
 }

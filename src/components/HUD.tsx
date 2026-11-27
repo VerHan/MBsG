@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import type { HudSnapshot } from '../engine/GameEngine';
 import { ARMORS } from '../data/armors';
-import { WEAPONS } from '../data/weapons';
+import { DAMAGE_TYPE_LABEL, WEAPONS } from '../data/weapons';
 
 interface HUDProps {
   hud: HudSnapshot;
@@ -60,7 +60,7 @@ export function HUD({
       {/* ── TOP BAR ── */}
       <div className="flex items-start justify-between gap-2">
         {/* Top-Left: Vitals & Armor */}
-        <div className="w-48 sm:w-64 border border-ancient-stone bg-abyss-950/85 p-2 sm:p-2.5 backdrop-blur-sm">
+        <div className="w-48 sm:w-64 border border-ancient-stone bg-abyss-950/90 p-2 sm:p-2.5">
           <div className="mb-1 flex items-center justify-between text-[10px] text-slate-400">
             <span className="truncate font-bold text-slate-200">{armorDef?.name}</span>
             <span className="text-loot-gold font-bold">{hud.shards} SHARDS</span>
@@ -105,7 +105,7 @@ export function HUD({
               [Q] Vial: {hud.nanoVials}/{hud.maxNanoVials}
             </span>
             <span className="text-loot-gold font-semibold">
-              [R] Ammo: {hud.ammoPacks}/{hud.maxAmmoPacks}
+              {hud.isMeleeMode ? '[R] Energy:' : '[R] Ammo:'} {hud.ammoPacks}/{hud.maxAmmoPacks}
             </span>
           </div>
           {hud.manaShieldTimer > 0 && (
@@ -117,7 +117,7 @@ export function HUD({
 
         {/* Top-Center: Area / Mode Objective / Timer / Pylon HP / Boss HP */}
         <div className="flex flex-col items-center gap-1.5">
-          <div className="border border-ancient-stone bg-abyss-950/85 px-3 py-1.5 text-center backdrop-blur-sm">
+          <div className="border border-ancient-stone bg-abyss-950/90 px-3 py-1.5 text-center">
             <div className="text-[9px] font-bold tracking-widest text-loot-gold uppercase">
               STAGE {hud.stageNumber} · {hud.themeTopic}
             </div>
@@ -166,17 +166,72 @@ export function HUD({
             )}
 
             {hud.mode === 'traverse' && (
-              <div className="mt-1 w-44 sm:w-56">
-                <div className="mb-0.5 flex justify-between text-[9px] text-slate-400">
-                  <span>Progres Sektor</span>
-                  <span className="text-loot-gold">{hud.progressPct}%</span>
+              <div className="mt-1.5 w-52 sm:w-64">
+                <div className="mb-0.5 flex justify-between text-[9px] text-slate-400 tabular-nums">
+                  <span>Peta Sektor</span>
+                  <span className="text-loot-gold font-bold">{hud.progressPct}%</span>
                 </div>
-                <div className="h-1.5 w-full bg-abyss-900 border border-ancient-stone">
-                  <div
-                    className="h-full bg-loot-gold transition-all duration-150"
-                    style={{ width: `${hud.progressPct}%` }}
-                  />
-                </div>
+                {hud.minimap ? (
+                  <div className="relative h-3.5 w-full border border-ancient-stone bg-abyss-900/95 overflow-hidden">
+                    {/* Sector dividers */}
+                    {hud.minimap.areas.slice(1).map((a, idx) => {
+                      const leftPct = (a.startX / Math.max(1, hud.minimap!.worldWidth)) * 100;
+                      return (
+                        <div
+                          key={idx}
+                          className="absolute top-0 bottom-0 w-px bg-ancient-stone/80"
+                          style={{ left: `${leftPct}%` }}
+                        />
+                      );
+                    })}
+                    {/* Explored trail fill */}
+                    <div
+                      className="absolute top-0 bottom-0 left-0 bg-mana-cyan/15"
+                      style={{ width: `${hud.progressPct}%` }}
+                    />
+                    {/* World markers (chests, shrine, boss, exit) */}
+                    {hud.minimap.markers.map((m, idx) => {
+                      const leftPct = Math.max(
+                        1,
+                        Math.min(99, (m.x / Math.max(1, hud.minimap!.worldWidth)) * 100)
+                      );
+                      const cls =
+                        m.kind === 'boss'
+                          ? 'h-2 w-2 bg-slayer-red rotate-45'
+                          : m.kind === 'exit'
+                            ? 'h-2.5 w-1.5 bg-loot-gold'
+                            : m.kind === 'shrine'
+                              ? 'h-2 w-2 bg-mana-purple'
+                              : m.kind === 'chest_open'
+                                ? 'h-1.5 w-1.5 bg-loot-green/50'
+                                : 'h-1.5 w-1.5 bg-loot-gold';
+                      return (
+                        <span
+                          key={idx}
+                          className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 ${cls}`}
+                          style={{ left: `${leftPct}%` }}
+                        />
+                      );
+                    })}
+                    {/* Live player position */}
+                    <span
+                      className="absolute top-1/2 h-2.5 w-1 -translate-x-1/2 -translate-y-1/2 bg-white shadow-[0_0_6px_#00F0FF]"
+                      style={{
+                        left: `${Math.max(
+                          1,
+                          Math.min(99, (hud.minimap.playerX / Math.max(1, hud.minimap.worldWidth)) * 100)
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-1.5 w-full bg-abyss-900 border border-ancient-stone">
+                    <div
+                      className="h-full bg-loot-gold transition-all duration-150"
+                      style={{ width: `${hud.progressPct}%` }}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -240,7 +295,7 @@ export function HUD({
 
         {/* Top-Right: Style Rank, Adrenaline & Quick Menu */}
         <div className="flex items-start gap-1.5 sm:gap-2">
-          <div className="hidden sm:block border border-ancient-stone bg-abyss-950/85 p-2 text-center backdrop-blur-sm">
+          <div className="hidden sm:block border border-ancient-stone bg-abyss-950/90 p-2 text-center">
             <div className="text-[9px] tracking-wider text-slate-400">STYLE</div>
             <div
               className={`mt-0.5 border px-2 py-0.5 font-pixel text-sm ${
@@ -297,23 +352,31 @@ export function HUD({
       {/* ── BOTTOM BAR ── */}
       <div className="flex items-end justify-between gap-3">
         <div className="flex gap-2">
-          <div className="border border-slayer-orange/60 bg-abyss-950/85 px-2 py-1 backdrop-blur-sm">
+          <div className="border border-slayer-orange/60 bg-abyss-950/90 px-2 py-1">
             <div className="flex items-center justify-between gap-2 text-[9px] font-bold text-slayer-orange">
               <span className="flex items-center gap-1">
-                <Sword className="h-3 w-3" /> [J] TAP HIT · HOLD BLOK
+                <Sword className="h-3 w-3" /> [LMB/J] COMBO 3 · JUMP SPIN/SLAM
               </span>
               {hud.isBlocking ? (
                 <span className="text-mana-cyan animate-pulse">BLOCK!</span>
+              ) : hud.activeMove === 'dash_thrust' ? (
+                <span className="text-loot-gold">DASH THRUST</span>
+              ) : hud.activeMove === 'spin_vertical' ? (
+                <span className="text-mana-cyan">SPIN V</span>
+              ) : hud.activeMove === 'air_slam_windup' ||
+                hud.activeMove === 'air_slam_dive' ||
+                hud.activeMove === 'air_slam_impact' ? (
+                <span className="text-loot-gold">SLAM!</span>
               ) : hud.counterReady ? (
                 <span className="text-loot-gold animate-pulse">COUNTER!</span>
               ) : hud.meleeCombo > 0 ? (
-                <span className="text-loot-gold">x{hud.meleeCombo}</span>
+                <span className="text-loot-gold">HIT {hud.meleeCombo}</span>
               ) : null}
             </div>
             <div className="text-[10px] font-semibold text-white">
               {meleeDef?.name}{' '}
               <span
-                className={`text-[9px] font-bold uppercase ${
+                className={`text-[9px] font-bold uppercase tabular-nums ${
                   (hud.meleeWeapon.level ?? 1) >= 3
                     ? 'text-loot-gold'
                     : (hud.meleeWeapon.level ?? 1) === 2
@@ -322,15 +385,21 @@ export function HUD({
                 }`}
               >
                 Lv.{hud.meleeWeapon.level ?? 1}
-                {(hud.meleeWeapon.level ?? 1) >= 2 ? ' ★' : ''} ({hud.meleeWeapon.tier})
+                {(hud.meleeWeapon.level ?? 1) >= 2 ? ' ★' : ''}
               </span>
+              {meleeDef && (
+                <span className="text-[9px] text-slate-400">
+                  {' '}
+                  · {DAMAGE_TYPE_LABEL[meleeDef.damageType].label}
+                </span>
+              )}
             </div>
           </div>
-          <div className="border border-mana-cyan/60 bg-abyss-950/85 px-2 py-1 backdrop-blur-sm">
+          <div className="border border-mana-cyan/60 bg-abyss-950/90 px-2 py-1">
             {hud.rangedWeapon && rangedDef ? (
               <>
                 <div className="flex items-center gap-1 text-[9px] font-bold text-mana-cyan">
-                  <Crosshair className="h-3 w-3" /> [K] RANGED (1H)
+                  <Crosshair className="h-3 w-3" /> [RMB/K] GUN · SHORT DAGGER
                 </div>
                 <div className="text-[10px] font-semibold text-white">
                   {rangedDef.name}{' '}
@@ -341,15 +410,16 @@ export function HUD({
               </>
             ) : (
               <>
-                <div className="flex items-center gap-1 text-[9px] font-bold text-slayer-orange">
-                  <Shield className="h-3 w-3" /> OFF-HAND (2H)
+                <div className="flex items-center justify-between gap-2 text-[9px] font-bold text-slayer-orange">
+                  <span className="flex items-center gap-1">
+                    <Zap className="h-3 w-3" /> [RMB/K] DASH THRUST
+                  </span>
+                  <span className={hud.dashThrustReady ? 'text-loot-green' : 'text-slate-500'}>
+                    {hud.dashThrustReady ? 'READY' : 'CD'}
+                  </span>
                 </div>
                 <div className="text-[10px] font-semibold text-mana-cyan">
-                  {hud.hasFullShield
-                    ? 'Energy Shield (Full Guard)'
-                    : hud.meleeWeapon.defId === 'dual_sword'
-                      ? 'Twin Blade (No Gun)'
-                      : 'Melee Focus (No Gun)'}
+                  Mode Melee Murni (Tanpa Gun)
                 </div>
               </>
             )}
@@ -363,12 +433,12 @@ export function HUD({
           </div>
         )}
 
-        <div className="hidden border border-ancient-stone bg-abyss-950/80 px-2.5 py-1 text-[10px] text-slate-400 lg:block">
-          <span className="text-slate-200">A/D</span> Gerak ·{' '}
-          <span className="text-slate-200">Space</span> Jump/2x ·{' '}
-          <span className="text-slate-200">Tap J</span> Combo ·{' '}
+        <div className="hidden border border-ancient-stone bg-abyss-950/90 px-2.5 py-1 text-[10px] text-slate-400 lg:block">
+          <span className="text-slate-200">LMB/J</span> Combo 3 / Jump Spin / Hold Slam ·{' '}
+          <span className="text-slate-200">RMB/K</span>{' '}
+          {hud.rangedWeapon ? 'Tembak Gun' : 'Dash Thrust'} ·{' '}
           <span className="text-slate-200">Hold J</span> Blok ·{' '}
-          <span className="text-slate-200">E</span> Interaksi
+          <span className="text-slate-200">E</span> Aksi
         </div>
       </div>
     </div>
