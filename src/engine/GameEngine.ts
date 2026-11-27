@@ -39,8 +39,12 @@ import {
   type PlayableModeKey,
 } from './LevelBuilder';
 import {
+  computeWeaponBladeSegment,
+  computeWeaponSweepHitbox,
   getWeaponMoveProfile,
   resolveCombatAction,
+  sampleStickmanCombatPose,
+  segmentIntersectsAABB,
   type CombatMoveType,
 } from './combatRules';
 import { Player } from '../entities/Player';
@@ -59,6 +63,7 @@ import {
   type EnemyInstance,
 } from '../entities/Enemy';
 import {
+  createBowArrow,
   createDualPistolBurst,
   createEnemyOrb,
   createProjectile,
@@ -302,6 +307,17 @@ export class GameEngine {
   private _airSlamState: 'none' | 'windup' | 'dive' | 'impact' = 'none';
   private _airSlamTimer = 0;
   private _airSlamHitIds = new Set<string>();
+  private _activeSwingHitIds = new Set<string>();
+  private _activeSwingMeta: {
+    move: CombatMoveType;
+    damageRatio: number;
+    armorBreak: boolean;
+    knockbackX: number;
+    color: string;
+    isPogo: boolean;
+    bidirectional: boolean;
+    comboStep: number;
+  } | null = null;
   private _meleePressHeld = false;
   private _meleeHoldTime = 0;
   private _meleeBufferTimer = 0;
@@ -650,6 +666,7 @@ export class GameEngine {
     this.player.update(dt);
     this.player.applyGravity(dt);
     this._moveAndCollidePlayer(dt);
+    this._checkLiveBladeContacts();
     this._updateGroundDrops(dt);
     this._updateScarf(dt);
     this._checkAreaTransition();
@@ -1223,61 +1240,118 @@ export class GameEngine {
       this.triggerShake(strike.shake, 0.12);
     }
 
-    const hx =
-      strike.bidirectional
+    const profile = getWeaponMoveProfile(weaponId);
+    const activeMove = this._activeCombatMove;
+
+    // Derive physical melee hitbox directly from the real weapon blade length & kinematic swing!
+    const usePhysicalBladeBox =
+      activeMove !== null &&
+      activeMove !== 'air_slam_impact' &&
+      strike.shape !== 'slam_impact';
+
+    let hx: number;
+    let hy: number;
+    let boxW: number;
+    let boxH: number;
+
+    if (usePhysicalBladeBox && activeMove) {
+      const sweep = computeWeaponSweepHitbox(
+        activeMove,
+        weaponId,
+        p.facingRight,
+        p.x + p.width / 2,
+        p.y + p.height
+      );
+      hx = sweep.x;
+      hy = sweep.y;
+      boxW = sweep.w;
+      boxH = sweep.h;
+    } else {
+      hx = strike.bidirectional
         ? p.x + p.width / 2 - strike.rangeW
         : strike.isPogo
           ? p.x - (strike.rangeW - p.width) / 2
           : p.facingRight
             ? p.x + p.width - 2
             : p.x - strike.rangeW + 2;
-    const boxW = strike.bidirectional ? strike.rangeW * 2 : strike.rangeW;
-    const hy =
-      strike.shape === 'vertical_spin'
-        ? p.y + p.height / 2 - strike.rangeH / 2
-        : strike.isPogo
-          ? p.y + p.height - 4
-          : p.y + p.height - strike.rangeH;
+      boxW = strike.bidirectional ? strike.rangeW * 2 : strike.rangeW;
+      hy =
+        strike.shape === 'vertical_spin'
+          ? p.y + p.height / 2 - strike.rangeH / 2
+          : strike.isPogo
+            ? p.y + p.height - 4
+            : p.y + p.height - strike.rangeH;
+      boxH = strike.rangeH;
+    }
+
+    // Track live moving blade segment hits across the full active swing frames (no double-hits)
+    this._activeSwingHitIds.clear();
+    this._activeSwingMeta =
+      usePhysicalBladeBox && activeMove
+        ? {
+            move: activeMove,
+            damageRatio: strike.damageRatio,
+            armorBreak: strike.armorBreak,
+            knockbackX: strike.knockbackX,
+            color: strike.color,
+            isPogo: strike.isPogo,
+            bidirectional: strike.bidirectional,
+            comboStep: strike.comboStep,
+          }
+        : null;
 
     const slashLife =
       strike.shape === 'spin_horizontal' ||
       strike.shape === 'vertical_spin' ||
       strike.shape === 'slam_impact'
-        ? 0.28
+        ? 0.24
         : strike.shape === 'dash_thrust'
-          ? 0.24
-          : 0.2;
+          ? 0.22
+          : 0.14;
 
-    this._slashes.push({
-      x:
-        strike.bidirectional || strike.shape === 'vertical_spin'
-          ? p.x + p.width / 2
-          : strike.isPogo
+    // Keep impact/air-break FX on slam, dash_thrust, and thrust; standard swings rely primarily
+    // on the real blade-swept metallic ribbon attached directly to the live weapon edge!
+    if (
+      strike.shape === 'slam_impact' ||
+      strike.shape === 'dash_thrust' ||
+      strike.shape === 'thrust' ||
+      strike.shape === 'needle_thread' ||
+      strike.shape === 'spin_horizontal' ||
+      strike.shape === 'vertical_spin'
+    ) {
+      this._slashes.push({
+        x:
+          strike.bidirectional || strike.shape === 'vertical_spin'
             ? p.x + p.width / 2
-            : p.x + p.width / 2 + dir * (strike.shape === 'thrust' || strike.shape === 'dash_thrust' ? 10 : 7),
-      y:
-        strike.shape === 'slam_impact'
-          ? p.y + p.height - 2
-          : strike.shape === 'vertical_spin'
-            ? p.y + p.height * 0.5
             : strike.isPogo
-              ? p.y + p.height
-              : p.y + p.height * 0.48,
-      radius: strike.radius,
-      isPogo: strike.isPogo && strike.shape !== 'vertical_spin',
-      facingRight: p.facingRight,
-      comboStep: strike.comboStep,
-      shape: strike.shape,
-      bidirectional: strike.bidirectional,
-      color: strike.color,
-      life: slashLife,
-      maxLife: slashLife,
-    });
+              ? p.x + p.width / 2
+              : p.x +
+                p.width / 2 +
+                dir * (strike.shape === 'thrust' || strike.shape === 'dash_thrust' ? 10 : 6),
+        y:
+          strike.shape === 'slam_impact'
+            ? p.y + p.height - 2
+            : strike.shape === 'vertical_spin'
+              ? p.y + p.height * 0.5
+              : strike.isPogo
+                ? p.y + p.height
+                : p.y + p.height * 0.48,
+        radius: Math.max(12, Math.round(profile.bladeLengthPx * 1.12)),
+        isPogo: strike.isPogo && strike.shape !== 'vertical_spin',
+        facingRight: p.facingRight,
+        comboStep: strike.comboStep,
+        shape: strike.shape,
+        bidirectional: strike.bidirectional,
+        color: strike.color,
+        life: slashLife,
+        maxLife: slashLife,
+      });
+    }
 
     this.particles.emit(
       'slash_trail',
       hx + boxW / 2,
-      hy + strike.rangeH / 2,
+      hy + boxH / 2,
       strike.isPogo ? Math.PI / 2 : p.facingRight ? 0 : Math.PI
     );
 
@@ -1293,7 +1367,8 @@ export class GameEngine {
 
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
-      if (_aabb(hx, hy, boxW, strike.rangeH, enemy.x, enemy.y, enemy.width, enemy.height)) {
+      if (_aabb(hx, hy, boxW, boxH, enemy.x, enemy.y, enemy.width, enemy.height)) {
+        this._activeSwingHitIds.add(enemy.id);
         hitSomething = true;
         const dmgRes = damageEnemyDetailed(enemy, finalDmg, strike.armorBreak, dmgType);
         const pushDir =
@@ -1303,8 +1378,10 @@ export class GameEngine {
           enemy.vy = Math.min(enemy.vy, strike.liftVy);
         }
         p.onMeleeHit();
-        const hitX = enemy.x + enemy.width / 2;
-        const hitY = enemy.y + enemy.height / 2;
+        // Contact sparks directly on the side of the enemy facing the physical blade!
+        const hitX =
+          pushDir > 0 ? enemy.x + 2 : enemy.x + enemy.width - 2;
+        const hitY = enemy.y + enemy.height * 0.48;
         this.particles.emit('hit_spark', hitX, hitY);
         this._spawnHitEffect(hitX, hitY, isCrit ? '#FACC15' : strike.color, isCrit ? 18 : 13, dmgType);
         this._spawnFloatingText(
@@ -1327,7 +1404,8 @@ export class GameEngine {
 
     if (this.boss && this.boss.hp > 0) {
       const b = this.boss;
-      if (_aabb(hx, hy, boxW, strike.rangeH, b.x, b.y, b.width, b.height)) {
+      if (_aabb(hx, hy, boxW, boxH, b.x, b.y, b.width, b.height)) {
+        this._activeSwingHitIds.add('__boss__');
         hitSomething = true;
         this._bossFlashTimer = 0.09;
         const killed = damageBoss(b, finalDmg);
@@ -1350,7 +1428,7 @@ export class GameEngine {
 
     if (strike.isPogo && this.level) {
       for (const sp of this.level.spikes) {
-        if (_aabb(hx, hy, boxW, strike.rangeH, sp.x, sp.y, sp.w, sp.h)) {
+        if (_aabb(hx, hy, boxW, boxH, sp.x, sp.y, sp.w, sp.h)) {
           hitSomething = true;
           this.particles.emit('hit_spark', hx + boxW / 2, sp.y);
           this._spawnHitEffect(hx + boxW / 2, sp.y, '#00F0FF', 12, 'pierce');
@@ -1361,7 +1439,7 @@ export class GameEngine {
 
     if (this.level) {
       for (const cry of this.level.crystals) {
-        if (!cry.exploded && _aabb(hx, hy, boxW, strike.rangeH, cry.x, cry.y, cry.w, cry.h)) {
+        if (!cry.exploded && _aabb(hx, hy, boxW, boxH, cry.x, cry.y, cry.w, cry.h)) {
           hitSomething = true;
           this._detonateCrystal(cry);
         }
@@ -1369,15 +1447,81 @@ export class GameEngine {
     }
 
     if (hitSomething) {
-      this.triggerHitstop(isCrit || strike.comboStep === 3 ? 3 : 2);
+      this.triggerHitstop(profile.heavy ? 4 : isCrit || strike.comboStep === 3 ? 3 : 2);
       if (!strike.isPogo && strike.lungeVx === undefined && p.onGround) {
-        p.vx -= dir * 24;
+        p.vx -= dir * (profile.heavy ? 36 : 24);
       }
       if (strike.isPogo && p.pogoSlash()) {
         this._scaleX = 0.82;
         this._scaleY = 1.22;
         this.sound.play('pogo_bounce');
         this._spawnFloatingText(p.x + 7, p.y - 4, 'POGO!', '#00F0FF');
+      }
+    }
+  }
+
+  /**
+   * Continuous physical blade-edge intersection during active swing frames so
+   * enemies stepping into the actual moving steel segment take realistic blade contact!
+   */
+  private _checkLiveBladeContacts() {
+    if (!this._activeSwingMeta || !this._activeCombatMove || this._meleeAnimTimer <= 0) {
+      this._activeSwingMeta = null;
+      return;
+    }
+
+    const prog = 1 - this._meleeAnimTimer / Math.max(0.05, this._meleeAnimDuration);
+    if (prog < 0.18 || prog > 0.82) return;
+
+    const p = this.player;
+    const weaponId = p.state.meleeWeapon.defId;
+    const pose = sampleStickmanCombatPose(this._activeSwingMeta.move, prog, weaponId);
+    const seg = computeWeaponBladeSegment(
+      pose,
+      weaponId,
+      p.facingRight,
+      p.x + p.width / 2,
+      p.y + p.height
+    );
+
+    const meta = this._activeSwingMeta;
+    const dir = p.facingRight ? 1 : -1;
+    const weaponDef = WEAPONS[weaponId];
+    const dmgType = weaponDef?.damageType ?? 'slash';
+    const baseDmg = Math.max(1, Math.round(p.getMeleeDamage() * meta.damageRatio));
+
+    for (const enemy of this.enemies) {
+      if (!enemy.alive || this._activeSwingHitIds.has(enemy.id)) continue;
+      if (
+        segmentIntersectsAABB(
+          seg.baseX,
+          seg.baseY,
+          seg.tipX,
+          seg.tipY,
+          enemy.x - 2,
+          enemy.y - 2,
+          enemy.width + 4,
+          enemy.height + 4
+        )
+      ) {
+        this._activeSwingHitIds.add(enemy.id);
+        const dmgRes = damageEnemyDetailed(enemy, baseDmg, meta.armorBreak, dmgType);
+        const pushDir =
+          meta.bidirectional && enemy.x + enemy.width / 2 < p.x + p.width / 2 ? -1 : dir;
+        enemy.vx = pushDir * meta.knockbackX;
+        p.onMeleeHit();
+        const cx = (seg.baseX + seg.tipX) * 0.5;
+        const cy = (seg.baseY + seg.tipY) * 0.5;
+        this.particles.emit('hit_spark', cx, cy);
+        this._spawnHitEffect(cx, cy, meta.color, 13, dmgType);
+        this._spawnFloatingText(cx, enemy.y - 4, `${baseDmg}`, '#FFFFFF', false);
+        this.triggerHitstop(2);
+        if (meta.isPogo && p.pogoSlash()) {
+          this.sound.play('pogo_bounce');
+          this._spawnFloatingText(p.x + 7, p.y - 4, 'POGO!', '#00F0FF');
+        }
+        if (dmgRes.killed) this._onEnemyKilled(enemy);
+        else this.sound.play('enemy_hit');
       }
     }
   }
@@ -1407,6 +1551,12 @@ export class GameEngine {
         this.projectiles.push(...createShotgunSpread(muzzleX, muzzleY, angle, dmg));
         break;
       }
+      case 'bow': {
+        this.sound.play('spear_thrust');
+        this.triggerShake(1.4, 0.08);
+        this.projectiles.push(createBowArrow(muzzleX, muzzleY - 1, angle, dmg));
+        break;
+      }
       case 'rifle': {
         this.sound.play('rifle_beam');
         this.triggerShake(2, 0.1);
@@ -1418,6 +1568,7 @@ export class GameEngine {
         this.sound.play('pistol_fire');
         this.projectiles.push(
           createProjectile('player', muzzleX, muzzleY, angle, 380, dmg, {
+            kind: 'bullet',
             color: '#F97316',
             trailColor: '#FACC15',
             size: 3,
@@ -3716,6 +3867,51 @@ export class GameEngine {
 
   private _renderProjectiles(ctx: CanvasRenderingContext2D) {
     for (const proj of this.projectiles) {
+      if (proj.kind === 'arrow') {
+        const ang = Math.atan2(proj.vy, proj.vx);
+        ctx.save();
+        ctx.translate(Math.round(proj.x), Math.round(proj.y));
+        ctx.rotate(ang);
+        // Trailing silk-energy wake
+        ctx.strokeStyle = proj.trailColor;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.65;
+        ctx.beginPath();
+        ctx.moveTo(-14, 0);
+        ctx.lineTo(-4, 0);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        // Arrow fletching
+        ctx.fillStyle = '#00F0FF';
+        ctx.fillRect(-7, -2, 3, 1);
+        ctx.fillRect(-7, 1, 3, 1);
+        // Arrow shaft
+        ctx.fillStyle = '#E2E8F0';
+        ctx.fillRect(-6, 0, 10, 1);
+        // Glowing broadhead tip
+        ctx.fillStyle = proj.color;
+        ctx.fillRect(3, -1, 3, 3);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(5, 0, 3, 1);
+        ctx.restore();
+        continue;
+      }
+
+      if (proj.kind === 'beam') {
+        const ang = Math.atan2(proj.vy, proj.vx);
+        ctx.save();
+        ctx.translate(Math.round(proj.x), Math.round(proj.y));
+        ctx.rotate(ang);
+        ctx.fillStyle = proj.trailColor;
+        ctx.fillRect(-14, -2, 18, 4);
+        ctx.fillStyle = proj.color;
+        ctx.fillRect(-10, -1, 16, 2);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(-4, -1, 10, 1);
+        ctx.restore();
+        continue;
+      }
+
       ctx.fillStyle = proj.trailColor;
       ctx.fillRect(
         Math.round(proj.x - proj.vx * 0.015 - 1),

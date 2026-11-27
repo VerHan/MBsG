@@ -1,10 +1,11 @@
 // ============================================================
-// RIFTBOUND: SLAYER CORPS — Combat Rules & Stickman Pose Rig
-// Pure, deterministic combat state rules & keyframed stickman
-// skeleton kinematics (Anticipation -> Snap -> Follow-Through).
+// RIFTBOUND: SLAYER CORPS — Combat Rules & Realistic Kinematics
+// Pure, deterministic combat state rules, visible ranged + quick-draw
+// dagger display rules, 2-bone stickman IK grip, wrist-whip weapon
+// physics, and blade-driven physical sweep collision geometry.
 // ============================================================
 
-import type { MeleeWeaponId, WeaponId, WeaponInstance } from '../types';
+import type { MeleeWeaponId, RangedWeaponId, WeaponId, WeaponInstance } from '../types';
 import { WEAPONS, getWeaponLevel, isLightRangedCompatibleMelee } from '../data/weapons';
 
 export type CombatMoveType =
@@ -29,7 +30,7 @@ export interface MoveResolveContext {
 
 /**
  * Resolve which combat action executes given player groundedness, input button,
- * hold state, and loadout mode (Melee-only vs Gun+Short-Dagger).
+ * hold state, and loadout mode (Melee-only vs Ranged+Short-Dagger).
  */
 export function resolveCombatAction(ctx: MoveResolveContext): ResolvedAction {
   if (ctx.isRightClick) {
@@ -45,6 +46,54 @@ export function resolveCombatAction(ctx: MoveResolveContext): ResolvedAction {
   return 'standard_slash';
 }
 
+export interface DisplayedWeaponState {
+  /** Weapon actively visible in the Slayer's hands */
+  weaponId: WeaponId;
+  /** Visual stance mode */
+  mode: 'ranged_primary' | 'melee_quickdraw' | 'melee_primary';
+  /** Whether the Short Combat Dagger is visibly sheathed at the waist */
+  showHolsteredDagger: boolean;
+  /** Whether the equipped Ranged weapon is temporarily slung on back during quick-draw dagger hit */
+  showHolsteredRangedOnBack: boolean;
+}
+
+/**
+ * Determine which weapon is visibly held in hand at any moment:
+ * - In Ranged Mode (Pistol / Dual Pistol / Shotgun / Bow / Rifle):
+ *   the Ranged weapon is displayed during idle, run, jump, block, and shooting.
+ *   The Short Combat Dagger only flashes out into the hand while actively melee-striking!
+ * - In Melee-Only Mode: the equipped Melee weapon is always displayed.
+ */
+export function resolveDisplayedWeapon(params: {
+  meleeWeaponId: WeaponId;
+  rangedWeaponId: WeaponId | null;
+  isMeleeAttacking: boolean;
+}): DisplayedWeaponState {
+  if (params.rangedWeaponId !== null) {
+    if (params.isMeleeAttacking) {
+      return {
+        weaponId: params.meleeWeaponId,
+        mode: 'melee_quickdraw',
+        showHolsteredDagger: false,
+        showHolsteredRangedOnBack: true,
+      };
+    }
+    return {
+      weaponId: params.rangedWeaponId,
+      mode: 'ranged_primary',
+      showHolsteredDagger: true,
+      showHolsteredRangedOnBack: false,
+    };
+  }
+
+  return {
+    weaponId: params.meleeWeaponId,
+    mode: 'melee_primary',
+    showHolsteredDagger: false,
+    showHolsteredRangedOnBack: false,
+  };
+}
+
 export interface LoadoutStateSlice {
   meleeWeapon: WeaponInstance;
   rangedWeapon: WeaponInstance | null;
@@ -53,8 +102,9 @@ export interface LoadoutStateSlice {
 
 /**
  * Pure loadout constraint enforcer:
- * - Pure Melee weapons (all melee except short Dagger) CANNOT carry a Gun.
- * - Equipping any Gun automatically locks Melee to the short Combat Dagger.
+ * - Pure Melee weapons (all melee except short Dagger) CANNOT carry a Ranged weapon.
+ * - Equipping any Ranged weapon (Pistol, Dual Pistol, Shotgun, Bow, Rifle)
+ *   automatically locks Melee to the short Combat Dagger.
  */
 export function applyLoadoutEquipRule(
   current: LoadoutStateSlice,
@@ -93,7 +143,7 @@ export function applyLoadoutEquipRule(
         rangedWeapon: null,
         weaponInventory: nextInv,
         notice: hadGun
-          ? `Mode Melee (${def.name}): Gun dilepas — Klik Kanan / [K] menjadi Dash Thrust!`
+          ? `Mode Melee (${def.name}): Senjata Range dilepas — Klik Kanan / [K] menjadi Dash Thrust!`
           : undefined,
       };
     }
@@ -104,7 +154,7 @@ export function applyLoadoutEquipRule(
     };
   }
 
-  // Equipping a Gun forces Melee to the short Combat Dagger
+  // Equipping any Ranged weapon forces Melee to the short Combat Dagger
   let daggerInst = nextInv.find((w) => w.defId === 'dagger');
   if (!daggerInst) {
     daggerInst = { defId: 'dagger', tier: 'common', level: 1 };
@@ -116,27 +166,47 @@ export function applyLoadoutEquipRule(
     rangedWeapon: normalized,
     weaponInventory: nextInv,
     notice: switchedMelee
-      ? `Mode Gun (${def.name}): Melee dikunci ke Combat Dagger jarak dekat.`
+      ? `Mode Range (${def.name}): Tampil di tangan, Short Dagger keluar otomatis saat hit melee!`
       : undefined,
   };
 }
 
-/** Per-weapon tuning for the unified conditional moveset */
+export type WeaponGripStyle = 'one_hand' | 'two_hand' | 'dual' | 'polearm';
+
+/** Per-weapon physical dimensions, handling weight, and move tuning */
 export interface WeaponMoveProfile {
   reachScale: number;
   speedScale: number;
   trailColor: string;
   accentColor: string;
   heavy: boolean;
+  /** Physical blade/head tip distance from hand grip in logical pixels */
+  bladeLengthPx: number;
+  /** Distance from hand grip where the sharp edge / head starts */
+  bladeBaseOffsetPx: number;
+  /** Physical width/thickness of the cutting edge or weapon head */
+  bladeWidthPx: number;
+  /** How the Slayer physically grips the weapon */
+  gripStyle: WeaponGripStyle;
+  /** Handle offset where off-hand physically grips on two-handed / polearm weapons */
+  offhandGripOffset: number;
+  /** Wrist whip inertia (higher = heavier windup drag & snap follow-through) */
+  weightLag: number;
 }
 
 export const WEAPON_MOVE_PROFILES: Record<MeleeWeaponId, WeaponMoveProfile> = {
   dagger: {
-    reachScale: 0.56, // Ultra-short emergency close-range backup for Gun builds
+    reachScale: 0.56,
     speedScale: 0.82,
     trailColor: '#00F0FF',
     accentColor: '#F8FAFC',
     heavy: false,
+    bladeLengthPx: 6.5,
+    bladeBaseOffsetPx: 1.5,
+    bladeWidthPx: 2.4,
+    gripStyle: 'one_hand',
+    offhandGripOffset: 0,
+    weightLag: 0.14,
   },
   needle: {
     reachScale: 1.08,
@@ -144,6 +214,12 @@ export const WEAPON_MOVE_PROFILES: Record<MeleeWeaponId, WeaponMoveProfile> = {
     trailColor: '#F43F5E',
     accentColor: '#FFF1F2',
     heavy: false,
+    bladeLengthPx: 22,
+    bladeBaseOffsetPx: 2,
+    bladeWidthPx: 2.6,
+    gripStyle: 'one_hand',
+    offhandGripOffset: 0,
+    weightLag: 0.2,
   },
   sword: {
     reachScale: 1.0,
@@ -151,6 +227,12 @@ export const WEAPON_MOVE_PROFILES: Record<MeleeWeaponId, WeaponMoveProfile> = {
     trailColor: '#F97316',
     accentColor: '#FEF3C7',
     heavy: false,
+    bladeLengthPx: 18.5,
+    bladeBaseOffsetPx: 2,
+    bladeWidthPx: 3.4,
+    gripStyle: 'two_hand',
+    offhandGripOffset: -2.4,
+    weightLag: 0.34,
   },
   spear: {
     reachScale: 1.3,
@@ -158,6 +240,12 @@ export const WEAPON_MOVE_PROFILES: Record<MeleeWeaponId, WeaponMoveProfile> = {
     trailColor: '#00F0FF',
     accentColor: '#E0F2FE',
     heavy: false,
+    bladeLengthPx: 24,
+    bladeBaseOffsetPx: 11,
+    bladeWidthPx: 3.6,
+    gripStyle: 'polearm',
+    offhandGripOffset: -5.2,
+    weightLag: 0.26,
   },
   katana: {
     reachScale: 1.14,
@@ -165,6 +253,12 @@ export const WEAPON_MOVE_PROFILES: Record<MeleeWeaponId, WeaponMoveProfile> = {
     trailColor: '#EF4444',
     accentColor: '#FEE2E2',
     heavy: false,
+    bladeLengthPx: 19.5,
+    bladeBaseOffsetPx: 2,
+    bladeWidthPx: 2.8,
+    gripStyle: 'two_hand',
+    offhandGripOffset: -2.6,
+    weightLag: 0.3,
   },
   dual_sword: {
     reachScale: 0.96,
@@ -172,6 +266,12 @@ export const WEAPON_MOVE_PROFILES: Record<MeleeWeaponId, WeaponMoveProfile> = {
     trailColor: '#A855F7',
     accentColor: '#00F0FF',
     heavy: false,
+    bladeLengthPx: 16,
+    bladeBaseOffsetPx: 2,
+    bladeWidthPx: 3.2,
+    gripStyle: 'dual',
+    offhandGripOffset: 0,
+    weightLag: 0.22,
   },
   axe: {
     reachScale: 1.12,
@@ -179,6 +279,12 @@ export const WEAPON_MOVE_PROFILES: Record<MeleeWeaponId, WeaponMoveProfile> = {
     trailColor: '#F97316',
     accentColor: '#FACC15',
     heavy: true,
+    bladeLengthPx: 17,
+    bladeBaseOffsetPx: 8,
+    bladeWidthPx: 8.5,
+    gripStyle: 'two_hand',
+    offhandGripOffset: 4.2,
+    weightLag: 0.54,
   },
   hammer: {
     reachScale: 1.06,
@@ -186,6 +292,12 @@ export const WEAPON_MOVE_PROFILES: Record<MeleeWeaponId, WeaponMoveProfile> = {
     trailColor: '#A855F7',
     accentColor: '#FACC15',
     heavy: true,
+    bladeLengthPx: 17.5,
+    bladeBaseOffsetPx: 7.5,
+    bladeWidthPx: 10.5,
+    gripStyle: 'two_hand',
+    offhandGripOffset: 3.8,
+    weightLag: 0.62,
   },
 };
 
@@ -197,6 +309,12 @@ export function getWeaponMoveProfile(id: WeaponId): WeaponMoveProfile {
       trailColor: '#F97316',
       accentColor: '#FFFFFF',
       heavy: false,
+      bladeLengthPx: 16,
+      bladeBaseOffsetPx: 2,
+      bladeWidthPx: 3.2,
+      gripStyle: 'one_hand',
+      offhandGripOffset: 0,
+      weightLag: 0.28,
     }
   );
 }
@@ -224,9 +342,11 @@ export interface StickmanCombatPose {
   weaponAngle: number;
   /** Weapon draws behind torso during back-half of horizontal spin */
   weaponBehindTorso: boolean;
-  /** Off-hand arm 2-bone joints relative to shoulder */
+  /** Off-hand arm 2-bone joints relative to off-shoulder */
   offElbow: Vec2;
   offHand: Vec2;
+  /** True when off-hand is physically gripping the weapon handle/shaft */
+  offHandOnWeapon: boolean;
   /** Leg joint targets (hip is at y = -11 + crouchY) */
   frontKnee: Vec2;
   frontFoot: Vec2;
@@ -235,6 +355,25 @@ export interface StickmanCombatPose {
   /** Subtle dynamic stretch */
   squashX: number;
   squashY: number;
+}
+
+export interface RangedAimPose {
+  mainElbow: Vec2;
+  mainHand: Vec2;
+  mainWeaponAngle: number;
+  offElbow: Vec2;
+  offHand: Vec2;
+  offWeaponAngle: number;
+  /** Draw tension (0..1) for recurve bowstring flex */
+  bowDraw: number;
+  /** True if weapon is braced two-handed (shotgun, rifle, bow) */
+  twoHanded: boolean;
+  /** True if off-hand holds a second pistol (dual_pistol) */
+  hasOffhandGun: boolean;
+  /** Recoil kickback offset in local X */
+  recoilX: number;
+  /** Subtle muzzle pitch kick */
+  recoilTilt: number;
 }
 
 function clamp01(v: number): number {
@@ -256,19 +395,185 @@ function easeInOutQuad(t: number): number {
 }
 
 /**
- * Sample a dynamic stickman-animation pose for any of the 6 core combat moves.
- * All coordinates are in character-local space facing RIGHT (+X forward, -Y up, ground at y = 0).
+ * Analytical 2-bone inverse kinematics solver for realistic elbow bend.
+ * Keeps upper-arm (l1) and forearm (l2) physically connected from shoulder to target hand.
+ */
+export function solveTwoBoneElbow(
+  targetX: number,
+  targetY: number,
+  l1 = 5.4,
+  l2 = 5.2,
+  bendSign = 1
+): Vec2 {
+  const distSq = targetX * targetX + targetY * targetY;
+  const dist = Math.max(0.5, Math.min(l1 + l2 - 0.1, Math.sqrt(distSq)));
+  const baseAng = Math.atan2(targetY, targetX);
+  const cosA = Math.max(
+    -1,
+    Math.min(1, (l1 * l1 + dist * dist - l2 * l2) / (2 * l1 * dist))
+  );
+  const bendAng = Math.acos(cosA) * bendSign;
+  const upperAng = baseAng + bendAng;
+  return {
+    x: Math.cos(upperAng) * l1,
+    y: Math.sin(upperAng) * l1,
+  };
+}
+
+/**
+ * Sample realistic weapon-specific ranged aiming & recoil stance for all 5 Ranged weapons:
+ * Pistol, Dual Pistol, Shotgun, Silkstring Recurve Bow, and Rifle.
+ */
+export function sampleRangedAimPose(
+  rangedId: RangedWeaponId,
+  recoilProgress: number
+): RangedAimPose {
+  const rec = clamp01(recoilProgress);
+  // Crisp kick curve: peaks immediately after fire, settles smoothly
+  const kick = Math.sin(rec * Math.PI);
+
+  switch (rangedId) {
+    case 'pistol': {
+      const mainHand = { x: 8.6 - kick * 2.2, y: -0.6 - kick * 1.4 };
+      return {
+        mainElbow: solveTwoBoneElbow(mainHand.x, mainHand.y, 5.2, 5.0, 1),
+        mainHand,
+        mainWeaponAngle: -kick * 0.24,
+        offElbow: { x: -2.2, y: 3.4 },
+        offHand: { x: 1.8, y: 4.2 },
+        offWeaponAngle: 0,
+        bowDraw: 0,
+        twoHanded: false,
+        hasOffhandGun: false,
+        recoilX: -kick * 2.0,
+        recoilTilt: -kick * 0.08,
+      };
+    }
+
+    case 'dual_pistol': {
+      // Alternating left/right recoil on twin pistols with crisp vertical separation
+      const kickMain = kick;
+      const kickOff = Math.sin(clamp01(rec * 1.3 - 0.15) * Math.PI);
+      const mainHand = { x: 9.4 - kickMain * 2.2, y: -2.4 - kickMain * 1.2 };
+      const offHand = { x: 6.2 - kickOff * 2.0, y: 3.2 - kickOff * 1.0 };
+      return {
+        mainElbow: solveTwoBoneElbow(mainHand.x, mainHand.y, 5.2, 5.0, 1),
+        mainHand,
+        mainWeaponAngle: -kickMain * 0.22,
+        offElbow: solveTwoBoneElbow(offHand.x + 2, offHand.y, 5.0, 4.8, 1),
+        offHand,
+        offWeaponAngle: -kickOff * 0.2,
+        bowDraw: 0,
+        twoHanded: false,
+        hasOffhandGun: true,
+        recoilX: -kick * 1.8,
+        recoilTilt: -kick * 0.07,
+      };
+    }
+
+    case 'shotgun': {
+      // Sturdy two-handed pump-action hold: right hand on grip, left hand forward on pump forend!
+      const mainHand = { x: 4.5 - kick * 2.8, y: 1.6 - kick * 1.2 };
+      const offHand = { x: 11.2 - kick * 2.4, y: 1.0 - kick * 2.0 };
+      return {
+        mainElbow: solveTwoBoneElbow(mainHand.x, mainHand.y, 5.0, 4.8, 1),
+        mainHand,
+        mainWeaponAngle: -kick * 0.3,
+        offElbow: solveTwoBoneElbow(offHand.x + 2, offHand.y, 5.4, 5.4, 1),
+        offHand,
+        offWeaponAngle: -kick * 0.3,
+        bowDraw: 0,
+        twoHanded: true,
+        hasOffhandGun: false,
+        recoilX: -kick * 3.0,
+        recoilTilt: -kick * 0.14,
+      };
+    }
+
+    case 'bow': {
+      // Archer stance! Front (off) hand holds the recurve bow extended forward,
+      // rear (main) hand draws the glowing silkstring back toward the visor/cheek and releases!
+      const drawTension = rec > 0 ? Math.max(0, 1 - rec * 2.2) : 0.65;
+      const offHand = { x: 9.8, y: -0.8 };
+      const mainHand = { x: 4.2 - drawTension * 5.2 + kick * 1.5, y: -1.4 };
+      return {
+        mainElbow: solveTwoBoneElbow(mainHand.x, mainHand.y, 5.0, 4.8, -1),
+        mainHand,
+        mainWeaponAngle: 0,
+        offElbow: solveTwoBoneElbow(offHand.x + 2, offHand.y, 5.6, 5.4, 1),
+        offHand,
+        offWeaponAngle: 0,
+        bowDraw: drawTension,
+        twoHanded: true,
+        hasOffhandGun: false,
+        recoilX: -kick * 1.4,
+        recoilTilt: -kick * 0.05,
+      };
+    }
+
+    case 'rifle':
+    default: {
+      // Precision rail-rifle shouldered two-handed marksman stance
+      const mainHand = { x: 4.4 - kick * 2.2, y: 0.8 - kick * 0.6 };
+      const offHand = { x: 12.2 - kick * 2.0, y: 0.4 - kick * 0.8 };
+      return {
+        mainElbow: solveTwoBoneElbow(mainHand.x, mainHand.y, 5.0, 4.8, 1),
+        mainHand,
+        mainWeaponAngle: -kick * 0.16,
+        offElbow: solveTwoBoneElbow(offHand.x + 2, offHand.y, 5.8, 5.8, 1),
+        offHand,
+        offWeaponAngle: -kick * 0.16,
+        bowDraw: 0,
+        twoHanded: true,
+        hasOffhandGun: false,
+        recoilX: -kick * 2.4,
+        recoilTilt: -kick * 0.09,
+      };
+    }
+  }
+}
+
+/**
+ * Sample a dynamic, weapon-aware stickman combat pose for any of the 6 core moves.
+ * Incorporates real wrist whip inertia (weightLag) and 2-bone analytical IK two-handed
+ * handle gripping so swords, katanas, axes, hammers, and spears feel physically wielded!
  */
 export function sampleStickmanCombatPose(
   move: CombatMoveType,
-  rawProgress: number
+  rawProgress: number,
+  weaponId: WeaponId = 'sword'
 ): StickmanCombatPose {
   const p = clamp01(rawProgress);
+  const profile = getWeaponMoveProfile(weaponId);
+  const wLag = profile.weightLag;
+  const isTwoHand = profile.gripStyle === 'two_hand' || profile.gripStyle === 'polearm';
+
+  const attachOffhandToWeapon = (
+    pose: StickmanCombatPose,
+    shoulderDeltaX: number,
+    allowTwoHand = true
+  ): StickmanCombatPose => {
+    if (!isTwoHand || !allowTwoHand) return pose;
+    // Compute exact off-hand world position gripping the weapon shaft/pommel
+    const gripOffset = profile.offhandGripOffset;
+    const gripX = pose.hand.x + Math.cos(pose.weaponAngle) * gripOffset;
+    const gripY = pose.hand.y + Math.sin(pose.weaponAngle) * gripOffset;
+    // Convert from main-shoulder local to off-shoulder local (+shoulderDeltaX)
+    const relX = gripX + shoulderDeltaX;
+    const relY = gripY;
+    return {
+      ...pose,
+      offHand: { x: relX, y: relY },
+      offElbow: solveTwoBoneElbow(relX, relY, 5.2, 5.0, 1),
+      offHandOnWeapon: true,
+    };
+  };
 
   switch (move) {
     // ── 1. SLASH STANDAR (Windup high -> Whip snap -> Low follow-through) ──
     case 'standard_slash': {
       let armAngle: number;
+      let wristOffset: number;
       let torsoTilt: number;
       let bodyOffsetX: number;
       let crouchY: number;
@@ -276,97 +581,109 @@ export function sampleStickmanCombatPose(
       let squashX = 1;
       let squashY = 1;
 
-      if (p < 0.22) {
-        // Anticipation coil: torso pulls back, weapon cocked high behind head
-        const k = easeInOutQuad(p / 0.22);
-        armAngle = lerp(-0.8, -2.35, k);
-        torsoTilt = lerp(0, -0.26, k);
-        bodyOffsetX = lerp(0, -3.5, k);
-        crouchY = lerp(0, 1.5, k);
-        offAngle = lerp(0.3, -0.45, k);
-        squashX = lerp(1, 0.92, k);
-        squashY = lerp(1, 1.08, k);
-      } else if (p < 0.58) {
-        // Explosive stickman snap!
-        const k = easeOutExpo((p - 0.22) / 0.36);
-        armAngle = lerp(-2.35, 1.05, k);
-        torsoTilt = lerp(-0.26, 0.44, k);
-        bodyOffsetX = lerp(-3.5, 5.5, k);
-        crouchY = lerp(1.5, 2.8, k);
-        offAngle = lerp(-0.45, 2.3, k);
-        squashX = lerp(1.16, 1.04, k);
-        squashY = lerp(0.88, 0.96, k);
+      if (p < 0.24) {
+        // Anticipation coil: torso pulls back, wrist cocks blade backward with weight lag
+        const k = easeInOutQuad(p / 0.24);
+        armAngle = lerp(-0.85, -2.35, k);
+        wristOffset = lerp(-0.15, -0.58 - wLag * 0.7, k);
+        torsoTilt = lerp(0, -0.28 - wLag * 0.16, k);
+        bodyOffsetX = lerp(0, -3.8, k);
+        crouchY = lerp(0, 1.8, k);
+        offAngle = lerp(0.3, -0.5, k);
+        squashX = lerp(1, 0.91, k);
+        squashY = lerp(1, 1.09, k);
+      } else if (p < 0.6) {
+        // Explosive whip snap! Wrist accelerates blade ahead of the forearm!
+        const k = easeOutExpo((p - 0.24) / 0.36);
+        armAngle = lerp(-2.35, 1.02, k);
+        wristOffset = lerp(-0.58 - wLag * 0.7, 0.42 + wLag * 0.45, k);
+        torsoTilt = lerp(-0.28, 0.46 + wLag * 0.12, k);
+        bodyOffsetX = lerp(-3.8, 5.8, k);
+        crouchY = lerp(1.8, 3.0, k);
+        offAngle = lerp(-0.5, 2.35, k);
+        squashX = lerp(1.17, 1.04, k);
+        squashY = lerp(0.87, 0.96, k);
       } else {
-        // Stylish follow-through settle
-        const k = easeInOutQuad((p - 0.58) / 0.42);
-        armAngle = lerp(1.05, 0.55, k);
-        torsoTilt = lerp(0.44, 0.14, k);
-        bodyOffsetX = lerp(5.5, 1.5, k);
-        crouchY = lerp(2.8, 0.8, k);
-        offAngle = lerp(2.3, 1.55, k);
+        // Weighty follow-through settle & recoil
+        const k = easeInOutQuad((p - 0.6) / 0.4);
+        armAngle = lerp(1.02, 0.48, k);
+        wristOffset = lerp(0.42 + wLag * 0.45, 0.14, k);
+        torsoTilt = lerp(0.46, 0.14, k);
+        bodyOffsetX = lerp(5.8, 1.4, k);
+        crouchY = lerp(3.0, 0.8, k);
+        offAngle = lerp(2.35, 1.5, k);
       }
 
-      const armReach = 9.5;
-      const elbow = {
-        x: Math.cos(armAngle - 0.28) * 5.2,
-        y: Math.sin(armAngle - 0.28) * 5.2,
-      };
+      const armReach = profile.heavy ? 8.8 : 9.6;
       const hand = {
         x: Math.cos(armAngle) * armReach,
         y: Math.sin(armAngle) * armReach,
       };
+      const elbow = solveTwoBoneElbow(hand.x, hand.y, 5.4, 5.2, -1);
 
-      return {
-        torsoTilt,
-        headTilt: -torsoTilt * 0.4,
-        bodyOffsetX,
-        crouchY,
-        bodyRotation: 0,
-        elbow,
-        hand,
-        weaponAngle: armAngle + 0.18,
-        weaponBehindTorso: false,
-        offElbow: { x: Math.cos(offAngle) * 4.5, y: Math.sin(offAngle) * 4.5 },
-        offHand: { x: Math.cos(offAngle) * 8.5, y: Math.sin(offAngle) * 8.5 },
-        frontKnee: { x: 6 + bodyOffsetX * 0.35, y: -5.5 + crouchY },
-        frontFoot: { x: 8 + bodyOffsetX * 0.4, y: -1 },
-        backKnee: { x: -4.5, y: -5 + crouchY },
-        backFoot: { x: -7.5, y: -1 },
-        squashX,
-        squashY,
-      };
+      return attachOffhandToWeapon(
+        {
+          torsoTilt,
+          headTilt: -torsoTilt * 0.4,
+          bodyOffsetX,
+          crouchY,
+          bodyRotation: 0,
+          elbow,
+          hand,
+          weaponAngle: armAngle + wristOffset,
+          weaponBehindTorso: false,
+          offElbow: { x: Math.cos(offAngle) * 4.5, y: Math.sin(offAngle) * 4.5 },
+          offHand: { x: Math.cos(offAngle) * 8.5, y: Math.sin(offAngle) * 8.5 },
+          offHandOnWeapon: false,
+          frontKnee: { x: 6 + bodyOffsetX * 0.35, y: -5.5 + crouchY },
+          frontFoot: { x: 8 + bodyOffsetX * 0.4, y: -1 },
+          backKnee: { x: -4.5, y: -5 + crouchY },
+          backFoot: { x: -7.5, y: -1 },
+          squashX,
+          squashY,
+        },
+        3,
+        true
+      );
     }
 
     // ── 2. SPIN HORIZONTAL (Dynamic 360° Waist Whirlwind Slash) ──
     case 'spin_horizontal': {
-      // Smooth 360° horizontal orbit around waist with martial pivot stance
       const phase = p < 0.14 ? lerp(-0.35, 0, p / 0.14) : easeOutExpo((p - 0.14) / 0.86);
       const orbitAngle = -0.7 + phase * Math.PI * 2.25;
       const reachX = Math.cos(orbitAngle) * 11.5;
-      const depthZ = Math.sin(orbitAngle); // >0 front pass, <0 behind torso
+      const depthZ = Math.sin(orbitAngle);
       const reachY = depthZ * 2.6 + 1.2;
-      const torsoTilt = Math.cos(orbitAngle) * 0.32;
+      const torsoTilt = Math.cos(orbitAngle) * 0.34;
       const crouchY = 2.6 + Math.abs(Math.sin(orbitAngle)) * 1.2;
+      const hand = { x: reachX, y: reachY };
+      const weaponAngle =
+        reachX >= 0 ? depthZ * (0.28 + wLag * 0.2) : Math.PI - depthZ * (0.28 + wLag * 0.2);
 
-      return {
-        torsoTilt,
-        headTilt: -torsoTilt * 0.35,
-        bodyOffsetX: Math.cos(orbitAngle) * 3.5,
-        crouchY,
-        bodyRotation: 0,
-        elbow: { x: reachX * 0.52, y: reachY - 1.2 },
-        hand: { x: reachX, y: reachY },
-        weaponAngle: reachX >= 0 ? depthZ * 0.25 : Math.PI - depthZ * 0.25,
-        weaponBehindTorso: depthZ < -0.15,
-        offElbow: { x: -reachX * 0.45, y: -1.5 },
-        offHand: { x: -reachX * 0.82, y: -2.2 },
-        frontKnee: { x: 6.5, y: -5 + crouchY },
-        frontFoot: { x: 9, y: -1 },
-        backKnee: { x: -6, y: -5 + crouchY },
-        backFoot: { x: -8.5, y: -1 },
-        squashX: 1.08,
-        squashY: 0.93,
-      };
+      return attachOffhandToWeapon(
+        {
+          torsoTilt,
+          headTilt: -torsoTilt * 0.35,
+          bodyOffsetX: Math.cos(orbitAngle) * 3.5,
+          crouchY,
+          bodyRotation: 0,
+          elbow: solveTwoBoneElbow(hand.x, hand.y, 5.8, 5.8, -1),
+          hand,
+          weaponAngle,
+          weaponBehindTorso: depthZ < -0.15,
+          offElbow: { x: -reachX * 0.45, y: -1.5 },
+          offHand: { x: -reachX * 0.82, y: -2.2 },
+          offHandOnWeapon: false,
+          frontKnee: { x: 6.5, y: -5 + crouchY },
+          frontFoot: { x: 9, y: -1 },
+          backKnee: { x: -6, y: -5 + crouchY },
+          backFoot: { x: -8.5, y: -1 },
+          squashX: 1.08,
+          squashY: 0.93,
+        },
+        3,
+        depthZ >= -0.15
+      );
     }
 
     // ── 3. THRUST KECIL (Hit 3 Finisher — Coiled Step-In Piercing Stab) ──
@@ -377,17 +694,15 @@ export function sampleStickmanCombatPose(
       let crouchY: number;
 
       if (p < 0.2) {
-        // Pull elbow back tightly at ribs
         const k = easeInOutQuad(p / 0.2);
         ext = lerp(2, -5.5, k);
-        torsoTilt = lerp(0, -0.18, k);
+        torsoTilt = lerp(0, -0.2, k);
         bodyOffsetX = lerp(0, -4, k);
         crouchY = lerp(0, 2.5, k);
       } else if (p < 0.62) {
-        // High-velocity stickman fencer lunge!
         const k = easeOutExpo((p - 0.2) / 0.42);
         ext = lerp(-5.5, 13.5, k);
-        torsoTilt = lerp(-0.18, 0.52, k);
+        torsoTilt = lerp(-0.2, 0.52, k);
         bodyOffsetX = lerp(-4, 7.5, k);
         crouchY = lerp(2.5, 3.8, k);
       } else {
@@ -398,122 +713,151 @@ export function sampleStickmanCombatPose(
         crouchY = lerp(3.8, 1, k);
       }
 
-      return {
-        torsoTilt,
-        headTilt: -torsoTilt * 0.45,
-        bodyOffsetX,
-        crouchY,
-        bodyRotation: 0,
-        elbow: { x: ext * 0.46, y: 1.2 },
-        hand: { x: ext, y: 0.4 },
-        weaponAngle: 0.02,
-        weaponBehindTorso: false,
-        offElbow: { x: -5.5, y: -1.5 },
-        offHand: { x: -10.5, y: -3.5 },
-        frontKnee: { x: 8.5, y: -4.5 + crouchY },
-        frontFoot: { x: 10.5, y: -1 },
-        backKnee: { x: -6.5, y: -4.5 + crouchY },
-        backFoot: { x: -11.5, y: -1.8 },
-        squashX: p >= 0.2 && p < 0.62 ? 1.18 : 1,
-        squashY: p >= 0.2 && p < 0.62 ? 0.87 : 1,
-      };
+      const hand = { x: ext, y: 0.4 };
+      return attachOffhandToWeapon(
+        {
+          torsoTilt,
+          headTilt: -torsoTilt * 0.45,
+          bodyOffsetX,
+          crouchY,
+          bodyRotation: 0,
+          elbow: solveTwoBoneElbow(hand.x, hand.y, 6.2, 6.2, 1),
+          hand,
+          weaponAngle: 0.02,
+          weaponBehindTorso: false,
+          offElbow: { x: -5.5, y: -1.5 },
+          offHand: { x: -10.5, y: -3.5 },
+          offHandOnWeapon: false,
+          frontKnee: { x: 8.5, y: -4.5 + crouchY },
+          frontFoot: { x: 10.5, y: -1 },
+          backKnee: { x: -6.5, y: -4.5 + crouchY },
+          backFoot: { x: -11.5, y: -1.8 },
+          squashX: p >= 0.2 && p < 0.62 ? 1.18 : 1,
+          squashY: p >= 0.2 && p < 0.62 ? 0.87 : 1,
+        },
+        3,
+        profile.gripStyle === 'polearm' || profile.heavy
+      );
     }
 
     // ── 4. SPIN VERTICAL (Jump Hit Tap — Acrobatic 360° Aerial Wheel) ──
     case 'spin_vertical': {
       const spinAngle = easeOutExpo(p) * Math.PI * 2;
-      return {
-        torsoTilt: 0.28,
-        headTilt: -0.1,
-        bodyOffsetX: 0,
-        crouchY: 1.5,
-        bodyRotation: spinAngle,
-        elbow: { x: 4.5, y: -4.2 },
-        hand: { x: 8.8, y: -7.2 },
-        weaponAngle: -0.78,
-        weaponBehindTorso: false,
-        offElbow: { x: -4.5, y: 2.5 },
-        offHand: { x: -7.5, y: 4.5 },
-        // Tight tucked somersault legs
-        frontKnee: { x: 5.5, y: -7.5 },
-        frontFoot: { x: 2.5, y: -3.5 },
-        backKnee: { x: -3.5, y: -7 },
-        backFoot: { x: -5.5, y: -3.5 },
-        squashX: 1.04,
-        squashY: 0.96,
-      };
+      const hand = { x: 8.8, y: -7.2 };
+      return attachOffhandToWeapon(
+        {
+          torsoTilt: 0.28,
+          headTilt: -0.1,
+          bodyOffsetX: 0,
+          crouchY: 1.5,
+          bodyRotation: spinAngle,
+          elbow: solveTwoBoneElbow(hand.x, hand.y, 5.6, 5.6, 1),
+          hand,
+          weaponAngle: -0.72 + wLag * 0.18,
+          weaponBehindTorso: false,
+          offElbow: { x: -4.5, y: 2.5 },
+          offHand: { x: -7.5, y: 4.5 },
+          offHandOnWeapon: false,
+          frontKnee: { x: 5.5, y: -7.5 },
+          frontFoot: { x: 2.5, y: -3.5 },
+          backKnee: { x: -3.5, y: -7 },
+          backFoot: { x: -5.5, y: -3.5 },
+          squashX: 1.04,
+          squashY: 0.96,
+        },
+        3,
+        true
+      );
     }
 
     // ── 5A. AIR SLAM WINDUP (Jump Hit Hold — Mid-air Overhead Charge) ──
     case 'air_slam_windup': {
       const k = easeOutExpo(p);
-      return {
-        torsoTilt: lerp(0, -0.32, k),
-        headTilt: 0.2,
-        bodyOffsetX: -1.5,
-        crouchY: -2,
-        bodyRotation: 0,
-        elbow: { x: -2.5, y: -6.5 },
-        hand: { x: -1.5, y: -12.5 },
-        weaponAngle: -Math.PI * 0.58,
-        weaponBehindTorso: false,
-        offElbow: { x: 2.5, y: -5.5 },
-        offHand: { x: 1.5, y: -11 },
-        frontKnee: { x: 5, y: -8 },
-        frontFoot: { x: 2, y: -3.5 },
-        backKnee: { x: -4.5, y: -7 },
-        backFoot: { x: -7.5, y: -4 },
-        squashX: 0.86,
-        squashY: 1.18,
-      };
+      const hand = { x: -1.5, y: -12.5 };
+      return attachOffhandToWeapon(
+        {
+          torsoTilt: lerp(0, -0.32, k),
+          headTilt: 0.2,
+          bodyOffsetX: -1.5,
+          crouchY: -2,
+          bodyRotation: 0,
+          elbow: solveTwoBoneElbow(hand.x, hand.y, 6.2, 6.2, -1),
+          hand,
+          weaponAngle: -Math.PI * 0.62 - wLag * 0.25,
+          weaponBehindTorso: false,
+          offElbow: { x: 2.5, y: -5.5 },
+          offHand: { x: 1.5, y: -11 },
+          offHandOnWeapon: false,
+          frontKnee: { x: 5, y: -8 },
+          frontFoot: { x: 2, y: -3.5 },
+          backKnee: { x: -4.5, y: -7 },
+          backFoot: { x: -7.5, y: -4 },
+          squashX: 0.86,
+          squashY: 1.18,
+        },
+        3,
+        true
+      );
     }
 
     // ── 5B. AIR SLAM DIVE (Plunging Meteor Strike) ──
     case 'air_slam_dive': {
-      return {
-        torsoTilt: 0.48,
-        headTilt: -0.2,
-        bodyOffsetX: 1,
-        crouchY: 1,
-        bodyRotation: 0,
-        elbow: { x: 5, y: 2.5 },
-        hand: { x: 7.5, y: 9.5 },
-        weaponAngle: Math.PI * 0.47,
-        weaponBehindTorso: false,
-        offElbow: { x: -5, y: -4.5 },
-        offHand: { x: -9, y: -8.5 },
-        frontKnee: { x: 3.5, y: -8.5 },
-        frontFoot: { x: 1, y: -4.5 },
-        backKnee: { x: -5, y: -10 },
-        backFoot: { x: -8.5, y: -7.5 },
-        squashX: 0.82,
-        squashY: 1.24,
-      };
+      const hand = { x: 7.5, y: 9.5 };
+      return attachOffhandToWeapon(
+        {
+          torsoTilt: 0.48,
+          headTilt: -0.2,
+          bodyOffsetX: 1,
+          crouchY: 1,
+          bodyRotation: 0,
+          elbow: solveTwoBoneElbow(hand.x, hand.y, 6.0, 6.0, -1),
+          hand,
+          weaponAngle: Math.PI * 0.47,
+          weaponBehindTorso: false,
+          offElbow: { x: -5, y: -4.5 },
+          offHand: { x: -9, y: -8.5 },
+          offHandOnWeapon: false,
+          frontKnee: { x: 3.5, y: -8.5 },
+          frontFoot: { x: 1, y: -4.5 },
+          backKnee: { x: -5, y: -10 },
+          backFoot: { x: -8.5, y: -7.5 },
+          squashX: 0.82,
+          squashY: 1.24,
+        },
+        3,
+        true
+      );
     }
 
-    // ── 5C. AIR SLAM IMPACT (Heroic Superhero Ground Crash) ──
+    // ── 5C. AIR SLAM IMPACT (Heroic Ground Crash — Weapon Embedded in Floor) ──
     case 'air_slam_impact': {
       const k = easeOutExpo(p);
       const crouchY = lerp(6.5, 2.2, k);
-      return {
-        torsoTilt: lerp(0.58, 0.25, k),
-        headTilt: -0.25,
-        bodyOffsetX: 2.5,
-        crouchY,
-        bodyRotation: 0,
-        elbow: { x: 6.5, y: 4.5 },
-        hand: { x: 10, y: 10.5 },
-        weaponAngle: lerp(1.18, 0.88, k),
-        weaponBehindTorso: false,
-        offElbow: { x: -2.5, y: 5.5 },
-        offHand: { x: -5.5, y: 11.5 },
-        frontKnee: { x: 8, y: -4 + crouchY * 0.5 },
-        frontFoot: { x: 9.5, y: -1 },
-        backKnee: { x: -7, y: -2.5 + crouchY * 0.4 },
-        backFoot: { x: -10, y: -1 },
-        squashX: lerp(1.32, 1.0, k),
-        squashY: lerp(0.74, 1.0, k),
-      };
+      const hand = { x: 10, y: 10.5 };
+      return attachOffhandToWeapon(
+        {
+          torsoTilt: lerp(0.58, 0.25, k),
+          headTilt: -0.25,
+          bodyOffsetX: 2.5,
+          crouchY,
+          bodyRotation: 0,
+          elbow: solveTwoBoneElbow(hand.x, hand.y, 6.5, 6.5, -1),
+          hand,
+          weaponAngle: lerp(1.18, 0.88, k),
+          weaponBehindTorso: false,
+          offElbow: { x: -2.5, y: 5.5 },
+          offHand: { x: -5.5, y: 11.5 },
+          offHandOnWeapon: false,
+          frontKnee: { x: 8, y: -4 + crouchY * 0.5 },
+          frontFoot: { x: 9.5, y: -1 },
+          backKnee: { x: -7, y: -2.5 + crouchY * 0.4 },
+          backFoot: { x: -10, y: -1 },
+          squashX: lerp(1.32, 1.0, k),
+          squashY: lerp(0.74, 1.0, k),
+        },
+        3,
+        true
+      );
     }
 
     // ── 6. DASH THRUST (Right-Click in Melee Mode — Explosive Horizontal Bullet Lunge) ──
@@ -523,27 +867,250 @@ export function sampleStickmanCombatPose(
       const ext = isCharge ? lerp(0, -6.5, k) : lerp(-6.5, 15.5, k);
       const torsoTilt = isCharge ? -0.22 : lerp(0.66, 0.34, k);
       const crouchY = isCharge ? 4 : lerp(3.5, 1.5, k);
+      const hand = { x: ext, y: 0 };
 
-      return {
-        torsoTilt,
-        headTilt: -torsoTilt * 0.48,
-        bodyOffsetX: isCharge ? -4 : lerp(9, 2.5, k),
-        crouchY,
-        bodyRotation: 0,
-        elbow: { x: ext * 0.48, y: 0.5 },
-        hand: { x: ext, y: 0 },
-        weaponAngle: 0,
-        weaponBehindTorso: false,
-        offElbow: { x: -6.5, y: -2.5 },
-        offHand: { x: -12, y: -4.5 },
-        // Dynamic flying horizontal stickman stride
-        frontKnee: { x: isCharge ? 5 : 9, y: -4.5 + crouchY },
-        frontFoot: { x: isCharge ? 6.5 : 10, y: -1.5 },
-        backKnee: { x: isCharge ? -6 : -8.5, y: -5.5 + crouchY },
-        backFoot: { x: isCharge ? -9.5 : -14.5, y: -4.5 },
-        squashX: isCharge ? 0.88 : lerp(1.28, 1.02, k),
-        squashY: isCharge ? 1.12 : lerp(0.8, 0.98, k),
-      };
+      return attachOffhandToWeapon(
+        {
+          torsoTilt,
+          headTilt: -torsoTilt * 0.48,
+          bodyOffsetX: isCharge ? -4 : lerp(9, 2.5, k),
+          crouchY,
+          bodyRotation: 0,
+          elbow: solveTwoBoneElbow(hand.x, hand.y, 6.8, 6.8, 1),
+          hand,
+          weaponAngle: 0,
+          weaponBehindTorso: false,
+          offElbow: { x: -6.5, y: -2.5 },
+          offHand: { x: -12, y: -4.5 },
+          offHandOnWeapon: false,
+          frontKnee: { x: isCharge ? 5 : 9, y: -4.5 + crouchY },
+          frontFoot: { x: isCharge ? 6.5 : 10, y: -1.5 },
+          backKnee: { x: isCharge ? -6 : -8.5, y: -5.5 + crouchY },
+          backFoot: { x: isCharge ? -9.5 : -14.5, y: -4.5 },
+          squashX: isCharge ? 0.88 : lerp(1.28, 1.02, k),
+          squashY: isCharge ? 1.12 : lerp(0.8, 0.98, k),
+        },
+        3,
+        profile.gripStyle === 'polearm'
+      );
     }
   }
+}
+
+// ── Physical Blade Segment & Swept Hitbox Geometry ───────────
+
+export interface WeaponBladeSegment {
+  hiltX: number;
+  hiltY: number;
+  baseX: number;
+  baseY: number;
+  tipX: number;
+  tipY: number;
+  behindTorso: boolean;
+}
+
+/**
+ * Transform the live stickman pose's hand & weapon angle into exact world/character
+ * space coordinates of the physical weapon hilt, blade base, and blade tip.
+ */
+export function computeWeaponBladeSegment(
+  pose: StickmanCombatPose,
+  weaponId: WeaponId,
+  facingRight: boolean,
+  charCenterX: number,
+  charBottomY: number
+): WeaponBladeSegment {
+  const profile = getWeaponMoveProfile(weaponId);
+  const handShoulderX = 2 + Math.sin(pose.torsoTilt) * 5;
+  const handShoulderY = -17 + pose.crouchY;
+
+  const localHiltX = handShoulderX + pose.hand.x;
+  const localHiltY = handShoulderY + pose.hand.y;
+  const cosW = Math.cos(pose.weaponAngle);
+  const sinW = Math.sin(pose.weaponAngle);
+
+  const localBaseX = localHiltX + cosW * profile.bladeBaseOffsetPx;
+  const localBaseY = localHiltY + sinW * profile.bladeBaseOffsetPx;
+  const localTipX = localHiltX + cosW * profile.bladeLengthPx;
+  const localTipY = localHiltY + sinW * profile.bladeLengthPx;
+
+  const toWorld = (lx: number, ly: number): Vec2 => {
+    let px = lx;
+    let py = ly;
+    // Apply bodyRotation around (0, -14) for somersault spin_vertical
+    if (pose.bodyRotation !== 0) {
+      const rx = px;
+      const ry = py + 14;
+      const c = Math.cos(pose.bodyRotation);
+      const s = Math.sin(pose.bodyRotation);
+      px = rx * c - ry * s;
+      py = rx * s + ry * c - 14;
+    }
+    px += pose.bodyOffsetX;
+    const dir = facingRight ? 1 : -1;
+    return {
+      x: charCenterX + px * dir * pose.squashX,
+      y: charBottomY + py * pose.squashY,
+    };
+  };
+
+  const hilt = toWorld(localHiltX, localHiltY);
+  const base = toWorld(localBaseX, localBaseY);
+  const tip = toWorld(localTipX, localTipY);
+
+  return {
+    hiltX: hilt.x,
+    hiltY: hilt.y,
+    baseX: base.x,
+    baseY: base.y,
+    tipX: tip.x,
+    tipY: tip.y,
+    behindTorso: pose.weaponBehindTorso,
+  };
+}
+
+/**
+ * Sample N trailing blade segments along the live weapon swing so the renderer
+ * can paint a realistic blade-driven metallic & energy motion ribbon directly
+ * attached to the actual steel/edge!
+ */
+export function sampleWeaponBladeTrail(
+  move: CombatMoveType,
+  progress: number,
+  weaponId: WeaponId,
+  facingRight: boolean,
+  charCenterX: number,
+  charBottomY: number,
+  samples = 6
+): WeaponBladeSegment[] {
+  const trailSpan =
+    move === 'spin_horizontal' || move === 'spin_vertical'
+      ? 0.24
+      : move === 'dash_thrust'
+        ? 0.2
+        : 0.16;
+  const startP = Math.max(0.05, progress - trailSpan);
+  if (progress <= startP + 0.01) return [];
+
+  const result: WeaponBladeSegment[] = [];
+  for (let i = 0; i < samples; i++) {
+    const t = samples <= 1 ? progress : lerp(startP, progress, i / (samples - 1));
+    const pose = sampleStickmanCombatPose(move, t, weaponId);
+    result.push(computeWeaponBladeSegment(pose, weaponId, facingRight, charCenterX, charBottomY));
+  }
+  return result;
+}
+
+export interface SweepHitbox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  centerX: number;
+  centerY: number;
+}
+
+/**
+ * Compute the physical swept melee collision AABB directly from the weapon's
+ * real blade length (`bladeLengthPx`), edge width (`bladeWidthPx`), and kinematic
+ * stickman motion trajectory!
+ */
+export function computeWeaponSweepHitbox(
+  move: CombatMoveType,
+  weaponId: WeaponId,
+  facingRight: boolean,
+  charCenterX: number,
+  charBottomY: number
+): SweepHitbox {
+  const profile = getWeaponMoveProfile(weaponId);
+  const pad = Math.max(4, profile.bladeWidthPx * 0.85);
+  const dir = facingRight ? 1 : -1;
+
+  // Sample active strike frames along the move
+  const startT = move === 'spin_vertical' || move === 'air_slam_dive' ? 0.08 : 0.22;
+  const endT = move === 'spin_horizontal' || move === 'spin_vertical' ? 0.88 : 0.66;
+  const steps = 7;
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  for (let i = 0; i <= steps; i++) {
+    const t = lerp(startT, endT, i / steps);
+    const pose = sampleStickmanCombatPose(move, t, weaponId);
+    const seg = computeWeaponBladeSegment(pose, weaponId, facingRight, charCenterX, charBottomY);
+    minX = Math.min(minX, seg.baseX, seg.tipX);
+    maxX = Math.max(maxX, seg.baseX, seg.tipX);
+    minY = Math.min(minY, seg.baseY, seg.tipY);
+    maxY = Math.max(maxY, seg.baseY, seg.tipY);
+  }
+
+  // Account for lunge forward displacement on thrusts
+  if (move === 'dash_thrust') {
+    const lungeExtra = weaponId === 'dagger' ? 14 : 26;
+    if (dir > 0) maxX += lungeExtra;
+    else minX -= lungeExtra;
+  } else if (move === 'mini_thrust') {
+    const lungeExtra = weaponId === 'dagger' ? 5 : 10;
+    if (dir > 0) maxX += lungeExtra;
+    else minX -= lungeExtra;
+  }
+
+  minX -= pad;
+  maxX += pad;
+  minY -= pad;
+  maxY += pad;
+
+  const w = Math.max(10, Math.round(maxX - minX));
+  const h = Math.max(14, Math.round(maxY - minY));
+  return {
+    x: Math.round(minX),
+    y: Math.round(minY),
+    w,
+    h,
+    centerX: (minX + maxX) * 0.5,
+    centerY: (minY + maxY) * 0.5,
+  };
+}
+
+/**
+ * Exact 2D line segment vs AABB intersection (Liang-Barsky) for live blade-edge hit checks.
+ */
+export function segmentIntersectsAABB(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  rx: number,
+  ry: number,
+  rw: number,
+  rh: number
+): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const checks: [number, number][] = [
+    [-dx, x1 - rx],
+    [dx, rx + rw - x1],
+    [-dy, y1 - ry],
+    [dy, ry + rh - y1],
+  ];
+
+  for (const [p, q] of checks) {
+    if (p === 0) {
+      if (q < 0) return false;
+    } else {
+      const r = q / p;
+      if (p < 0) {
+        if (r > t1) return false;
+        if (r > t0) t0 = r;
+      } else {
+        if (r < t0) return false;
+        if (r < t1) t1 = r;
+      }
+    }
+  }
+  return t0 <= t1;
 }

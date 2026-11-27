@@ -288,7 +288,7 @@ export function GameCanvas({
     engine.player.state.shards = Math.max(engine.player.state.shards, 200);
     engine.saveGear();
     setPlayerSnapshot({ ...engine.player.state });
-    showToast('Sandbox aktif: 12 Senjata (Lv.2 Glow) + 200 Shards & 6 Armor dibuka!');
+    showToast('Sandbox aktif: 13 Senjata (termasuk Bow) + 200 Shards & 6 Armor dibuka!');
   };
 
   const nextStageInfo = NEXT_STAGE_MAP[modeKey];

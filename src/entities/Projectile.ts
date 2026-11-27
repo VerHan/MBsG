@@ -7,9 +7,12 @@
 
 export type ProjectileSource = 'player' | 'enemy' | 'boss';
 
+export type ProjectileKind = 'bullet' | 'pellet' | 'arrow' | 'beam' | 'orb';
+
 export interface ProjectileInstance {
   id: string;
   source: ProjectileSource;
+  kind?: ProjectileKind;
   x: number;
   y: number;
   vx: number;
@@ -43,6 +46,7 @@ export function createProjectile(
   speed: number,
   damage: number,
   options?: {
+    kind?: ProjectileKind;
     piercing?: boolean;
     color?: string;
     trailColor?: string;
@@ -54,6 +58,7 @@ export function createProjectile(
   return {
     id: `proj_${_projCounter++}`,
     source,
+    kind: options?.kind ?? (source === 'player' ? 'bullet' : 'orb'),
     x,
     y,
     vx: Math.cos(angle) * speed,
@@ -89,6 +94,7 @@ export function createShotgunSpread(
     const angle = baseAngle - halfSpread + step * i;
     projectiles.push(
       createProjectile('player', x, y, angle, 350, damage, {
+        kind: 'pellet',
         color: '#FACC15',
         trailColor: '#F97316',
         life: 0.4, // short range
@@ -110,16 +116,37 @@ export function createDualPistolBurst(
 ): ProjectileInstance[] {
   return [
     createProjectile('player', x, y - 2, angle, 400, damage, {
+      kind: 'bullet',
       color: '#00F0FF',
       trailColor: '#A855F7',
       size: 2,
     }),
     createProjectile('player', x, y + 2, angle + 0.05, 400, damage, {
+      kind: 'bullet',
       color: '#00F0FF',
       trailColor: '#A855F7',
       size: 2,
     }),
   ];
+}
+
+/**
+ * Spawn Silkstring Recurve Bow piercing energy arrow.
+ */
+export function createBowArrow(
+  x: number,
+  y: number,
+  angle: number,
+  damage: number,
+): ProjectileInstance {
+  return createProjectile('player', x, y, angle, 465, damage, {
+    kind: 'arrow',
+    piercing: true,
+    color: '#4ADE80',
+    trailColor: '#00F0FF',
+    life: 2.2,
+    size: 4,
+  });
 }
 
 /**
@@ -132,6 +159,7 @@ export function createRifleBeam(
   damage: number,
 ): ProjectileInstance {
   return createProjectile('player', x, y, angle, 500, damage, {
+    kind: 'beam',
     piercing: true,
     color: '#A855F7',
     trailColor: '#00F0FF',
@@ -150,6 +178,7 @@ export function createEnemyOrb(
   damage: number,
 ): ProjectileInstance {
   return createProjectile('enemy', x, y, angle, 120, damage, {
+    kind: 'orb',
     color: '#A855F7',
     trailColor: '#00F0FF',
     life: 4,

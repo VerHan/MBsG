@@ -124,6 +124,7 @@ export class Player {
         { defId: 'needle', tier: 'common', level: 1 },
         { defId: 'dagger', tier: 'common', level: 1 },
         { defId: 'pistol', tier: 'common', level: 1 },
+        { defId: 'bow', tier: 'common', level: 1 },
       ],
       armorInventory: ['recruit_mk1'],
       ...initialState,

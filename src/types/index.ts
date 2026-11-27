@@ -28,7 +28,7 @@ export type MeleeWeaponId =
   | 'axe'
   | 'hammer'
   | 'dual_sword';
-export type RangedWeaponId = 'pistol' | 'dual_pistol' | 'shotgun' | 'rifle';
+export type RangedWeaponId = 'pistol' | 'dual_pistol' | 'shotgun' | 'bow' | 'rifle';
 export type WeaponId = MeleeWeaponId | RangedWeaponId;
 
 export interface WeaponDef {

@@ -232,8 +232,24 @@ export const WEAPONS: Record<string, WeaponDef> = {
     critChance: 0.08,
     reachRating: 2,
     energyCost: 24,
-    specialTrait: 'Mode Gun (+Short Dagger). 5 proyektil sebar penghancur perisai (24 EN).',
+    specialTrait: 'Mode Range (+Short Dagger). 5 proyektil sebar penghancur perisai (24 EN).',
     description: 'Senjata jarak dekat penghancur kerumunan musuh dan perisai Sentinel.',
+  },
+
+  bow: {
+    id: 'bow',
+    name: 'Silkstring Recurve Bow',
+    slot: 'ranged',
+    damageType: 'pierce',
+    baseDamage: 28,
+    hitsPerAttack: 1,
+    attackSpeed: 'fast',
+    attackCooldown: 22,
+    critChance: 0.26,
+    reachRating: 5,
+    energyCost: 12,
+    specialTrait: 'Mode Range (+Short Dagger). Panah energi menembus musuh dengan Crit tinggi (12 EN).',
+    description: 'Busur recurve bertali sutra energi yang melesatkan panah tajam menembus barisan musuh.',
   },
 
   rifle: {
@@ -248,7 +264,7 @@ export const WEAPONS: Record<string, WeaponDef> = {
     critChance: 0.18,
     reachRating: 5,
     energyCost: 18,
-    specialTrait: 'Mode Gun (+Short Dagger). Sinar piercing menembus seluruh barisan musuh (18 EN).',
+    specialTrait: 'Mode Range (+Short Dagger). Sinar piercing menembus seluruh barisan musuh (18 EN).',
     description: 'Senapan energi Ancient Tech berdaya tembus tinggi untuk garis lurus.',
   },
 };
@@ -263,7 +279,7 @@ export const MELEE_WEAPON_IDS = [
   'hammer',
   'dual_sword',
 ] as const;
-export const RANGED_WEAPON_IDS = ['pistol', 'dual_pistol', 'shotgun', 'rifle'] as const;
+export const RANGED_WEAPON_IDS = ['pistol', 'dual_pistol', 'shotgun', 'bow', 'rifle'] as const;
 
 export const DEFAULT_MELEE = 'needle';
 export const DEFAULT_RANGED = 'pistol';

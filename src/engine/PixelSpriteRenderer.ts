@@ -6,8 +6,16 @@
 // 7 Distinct Enemies & 3 Bosses.
 // ============================================================
 
-import type { ArmorId, BossId, EnemyId, WeaponId } from '../types';
-import { sampleStickmanCombatPose, type CombatMoveType } from './combatRules';
+import type { ArmorId, BossId, EnemyId, RangedWeaponId, WeaponId } from '../types';
+import {
+  getWeaponMoveProfile,
+  resolveDisplayedWeapon,
+  sampleRangedAimPose,
+  sampleStickmanCombatPose,
+  sampleWeaponBladeTrail,
+  solveTwoBoneElbow,
+  type CombatMoveType,
+} from './combatRules';
 
 export interface SpriteFrame {
   canvas: OffscreenCanvas;
@@ -482,8 +490,88 @@ export function drawComplexSlayerAvatar(
 
   const activePose =
     s.combatMove && !s.isBlocking
-      ? sampleStickmanCombatPose(s.combatMove, s.combatMoveProgress ?? 0)
+      ? sampleStickmanCombatPose(s.combatMove, s.combatMoveProgress ?? 0, s.meleeWeaponId)
       : null;
+
+  const displayWeapon = resolveDisplayedWeapon({
+    meleeWeaponId: s.meleeWeaponId,
+    rangedWeaponId: s.rangedWeaponId,
+    isMeleeAttacking: Boolean(activePose),
+  });
+
+  const activeRangedId: RangedWeaponId | null =
+    displayWeapon.mode === 'ranged_primary' && s.rangedWeaponId
+      ? (s.rangedWeaponId as RangedWeaponId)
+      : null;
+  const rangedRecoilProg = s.rangedTimer > 0 ? Math.max(0, Math.min(1, 1 - s.rangedTimer / 0.14)) : 0;
+  const rangedPose = activeRangedId && !s.isBlocking ? sampleRangedAimPose(activeRangedId, rangedRecoilProg) : null;
+
+  // ── 1B. Live Physical Blade-Swept Motion Ribbon (world space, attached directly to moving blade!) ──
+  if (
+    activePose &&
+    s.combatMove &&
+    s.combatMove !== 'air_slam_windup' &&
+    s.combatMove !== 'air_slam_impact'
+  ) {
+    const trail = sampleWeaponBladeTrail(
+      s.combatMove,
+      s.combatMoveProgress ?? 0,
+      s.meleeWeaponId,
+      s.facingRight,
+      cx,
+      bottomY,
+      7
+    );
+    if (trail.length >= 2) {
+      const wProfile = getWeaponMoveProfile(s.meleeWeaponId);
+      const ribbonColor =
+        s.meleeWeaponLevel >= 3
+          ? '#FACC15'
+          : s.meleeWeaponLevel === 2
+            ? '#00F0FF'
+            : wProfile.trailColor;
+      ctx.save();
+      // Tapered physical blade-sweep polygon connecting moving blade base -> blade tip
+      for (let i = 1; i < trail.length; i++) {
+        const a = trail[i - 1];
+        const b = trail[i];
+        const frac = i / (trail.length - 1);
+        ctx.globalAlpha = frac * 0.42;
+        ctx.fillStyle = ribbonColor;
+        ctx.beginPath();
+        ctx.moveTo(a.baseX, a.baseY);
+        ctx.lineTo(a.tipX, a.tipY);
+        ctx.lineTo(b.tipX, b.tipY);
+        ctx.lineTo(b.baseX, b.baseY);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // Razor-sharp gleaming blade-tip wake line
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = wProfile.heavy ? 2.1 : 1.3;
+      ctx.beginPath();
+      for (let i = 0; i < trail.length; i++) {
+        if (i === 0) ctx.moveTo(trail[i].tipX, trail[i].tipY);
+        else ctx.lineTo(trail[i].tipX, trail[i].tipY);
+      }
+      ctx.stroke();
+
+      // Secondary metallic core gleam along mid-blade
+      ctx.globalAlpha = 0.45;
+      ctx.strokeStyle = wProfile.accentColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i < trail.length; i++) {
+        const mx = (trail[i].baseX + trail[i].tipX) * 0.5;
+        const my = (trail[i].baseY + trail[i].tipY) * 0.5;
+        if (i === 0) ctx.moveTo(mx, my);
+        else ctx.lineTo(mx, my);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
 
   let bodyTilt = 0;
   let headTilt = 0;
@@ -680,8 +768,32 @@ export function drawComplexSlayerAvatar(
   // ── 3. Back Articulated Leg ─────────────────────────────
   drawArmoredLeg(ctx, -1, hipY, bKneeX, bKneeY, bFootX, bFootY, pal.secondary, pal.secondary, pal.glow);
 
-  // ── 4. Off-Hand Left Arm / Buckler / Cyber Fang / Katana Scabbard ─
-  if (s.meleeWeaponId === 'katana') {
+  // ── 4. Back-Slung Ranged Weapon (during Quick-Draw Dagger) / Hip Sheath / Off-Hand Arm ─
+  if (displayWeapon.showHolsteredRangedOnBack && s.rangedWeaponId) {
+    // Ranged weapon cleanly slung diagonally across back while quick-drawing the short dagger
+    ctx.save();
+    ctx.translate(-3, -16 + crouchY);
+    ctx.rotate(-1.08);
+    ctx.globalAlpha = 0.92;
+    drawWeaponPixelArt(ctx, s.rangedWeaponId, s.rangedWeaponLevel, s.animTime, 0);
+    ctx.restore();
+  }
+
+  if (displayWeapon.showHolsteredDagger) {
+    // Compact Short Combat Dagger tucked cleanly at hip sheath until melee attack
+    ctx.save();
+    ctx.translate(-4, -9 + crouchY);
+    ctx.rotate(0.65);
+    ctx.fillStyle = '#0B0D14';
+    ctx.fillRect(-1, -1, 7, 3);
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(0, 0, 5, 1);
+    ctx.fillStyle = '#00F0FF';
+    ctx.fillRect(-2, -1, 2, 3);
+    ctx.restore();
+  }
+
+  if (s.meleeWeaponId === 'katana' && displayWeapon.mode === 'melee_primary') {
     ctx.save();
     ctx.translate(-3, -10 + crouchY);
     ctx.rotate(-0.32);
@@ -711,6 +823,8 @@ export function drawComplexSlayerAvatar(
 
   const handShoulderX = 2 + Math.sin(bodyTilt) * 5;
   const handShoulderY = -17 + crouchY;
+  const offShoulderX = -1 + Math.sin(bodyTilt) * 4;
+  const offShoulderY = -17 + crouchY;
 
   const drawStickmanMainArm = () => {
     if (!activePose) return;
@@ -732,22 +846,22 @@ export function drawComplexSlayerAvatar(
     ctx.save();
     ctx.translate(hx, hy);
     ctx.rotate(activePose.weaponAngle);
-    drawWeaponPixelArt(ctx, s.meleeWeaponId, s.meleeWeaponLevel, s.animTime);
+    drawWeaponPixelArt(ctx, s.meleeWeaponId, s.meleeWeaponLevel, s.animTime, 0);
     ctx.restore();
   };
 
   if (activePose) {
-    // Articulated 2-bone off-hand arm for expressive stickman counter-balance
-    const oShX = -1 + Math.sin(bodyTilt) * 4;
-    const oShY = -17 + crouchY;
-    const oEx = oShX + activePose.offElbow.x;
-    const oEy = oShY + activePose.offElbow.y;
-    const oHx = oShX + activePose.offHand.x;
-    const oHy = oShY + activePose.offHand.y;
-    drawLimbSegment(ctx, oShX, oShY, oEx, oEy, 2.4, '#0B0D14', pal.secondary);
-    drawLimbSegment(ctx, oEx, oEy, oHx, oHy, 2.2, '#0B0D14', pal.secondary);
-    ctx.fillStyle = pal.glow;
-    ctx.fillRect(Math.round(oHx - 1), Math.round(oHy - 1), 2, 2);
+    // Articulated 2-bone off-hand arm: either physically gripping two-handed weapon shaft OR counterbalance!
+    const oEx = offShoulderX + activePose.offElbow.x;
+    const oEy = offShoulderY + activePose.offElbow.y;
+    const oHx = offShoulderX + activePose.offHand.x;
+    const oHy = offShoulderY + activePose.offHand.y;
+    if (!activePose.offHandOnWeapon) {
+      drawLimbSegment(ctx, offShoulderX, offShoulderY, oEx, oEy, 2.4, '#0B0D14', pal.secondary);
+      drawLimbSegment(ctx, oEx, oEy, oHx, oHy, 2.2, '#0B0D14', pal.secondary);
+      ctx.fillStyle = pal.glow;
+      ctx.fillRect(Math.round(oHx - 1), Math.round(oHy - 1), 2, 2);
+    }
 
     if (s.meleeWeaponId === 'dual_sword') {
       const offAng = Math.atan2(oHy - oEy, oHx - oEx);
@@ -761,6 +875,31 @@ export function drawComplexSlayerAvatar(
     if (activePose.weaponBehindTorso) {
       drawStickmanMainArm();
     }
+  } else if (rangedPose && activeRangedId) {
+    // Off-hand arm for Ranged Mode (behind torso for Pistol/Shotgun/Rifle/Dual Pistol/Bow)
+    const oEx = offShoulderX + rangedPose.offElbow.x;
+    const oEy = offShoulderY + rangedPose.offElbow.y;
+    const oHx = offShoulderX + rangedPose.offHand.x;
+    const oHy = offShoulderY + rangedPose.offHand.y;
+    drawLimbSegment(ctx, offShoulderX, offShoulderY, oEx, oEy, 2.4, '#0B0D14', pal.secondary);
+    drawLimbSegment(ctx, oEx, oEy, oHx, oHy, 2.2, '#0B0D14', pal.secondary);
+    ctx.fillStyle = pal.glow;
+    ctx.fillRect(Math.round(oHx - 1), Math.round(oHy - 1), 2, 2);
+
+    if (rangedPose.hasOffhandGun) {
+      // Second pistol held in off-hand for Dual Pistol (cyan plasma slide)!
+      ctx.save();
+      ctx.translate(oHx, oHy);
+      ctx.rotate(rangedPose.offWeaponAngle);
+      drawWeaponPixelArt(ctx, 'pistol', Math.max(2, s.rangedWeaponLevel), s.animTime, 0);
+      if (s.rangedTimer > 0.05) {
+        ctx.fillStyle = '#00F0FF';
+        ctx.fillRect(9, -3, 4, 3);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(10, -2, 3, 1);
+      }
+      ctx.restore();
+    }
   } else {
     ctx.save();
     ctx.translate(2, -17 + crouchY);
@@ -772,19 +911,19 @@ export function drawComplexSlayerAvatar(
     ctx.fillStyle = pal.glow;
     ctx.fillRect(4, 0, 2, 2);
 
-    if (s.meleeWeaponId === 'dual_sword') {
+    if (displayWeapon.mode === 'melee_primary' && s.meleeWeaponId === 'dual_sword') {
       ctx.save();
       ctx.translate(5, 0);
       drawOffhandTwinBlade(ctx, s.meleeWeaponLevel);
       ctx.restore();
-    } else if (s.hasOffhandShield) {
+    } else if (displayWeapon.mode === 'melee_primary' && s.hasOffhandShield) {
       ctx.fillStyle = '#0B0D14';
       ctx.fillRect(4, -5, 4, 10);
       ctx.fillStyle = pal.primary;
       ctx.fillRect(5, -4, 2, 8);
       ctx.fillStyle = '#00F0FF';
       ctx.fillRect(6, -3, 2, 6);
-    } else if (s.meleeWeaponId === 'needle') {
+    } else if (displayWeapon.mode === 'melee_primary' && s.meleeWeaponId === 'needle') {
       ctx.fillStyle = '#0B0D14';
       ctx.fillRect(4, -3, 4, 6);
       ctx.fillStyle = '#FFF1F2';
@@ -803,7 +942,7 @@ export function drawComplexSlayerAvatar(
   // ── 5. Tilted Torso + Armor Chestplate Matrix ───────────
   ctx.save();
   ctx.translate(0, -10 + crouchY);
-  ctx.rotate(bodyTilt);
+  ctx.rotate(bodyTilt + (rangedPose ? rangedPose.recoilTilt : 0));
 
   const chestMat = ARMOR_CHESTS[s.armorId] ?? CHEST_RECRUIT;
   const chestFrame = sprites.render(`chest_v2_${s.armorId}`, chestMat, pal, 1);
@@ -823,14 +962,16 @@ export function drawComplexSlayerAvatar(
   // ── 7. Front Articulated Leg ────────────────────────────
   drawArmoredLeg(ctx, 1, hipY, fKneeX, fKneeY, fFootX, fFootY, pal.primary, pal.secondary, pal.glow);
 
-  // ── 8. Front Right Arm + Active Weapon ──────────────────
+  // ── 8. Front Right Arm + Active Weapon (Ranged Primary OR Realistic Melee Grip) ──
   const isKatanaSheathed =
-    s.meleeWeaponId === 'katana' && (s.iaidoWindup || (!activePose && s.meleeTimer <= 0 && !s.isBlocking));
+    displayWeapon.mode === 'melee_primary' &&
+    s.meleeWeaponId === 'katana' &&
+    (s.iaidoWindup || (!activePose && s.meleeTimer <= 0 && !s.isBlocking));
 
   if (s.isBlocking) {
     drawWeaponInHand(
       ctx,
-      s.meleeWeaponId,
+      displayWeapon.weaponId,
       handShoulderX + 2,
       handShoulderY - 1,
       true,
@@ -840,35 +981,159 @@ export function drawComplexSlayerAvatar(
       false,
       0,
       true,
-      s.meleeWeaponLevel,
+      displayWeapon.mode === 'ranged_primary' ? s.rangedWeaponLevel : s.meleeWeaponLevel,
       s.animTime,
       false
     );
   } else if (activePose) {
     if (!activePose.weaponBehindTorso) {
       drawStickmanMainArm();
+      // Draw front-side second hand gripping two-handed weapon shaft/pommel so BOTH hands visibly hold it!
+      if (activePose.offHandOnWeapon) {
+        const oEx = offShoulderX + activePose.offElbow.x;
+        const oEy = offShoulderY + activePose.offElbow.y;
+        const oHx = offShoulderX + activePose.offHand.x;
+        const oHy = offShoulderY + activePose.offHand.y;
+        drawLimbSegment(ctx, offShoulderX, offShoulderY, oEx, oEy, 2.3, '#0B0D14', pal.secondary);
+        drawLimbSegment(ctx, oEx, oEy, oHx, oHy, 2.2, '#0B0D14', pal.primary);
+        ctx.fillStyle = '#0B0D14';
+        ctx.fillRect(Math.round(oHx - 1.5), Math.round(oHy - 1.5), 3, 3);
+        ctx.fillStyle = pal.glow;
+        ctx.fillRect(Math.round(oHx - 1), Math.round(oHy - 1), 2, 2);
+      }
+    }
+  } else if (rangedPose && activeRangedId) {
+    // Realistic Ranged Weapon Pose (Pistol, Dual Pistol, Shotgun, Bow, Rifle!)
+    const mEx = handShoulderX + rangedPose.mainElbow.x;
+    const mEy = handShoulderY + rangedPose.mainElbow.y;
+    const mHx = handShoulderX + rangedPose.mainHand.x;
+    const mHy = handShoulderY + rangedPose.mainHand.y;
+    const oHx = offShoulderX + rangedPose.offHand.x;
+    const oHy = offShoulderY + rangedPose.offHand.y;
+
+    if (activeRangedId === 'bow') {
+      // Recurve Bow is anchored at the extended front (off) hand, drawn by the rear (main) hand!
+      ctx.save();
+      ctx.translate(oHx, oHy);
+      drawWeaponPixelArt(ctx, 'bow', s.rangedWeaponLevel, s.animTime, rangedPose.bowDraw);
+      ctx.restore();
+
+      // Rear drawing arm pulling bowstring back toward visor
+      drawLimbSegment(ctx, handShoulderX, handShoulderY, mEx, mEy, 2.6, '#0B0D14', pal.primary);
+      drawLimbSegment(ctx, mEx, mEy, mHx, mHy, 2.4, '#0B0D14', pal.secondary);
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(Math.round(mHx - 2), Math.round(mHy - 2), 4, 4);
+      ctx.fillStyle = pal.glow;
+      ctx.fillRect(Math.round(mHx - 1), Math.round(mHy - 1), 2, 2);
+
+      // Flash release sparkle when firing arrow
+      if (s.rangedTimer > 0.04) {
+        ctx.fillStyle = '#4ADE80';
+        ctx.fillRect(Math.round(oHx + 4), Math.round(oHy - 2), 5, 4);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(Math.round(oHx + 6), Math.round(oHy - 1), 4, 2);
+      }
+    } else {
+      // Main arm holding Pistol / Dual Pistol (right gun) / Shotgun / Rifle
+      drawLimbSegment(ctx, handShoulderX, handShoulderY, mEx, mEy, 2.7, '#0B0D14', pal.primary);
+      drawLimbSegment(ctx, mEx, mEy, mHx, mHy, 2.5, '#0B0D14', pal.secondary);
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(Math.round(mHx - 2), Math.round(mHy - 2), 4, 4);
+      ctx.fillStyle = pal.primary;
+      ctx.fillRect(Math.round(mHx - 1), Math.round(mHy - 1), 2, 2);
+
+      ctx.save();
+      ctx.translate(mHx, mHy);
+      ctx.rotate(rangedPose.mainWeaponAngle);
+      // Dual pistol draws a crisp single pistol in each hand!
+      const artId: WeaponId = activeRangedId === 'dual_pistol' ? 'pistol' : activeRangedId;
+      drawWeaponPixelArt(ctx, artId, s.rangedWeaponLevel, s.animTime, 0);
+
+      // Crisp live muzzle flash right at each gun's actual barrel tip!
+      if (s.rangedTimer > 0.04) {
+        const tipX = activeRangedId === 'rifle' ? 18 : activeRangedId === 'shotgun' ? 14 : 9;
+        const flashColor =
+          activeRangedId === 'rifle'
+            ? '#A855F7'
+            : activeRangedId === 'shotgun'
+              ? '#FACC15'
+              : activeRangedId === 'dual_pistol'
+                ? '#00F0FF'
+                : '#F97316';
+        ctx.fillStyle = flashColor;
+        ctx.fillRect(tipX, activeRangedId === 'shotgun' ? -4 : -3, activeRangedId === 'shotgun' ? 6 : 5, activeRangedId === 'shotgun' ? 6 : 4);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(tipX + 1, -2, 4, 2);
+      }
+      ctx.restore();
+
+      // For two-handed Shotgun & Rifle, draw front-hand gauntlet visibly gripping the barrel/pump!
+      if (rangedPose.twoHanded) {
+        ctx.fillStyle = '#0B0D14';
+        ctx.fillRect(Math.round(oHx - 2), Math.round(oHy - 2), 4, 4);
+        ctx.fillStyle = pal.glow;
+        ctx.fillRect(Math.round(oHx - 1), Math.round(oHy - 1), 2, 2);
+      }
     }
   } else {
-    const recoil = s.rangedTimer > 0 ? 3 : 0;
-    const useRangedPose = s.rangedTimer > 0 && s.rangedWeaponId !== null;
-    const showWeapon = useRangedPose && s.rangedWeaponId ? s.rangedWeaponId : s.meleeWeaponId;
-    const showLv = useRangedPose ? s.rangedWeaponLevel : s.meleeWeaponLevel;
-    drawWeaponInHand(
-      ctx,
-      showWeapon,
-      isKatanaSheathed ? handShoulderX - 2 : handShoulderX,
-      isKatanaSheathed ? handShoulderY + 3 : handShoulderY,
-      true,
-      pal,
-      0,
-      s.meleeCombo,
-      false,
-      recoil,
-      false,
-      showLv,
-      s.animTime,
-      isKatanaSheathed
-    );
+    // Idle / Running Melee Primary Stance with realistic articulated arm & two-hand brace!
+    const wProfile = getWeaponMoveProfile(s.meleeWeaponId);
+    const sway = Math.sin(s.animTime * 4.5 + (moving ? s.walkPhase : 0)) * (moving ? 0.14 : 0.04);
+    if (isKatanaSheathed) {
+      drawWeaponInHand(
+        ctx,
+        s.meleeWeaponId,
+        handShoulderX - 2,
+        handShoulderY + 3,
+        true,
+        pal,
+        0,
+        s.meleeCombo,
+        false,
+        0,
+        false,
+        s.meleeWeaponLevel,
+        s.animTime,
+        true
+      );
+    } else {
+      const idleHandX = wProfile.heavy ? 5.2 : 6.4;
+      const idleHandY = wProfile.heavy ? 2.2 : 1.0 + Math.sin(s.animTime * 4) * 0.5;
+      const idleAngle =
+        s.meleeWeaponId === 'spear'
+          ? -0.22 + sway
+          : wProfile.heavy
+            ? -0.58 + sway
+            : -0.34 + sway;
+      const el = solveTwoBoneElbow(idleHandX, idleHandY, 5.2, 5.0, 1);
+      const ex = handShoulderX + el.x;
+      const ey = handShoulderY + el.y;
+      const hx = handShoulderX + idleHandX;
+      const hy = handShoulderY + idleHandY;
+
+      drawLimbSegment(ctx, handShoulderX, handShoulderY, ex, ey, 2.7, '#0B0D14', pal.primary);
+      drawLimbSegment(ctx, ex, ey, hx, hy, 2.5, '#0B0D14', pal.secondary);
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(Math.round(hx - 2), Math.round(hy - 2), 4, 4);
+      ctx.fillStyle = pal.primary;
+      ctx.fillRect(Math.round(hx - 1), Math.round(hy - 1), 2, 2);
+
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.rotate(idleAngle);
+      drawWeaponPixelArt(ctx, s.meleeWeaponId, s.meleeWeaponLevel, s.animTime, 0);
+      ctx.restore();
+
+      // Rest second hand on handle for heavy two-handed/polearm weapons even at idle!
+      if (wProfile.gripStyle === 'two_hand' || wProfile.gripStyle === 'polearm') {
+        const gX = hx + Math.cos(idleAngle) * wProfile.offhandGripOffset;
+        const gY = hy + Math.sin(idleAngle) * wProfile.offhandGripOffset;
+        ctx.fillStyle = '#0B0D14';
+        ctx.fillRect(Math.round(gX - 1.5), Math.round(gY - 1.5), 3, 3);
+        ctx.fillStyle = pal.glow;
+        ctx.fillRect(Math.round(gX - 1), Math.round(gY - 1), 2, 2);
+      }
+    }
   }
 
   // ── 9. Active Hold-Block Energy Aegis Shield & Parry Ring ─
@@ -954,6 +1219,7 @@ const WEAPON_GLOW_COLOR: Record<WeaponId, string> = {
   pistol: '#F97316',
   dual_pistol: '#00F0FF',
   shotgun: '#FACC15',
+  bow: '#4ADE80',
   rifle: '#A855F7',
 };
 
@@ -1083,6 +1349,7 @@ export function drawWeaponInHand(
       weaponId === 'pistol' ||
       weaponId === 'dual_pistol' ||
       weaponId === 'shotgun' ||
+      weaponId === 'bow' ||
       weaponId === 'rifle';
     ctx.translate(-recoil, 0);
     ctx.rotate(isGun ? 0 : weaponId === 'spear' ? -0.15 : -0.35);
@@ -1120,12 +1387,13 @@ function drawOffhandTwinBlade(ctx: CanvasRenderingContext2D, weaponLevel: number
   ctx.fillRect(10, -2, 4, 2);
 }
 
-/** Shared pixel-art renderer for all 12 weapons anchored at the hand grip (0, 0) */
+/** Shared pixel-art renderer for all 13 weapons anchored at the hand grip (0, 0) */
 export function drawWeaponPixelArt(
   ctx: CanvasRenderingContext2D,
   weaponId: WeaponId,
   weaponLevel = 1,
-  animTime = 0
+  animTime = 0,
+  bowDraw = 0.6
 ) {
   const glowColor = WEAPON_GLOW_COLOR[weaponId] ?? '#00F0FF';
   if (weaponLevel >= 2) {
@@ -1135,17 +1403,19 @@ export function drawWeaponPixelArt(
     const glowLen =
       weaponId === 'dagger'
         ? 6
-        : weaponId === 'spear' || weaponId === 'needle'
-          ? 22
-          : weaponId === 'sword' || weaponId === 'katana'
-            ? 17
-            : weaponId === 'axe' || weaponId === 'hammer'
-              ? 16
-              : 12;
+        : weaponId === 'bow'
+          ? 7
+          : weaponId === 'spear' || weaponId === 'needle'
+            ? 22
+            : weaponId === 'sword' || weaponId === 'katana'
+              ? 17
+              : weaponId === 'axe' || weaponId === 'hammer'
+                ? 16
+                : 12;
     ctx.fillStyle =
       weaponLevel === 3
-        ? `rgba(255, 255, 255, ${0.28 + pulse * 0.2})`
-        : `rgba(0, 240, 255, ${0.2 + pulse * 0.16})`;
+        ? `rgba(255, 255, 255, ${0.26 + pulse * 0.18})`
+        : `rgba(0, 240, 255, ${0.18 + pulse * 0.15})`;
     ctx.fillRect(1, weaponLevel === 3 ? -3 : -2, glowLen, weaponLevel === 3 ? 6 : 4);
   }
 
@@ -1177,7 +1447,7 @@ export function drawWeaponPixelArt(
     }
 
     case 'dagger':
-      // Ultra-short tactical backup blade (visibly compact close-range Gun sidearm!)
+      // Ultra-short tactical backup blade (visibly compact close-range sidearm!)
       ctx.fillStyle = '#0B0D14';
       ctx.fillRect(-2, -2, 3, 4);
       ctx.fillStyle = weaponLevel >= 2 ? '#FACC15' : '#64748B';
@@ -1189,6 +1459,11 @@ export function drawWeaponPixelArt(
       break;
 
     case 'sword':
+      // Extended two-handed pommel + broad glowing fuller blade
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(-5, -1, 5, 3);
+      ctx.fillStyle = '#92400E';
+      ctx.fillRect(-4, 0, 4, 1);
       ctx.fillStyle = '#0B0D14';
       ctx.fillRect(-1, -4, 3, 8);
       ctx.fillStyle = '#FACC15';
@@ -1197,30 +1472,37 @@ export function drawWeaponPixelArt(
       ctx.fillRect(2, -1, 15, 2);
       ctx.fillStyle = weaponLevel >= 2 ? '#00F0FF' : '#F97316';
       ctx.fillRect(3, 0, 12, 1);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(16, -1, 2, 1);
       break;
 
     case 'spear':
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(-8, -1, 23, 3);
       ctx.fillStyle = '#78350F';
-      ctx.fillRect(-5, -1, 19, 2);
+      ctx.fillRect(-7, -1, 21, 2);
       ctx.fillStyle = '#FACC15';
       ctx.fillRect(12, -2, 2, 4);
       ctx.fillStyle = weaponLevel >= 2 ? '#00F0FF' : '#E2E8F0';
       ctx.fillRect(14, -2, 5, 4);
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(16, -1, 6, 2);
+      ctx.fillRect(16, -1, 7, 2);
       break;
 
     case 'katana':
       ctx.fillStyle = '#1E293B';
-      ctx.fillRect(-2, -1, 3, 2);
+      ctx.fillRect(-5, -1, 6, 2);
+      ctx.fillStyle = '#EF4444';
+      ctx.fillRect(-4, -1, 1, 2);
+      ctx.fillRect(-2, -1, 1, 2);
       ctx.fillStyle = '#FACC15';
       ctx.fillRect(1, -3, 1, 6);
       ctx.fillStyle = '#0F172A';
-      ctx.fillRect(2, -1, 14, 2);
+      ctx.fillRect(2, -1, 15, 2);
       ctx.fillStyle = weaponLevel >= 2 ? '#EF4444' : '#F87171';
-      ctx.fillRect(4, -2, 13, 1);
+      ctx.fillRect(4, -2, 14, 1);
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(10, -2, 6, 1);
+      ctx.fillRect(10, -2, 8, 1);
       break;
 
     case 'dual_sword':
@@ -1241,8 +1523,10 @@ export function drawWeaponPixelArt(
       break;
 
     case 'axe':
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(-3, -1, 17, 3);
       ctx.fillStyle = '#78350F';
-      ctx.fillRect(-1, -1, 14, 2);
+      ctx.fillRect(-2, -1, 15, 2);
       ctx.fillStyle = '#94A3B8';
       ctx.fillRect(9, -6, 5, 11);
       ctx.fillStyle = weaponLevel >= 2 ? '#FACC15' : '#EF4444';
@@ -1252,8 +1536,10 @@ export function drawWeaponPixelArt(
       break;
 
     case 'hammer':
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(-4, -1, 15, 3);
       ctx.fillStyle = '#475569';
-      ctx.fillRect(-2, -1, 12, 2);
+      ctx.fillRect(-3, -1, 13, 2);
       ctx.fillStyle = '#0B0D14';
       ctx.fillRect(8, -7, 8, 14);
       ctx.fillStyle = '#334155';
@@ -1264,51 +1550,119 @@ export function drawWeaponPixelArt(
       ctx.fillRect(11, -2, 2, 4);
       break;
 
+    // ── 5 DISTINCT RANGED WEAPONS ───────────────────────────
     case 'pistol':
+      // Crisp tactical plasma sidearm with barrel rail & angled grip
       ctx.fillStyle = '#0B0D14';
-      ctx.fillRect(-1, -3, 10, 5);
-      ctx.fillStyle = '#475569';
-      ctx.fillRect(0, -2, 8, 3);
+      ctx.fillRect(-1, -3, 11, 5);
+      ctx.fillRect(-1, 1, 4, 4);
+      ctx.fillStyle = '#64748B';
+      ctx.fillRect(0, -2, 9, 2);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(0, 0, 7, 1);
       ctx.fillStyle = weaponLevel >= 2 ? '#00F0FF' : '#F97316';
-      ctx.fillRect(6, -2, 2, 2);
-      ctx.fillStyle = '#1E293B';
-      ctx.fillRect(0, 1, 3, 2);
+      ctx.fillRect(5, -2, 4, 1);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(8, -2, 1, 2);
       break;
 
     case 'dual_pistol':
-      ctx.fillStyle = '#1E293B';
-      ctx.fillRect(0, -3, 9, 3);
-      ctx.fillRect(-2, 1, 8, 2);
-      ctx.fillStyle = '#00F0FF';
-      ctx.fillRect(7, -3, 2, 2);
-      ctx.fillRect(4, 1, 2, 1);
+      // Paired cyber pistols icon/fallback (in active stance each hand renders its own crisp pistol!)
+      ctx.fillStyle = '#0B0D14';
+      ctx.fillRect(-1, -4, 10, 4);
+      ctx.fillRect(-2, 1, 9, 4);
+      ctx.fillStyle = '#38BDF8';
+      ctx.fillRect(0, -3, 8, 2);
+      ctx.fillRect(-1, 2, 7, 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(6, -3, 2, 1);
+      ctx.fillRect(4, 2, 2, 1);
       break;
 
     case 'shotgun':
+      // Heavy pump-action Breacher shotgun with wooden stock, pump forend, & wide dual-bore muzzle
       ctx.fillStyle = '#0B0D14';
-      ctx.fillRect(-2, -3, 15, 5);
-      ctx.fillStyle = '#64748B';
-      ctx.fillRect(-1, -2, 13, 3);
-      ctx.fillStyle = '#FACC15';
-      ctx.fillRect(10, -2, 2, 2);
-      ctx.fillStyle = '#78350F';
-      ctx.fillRect(-2, 0, 4, 2);
+      ctx.fillRect(-5, -2, 20, 6);
+      ctx.fillStyle = '#78350F'; // wood stock
+      ctx.fillRect(-4, 0, 5, 3);
+      ctx.fillStyle = '#475569'; // receiver
+      ctx.fillRect(1, -2, 6, 4);
+      ctx.fillStyle = '#94A3B8'; // thick upper barrel
+      ctx.fillRect(7, -2, 7, 2);
+      ctx.fillStyle = '#B45309'; // tactical pump forend (where off-hand grips!)
+      ctx.fillRect(6, 0, 5, 2);
+      ctx.fillStyle = '#FACC15'; // glowing energy choke
+      ctx.fillRect(12, -2, 2, 3);
       break;
 
+    case 'bow': {
+      // Silkstring Recurve Bow: curved dark-jade/ivory recurve limbs + taut drawn silkstring + nocked arrow!
+      const pullX = -2 - bowDraw * 5.5;
+      // Curved upper & lower recurve limbs
+      ctx.strokeStyle = '#0B0D14';
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.moveTo(-2, -10);
+      ctx.quadraticCurveTo(5, -5, 1, 0);
+      ctx.quadraticCurveTo(5, 5, -2, 10);
+      ctx.stroke();
+
+      ctx.strokeStyle = weaponLevel >= 2 ? '#4ADE80' : '#CBD5E1';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-2, -10);
+      ctx.quadraticCurveTo(4.5, -5, 1, 0);
+      ctx.quadraticCurveTo(4.5, 5, -2, 10);
+      ctx.stroke();
+
+      // Gold riser grip + limb tips
+      ctx.fillStyle = '#FACC15';
+      ctx.fillRect(0, -2, 2, 4);
+      ctx.fillRect(-3, -11, 2, 2);
+      ctx.fillRect(-3, 9, 2, 2);
+
+      // Animated taut glowing silkstring pulled back to drawing hand!
+      ctx.strokeStyle = '#00F0FF';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-2, -10);
+      ctx.lineTo(pullX, 0);
+      ctx.lineTo(-2, 10);
+      ctx.stroke();
+
+      // Nocked glowing energy arrow (visible whenever bowstring is drawn!)
+      if (bowDraw > 0.15) {
+        ctx.fillStyle = '#E2E8F0';
+        ctx.fillRect(Math.round(pullX), -1, Math.round(9 - pullX), 1);
+        ctx.fillStyle = '#4ADE80';
+        ctx.fillRect(8, -2, 3, 3);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(10, -1, 2, 1);
+      }
+      break;
+    }
+
     case 'rifle':
+      // Long Ancient-Tech Rail Sniper Rifle with top optic scope & glowing violet/cyan rail coils
       ctx.fillStyle = '#0B0D14';
-      ctx.fillRect(-2, -3, 18, 4);
-      ctx.fillStyle = '#312E81';
-      ctx.fillRect(-1, -2, 16, 2);
-      ctx.fillStyle = '#00F0FF';
-      ctx.fillRect(4, -2, 9, 1);
-      ctx.fillStyle = '#A855F7';
-      ctx.fillRect(14, -2, 2, 2);
+      ctx.fillRect(-5, -3, 24, 5);
+      ctx.fillRect(1, -5, 7, 2); // optic scope silhouette
+      ctx.fillStyle = '#334155'; // stock
+      ctx.fillRect(-4, -1, 5, 3);
+      ctx.fillStyle = '#312E81'; // body chassis
+      ctx.fillRect(1, -2, 16, 3);
+      ctx.fillStyle = '#00F0FF'; // optic lens & rail strip
+      ctx.fillRect(2, -4, 5, 1);
+      ctx.fillRect(6, -1, 10, 1);
+      ctx.fillStyle = '#A855F7'; // plasma rail muzzle
+      ctx.fillRect(16, -2, 3, 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(18, -1, 1, 1);
       break;
   }
 
   if (weaponLevel >= 3) {
-    const maxSpark = weaponId === 'dagger' ? 4 : 10;
+    const maxSpark = weaponId === 'dagger' || weaponId === 'bow' ? 4 : 10;
     const sparkX = 2 + Math.round((animTime * 22) % maxSpark);
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(sparkX, -1, 2, 2);

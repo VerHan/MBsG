@@ -65,9 +65,11 @@ const MOVE_PREVIEW_DURATION: Record<CombatMoveType, number> = {
 function SlayerPreviewCanvas({
   playerState,
   moveTrigger,
+  rangedTriggerSeq,
 }: {
   playerState: PlayerState;
   moveTrigger: { seq: number; move: CombatMoveType };
+  rangedTriggerSeq: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const spritesRef = useRef<PixelSpriteRenderer | null>(null);
@@ -79,13 +81,23 @@ function SlayerPreviewCanvas({
     duration: number;
     move: CombatMoveType | null;
     lastSeq: number;
-  }>({ timer: 0, duration: 0.34, move: null, lastSeq: 0 });
+    rangedTimer: number;
+    lastRangedSeq: number;
+  }>({ timer: 0, duration: 0.34, move: null, lastSeq: 0, rangedTimer: 0, lastRangedSeq: 0 });
 
   if (moveTrigger.seq !== swingRef.current.lastSeq) {
     swingRef.current.lastSeq = moveTrigger.seq;
     swingRef.current.move = moveTrigger.move;
     swingRef.current.duration = MOVE_PREVIEW_DURATION[moveTrigger.move] ?? 0.36;
     swingRef.current.timer = swingRef.current.duration;
+    swingRef.current.rangedTimer = 0;
+  }
+
+  if (rangedTriggerSeq !== swingRef.current.lastRangedSeq) {
+    swingRef.current.lastRangedSeq = rangedTriggerSeq;
+    swingRef.current.timer = 0;
+    swingRef.current.move = null;
+    swingRef.current.rangedTimer = 0.18;
   }
 
   useEffect(() => {
@@ -114,6 +126,9 @@ function SlayerPreviewCanvas({
         if (swingRef.current.timer <= 0) {
           swingRef.current.move = null;
         }
+      }
+      if (swingRef.current.rangedTimer > 0) {
+        swingRef.current.rangedTimer = Math.max(0, swingRef.current.rangedTimer - dt);
       }
 
       const ps = stateRef.current;
@@ -167,83 +182,55 @@ function SlayerPreviewCanvas({
       ctx.fillRect(14, 72, 68, 1);
       ctx.globalAlpha = 1;
 
-      // Render stickman-style motion trail matching the previewed move
-      if (activeMove) {
+      // Ground shockwave for Slam or projectile streak for Ranged fire preview
+      // (Melee slashes use the real live blade-swept ribbon inside drawComplexSlayerAvatar!)
+      if (activeMove === 'air_slam_impact') {
         const alpha = Math.max(0, 1 - prog * 0.72);
         const arcColor =
           meleeLv >= 3 ? '#FACC15' : meleeLv === 2 ? '#00F0FF' : profile.trailColor;
-        const r = Math.round(22 * Math.max(0.65, profile.reachScale));
+        const r = Math.round(20 * Math.max(0.65, profile.reachScale));
+        const spread = (r + 10) * (0.4 + prog * 0.7);
         ctx.save();
         ctx.globalAlpha = alpha;
-        if (activeMove === 'spin_horizontal') {
-          ctx.translate(48, 56);
-          const rot = prog * Math.PI * 2;
-          ctx.strokeStyle = arcColor;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.ellipse(0, 0, r + 4, 7, 0, rot - Math.PI * 0.8, rot + Math.PI * 0.6);
-          ctx.stroke();
-          ctx.strokeStyle = '#FFFFFF';
-          ctx.lineWidth = 1.4;
-          ctx.beginPath();
-          ctx.ellipse(0, -1, r + 5, 6, 0, rot - Math.PI * 0.4, rot + Math.PI * 0.5);
-          ctx.stroke();
-        } else if (activeMove === 'spin_vertical') {
-          ctx.translate(48, 54 + airLiftY);
-          ctx.rotate(prog * Math.PI * 2.4);
-          ctx.strokeStyle = arcColor;
-          ctx.lineWidth = 2.8;
-          ctx.beginPath();
-          ctx.arc(0, 0, r, -Math.PI * 0.65, Math.PI * 0.75);
-          ctx.stroke();
-          ctx.strokeStyle = '#FFFFFF';
-          ctx.lineWidth = 1.4;
-          ctx.beginPath();
-          ctx.arc(0, 0, r - 2, -Math.PI * 0.4, Math.PI * 0.55);
-          ctx.stroke();
-        } else if (activeMove === 'mini_thrust' || activeMove === 'dash_thrust') {
-          ctx.translate(52, 54);
-          const len = (activeMove === 'dash_thrust' ? r + 14 : r + 4) * (0.6 + prog * 0.55);
-          ctx.fillStyle = arcColor;
-          ctx.beginPath();
-          ctx.moveTo(-4, activeMove === 'dash_thrust' ? -4 : -2.5);
-          ctx.lineTo(len, 0);
-          ctx.lineTo(-4, activeMove === 'dash_thrust' ? 4 : 2.5);
-          ctx.closePath();
-          ctx.fill();
-          ctx.strokeStyle = '#FFFFFF';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(-2, 0);
-          ctx.lineTo(len + 4, 0);
-          ctx.stroke();
-        } else if (activeMove === 'air_slam_impact') {
-          ctx.translate(48, 72);
-          const spread = (r + 10) * (0.4 + prog * 0.7);
-          ctx.fillStyle = arcColor;
-          ctx.beginPath();
-          ctx.moveTo(-spread, 0);
-          ctx.quadraticCurveTo(-spread * 0.45, -18 * (1 - prog * 0.5), 0, -6);
-          ctx.quadraticCurveTo(spread * 0.45, -18 * (1 - prog * 0.5), spread, 0);
-          ctx.closePath();
-          ctx.fill();
-          ctx.strokeStyle = '#FFFFFF';
-          ctx.lineWidth = 1.6;
-          ctx.beginPath();
-          ctx.ellipse(0, 0, spread, 5, 0, Math.PI, Math.PI * 2);
-          ctx.stroke();
+        ctx.translate(48, 72);
+        ctx.fillStyle = arcColor;
+        ctx.beginPath();
+        ctx.moveTo(-spread, 0);
+        ctx.quadraticCurveTo(-spread * 0.45, -18 * (1 - prog * 0.5), 0, -6);
+        ctx.quadraticCurveTo(spread * 0.45, -18 * (1 - prog * 0.5), spread, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, spread, 5, 0, Math.PI, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      } else if (swingRef.current.rangedTimer > 0 && ps.rangedWeapon) {
+        const rProg = 1 - swingRef.current.rangedTimer / 0.18;
+        const shotX = 62 + rProg * 30;
+        ctx.save();
+        if (ps.rangedWeapon.defId === 'bow') {
+          ctx.fillStyle = '#E2E8F0';
+          ctx.fillRect(Math.round(shotX - 6), 54, 10, 1);
+          ctx.fillStyle = '#4ADE80';
+          ctx.fillRect(Math.round(shotX + 3), 53, 3, 3);
+        } else if (ps.rangedWeapon.defId === 'shotgun') {
+          ctx.fillStyle = '#FACC15';
+          for (let i = -2; i <= 2; i++) {
+            ctx.fillRect(Math.round(shotX), Math.round(54 + i * rProg * 5), 3, 2);
+          }
+        } else if (ps.rangedWeapon.defId === 'rifle') {
+          ctx.fillStyle = '#00F0FF';
+          ctx.fillRect(60, 53, 34, 3);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(62, 54, 32, 1);
         } else {
-          ctx.translate(53, 52);
-          ctx.strokeStyle = arcColor;
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(0, 0, r, -Math.PI * 0.65, -Math.PI * 0.65 + Math.PI * 1.3 * Math.min(1, prog * 1.6));
-          ctx.stroke();
-          ctx.strokeStyle = '#FFFFFF';
-          ctx.lineWidth = 1.3;
-          ctx.beginPath();
-          ctx.arc(0, 0, r + 1, -Math.PI * 0.5, -Math.PI * 0.5 + Math.PI * 1.05 * Math.min(1, prog * 1.6));
-          ctx.stroke();
+          ctx.fillStyle = ps.rangedWeapon.defId === 'dual_pistol' ? '#00F0FF' : '#F97316';
+          ctx.fillRect(Math.round(shotX), 53, 5, 2);
+          if (ps.rangedWeapon.defId === 'dual_pistol') {
+            ctx.fillRect(Math.round(shotX - 5), 57, 5, 2);
+          }
         }
         ctx.restore();
       }
@@ -269,7 +256,7 @@ function SlayerPreviewCanvas({
         meleeDuration: swingRef.current.duration,
         meleeCombo: 1,
         isPogo: false,
-        rangedTimer: 0,
+        rangedTimer: swingRef.current.rangedTimer,
         doubleJumpFlip: 0,
         spinAttack: 0,
         walkPhase: 0,
@@ -312,6 +299,7 @@ export function InventoryModal({
   onClose,
 }: InventoryModalProps) {
   const [comboStep, setComboStep] = useState(1);
+  const [rangedTriggerSeq, setRangedTriggerSeq] = useState(0);
   const [moveTrigger, setMoveTrigger] = useState<{ seq: number; move: CombatMoveType }>({
     seq: 0,
     move: 'standard_slash',
@@ -376,6 +364,7 @@ export function InventoryModal({
           onClick={() => {
             onEquipWeapon(inst);
             if (isMelee) handleTestCombo();
+            else setRangedTriggerSeq((s) => s + 1);
           }}
           className="w-full text-left"
         >
@@ -475,7 +464,7 @@ export function InventoryModal({
               onClick={onUnlockAllDemoGear}
               className="inline-flex items-center gap-1 border border-mana-cyan/60 bg-mana-cyan/10 px-2.5 py-1 text-[10px] font-bold text-mana-cyan hover:bg-mana-cyan/20"
             >
-              <Sparkles className="h-3.5 w-3.5" /> Sandbox: Buka 12 Senjata &amp; 6 Armor
+              <Sparkles className="h-3.5 w-3.5" /> Sandbox: Buka 13 Senjata &amp; 6 Armor
             </button>
             <button
               type="button"
@@ -490,14 +479,18 @@ export function InventoryModal({
         {/* Live Animated Stickman Slayer Loadout Preview */}
         <div className="mb-4 flex flex-col sm:flex-row items-center gap-4 border border-ancient-stone bg-abyss-950/90 p-3">
           <div className="flex flex-col items-center gap-1.5 shrink-0 w-44">
-            <SlayerPreviewCanvas playerState={playerState} moveTrigger={moveTrigger} />
+            <SlayerPreviewCanvas
+              playerState={playerState}
+              moveTrigger={moveTrigger}
+              rangedTriggerSeq={rangedTriggerSeq}
+            />
             <div className="grid w-full grid-cols-2 gap-1">
               <button
                 type="button"
                 onClick={handleTestCombo}
                 className="inline-flex items-center justify-center gap-1 border border-slayer-orange/70 bg-slayer-orange/15 px-1.5 py-1 text-[9px] font-bold text-slayer-orange hover:bg-slayer-orange/25"
               >
-                <Play className="h-2.5 w-2.5" /> Combo {comboStep}
+                <Play className="h-2.5 w-2.5" /> {isMeleeOnlyMode ? `Combo ${comboStep}` : `Dagger ${comboStep}`}
               </button>
               <button
                 type="button"
@@ -506,13 +499,23 @@ export function InventoryModal({
               >
                 Spin V
               </button>
-              <button
-                type="button"
-                onClick={() => triggerPreviewMove('dash_thrust')}
-                className="border border-rose-400/70 bg-rose-500/15 px-1.5 py-1 text-[9px] font-bold text-rose-300 hover:bg-rose-500/25"
-              >
-                Dash Thrust
-              </button>
+              {isMeleeOnlyMode ? (
+                <button
+                  type="button"
+                  onClick={() => triggerPreviewMove('dash_thrust')}
+                  className="border border-rose-400/70 bg-rose-500/15 px-1.5 py-1 text-[9px] font-bold text-rose-300 hover:bg-rose-500/25"
+                >
+                  Dash Thrust
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setRangedTriggerSeq((s) => s + 1)}
+                  className="border border-emerald-400/70 bg-emerald-500/15 px-1.5 py-1 text-[9px] font-bold text-emerald-300 hover:bg-emerald-500/25"
+                >
+                  {playerState.rangedWeapon?.defId === 'bow' ? 'Tarik Busur' : 'Tembak Range'}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => triggerPreviewMove('air_slam_impact')}
@@ -577,7 +580,7 @@ export function InventoryModal({
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-mana-cyan tabular-nums">
               <span className="flex items-center gap-1.5">
-                <Crosshair className="h-4 w-4" /> RANGED GUN ({rangedOwned.length}/4)
+                <Crosshair className="h-4 w-4" /> RANGED ARSENAL ({rangedOwned.length}/5)
               </span>
               {isMeleeOnlyMode ? (
                 <span className="text-[10px] font-normal text-slayer-orange">
@@ -591,15 +594,15 @@ export function InventoryModal({
                     onClick={onUnequipRanged}
                     className="border border-ancient-stone px-2 py-0.5 text-[10px] text-slate-300 hover:border-slayer-orange hover:text-slayer-orange"
                   >
-                    Lepas Gun
+                    Lepas Range
                   </button>
                 )
               )}
             </div>
             {isMeleeOnlyMode && (
               <div className="mb-2 border border-slayer-orange/40 bg-slayer-orange/10 p-2 text-[10px] text-slate-300">
-                Sedang dalam Mode Melee Murni (Klik Kanan = Dash Thrust). Pilih Gun di bawah untuk beralih ke{' '}
-                <strong className="text-mana-cyan">Gun + Short Combat Dagger</strong> (jarak dekat).
+                Sedang dalam Mode Melee Murni (Klik Kanan = Dash Thrust). Pilih Pistol, Dual Pistol, Shotgun, Bow, atau Rifle di bawah untuk tampil di tangan +{' '}
+                <strong className="text-mana-cyan">Quick-Draw Short Dagger</strong> saat hit melee.
               </div>
             )}
             <div className="space-y-2">
