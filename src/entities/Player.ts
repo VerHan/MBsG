@@ -21,7 +21,16 @@ import {
 } from '../data/weapons';
 import { ARMORS } from '../data/armors';
 import { TIER_DAMAGE_MULT } from '../types';
-import { applyLoadoutEquipRule } from '../engine/combatRules';
+import {
+  DASH_THRUST_ENERGY_COST,
+  DUAL_CROSS_COMBO_ENERGY_COST,
+  GROUND_SLAM_ENERGY_COST,
+  applyLoadoutEquipRule,
+  canWeaponAirSlam,
+  canWeaponDashThrust,
+  canWeaponDualCombo,
+  canWeaponGroundSlam,
+} from '../engine/combatRules';
 
 const GRAVITY = 880;
 const APEX_GRAVITY = 420;
@@ -529,11 +538,24 @@ export class Player {
     return true;
   }
 
-  /** Right-Click / [K] special lunge in Melee-Only mode */
-  triggerDashThrust(): boolean {
-    if (this._dashThrustCooldown > 0) return false;
-    this.setBlocking(false);
+  /** Right-Click / [K] Dash Thrust — ONLY for Sword, Katana, Spear, and costs Energy */
+  triggerDashThrust(): {
+    ok: boolean;
+    reason?: 'not_allowed' | 'cooldown' | 'no_energy';
+    cost?: number;
+  } {
+    if (!canWeaponDashThrust(this.state.meleeWeapon.defId)) {
+      return { ok: false, reason: 'not_allowed' };
+    }
+    if (this._dashThrustCooldown > 0) return { ok: false, reason: 'cooldown' };
     const armor = ARMORS[this.state.armorId];
+    const cost = Math.round(DASH_THRUST_ENERGY_COST * (armor?.energyCostMult ?? 1));
+    if (this.state.energy < cost) {
+      return { ok: false, reason: 'no_energy', cost };
+    }
+
+    this.state.energy -= cost;
+    this.setBlocking(false);
     const adrMult = this._adrenalineActive ? 0.72 : 1;
     this._dashThrustCooldown = 0.52 * (armor?.dashCdMult ?? 1) * adrMult;
     this._meleeTimer = Math.max(this._meleeTimer, 0.22);
@@ -541,7 +563,62 @@ export class Player {
     const variety = this._lastAttackType !== 'dash_attack' ? STYLE_VARIETY_MULT : 1;
     this.addStylePoints(14 * variety);
     this._lastAttackType = 'dash_attack';
-    return true;
+    return { ok: true, cost };
+  }
+
+  /** Hold Right-Click / [K] Ground Slam — ONLY for Axe & Hammer, costs Energy */
+  triggerGroundSlam(): {
+    ok: boolean;
+    reason?: 'not_allowed' | 'cooldown' | 'no_energy';
+    cost?: number;
+  } {
+    if (!canWeaponGroundSlam(this.state.meleeWeapon.defId)) {
+      return { ok: false, reason: 'not_allowed' };
+    }
+    if (this._dashThrustCooldown > 0) return { ok: false, reason: 'cooldown' };
+    const armor = ARMORS[this.state.armorId];
+    const cost = Math.round(GROUND_SLAM_ENERGY_COST * (armor?.energyCostMult ?? 1));
+    if (this.state.energy < cost) {
+      return { ok: false, reason: 'no_energy', cost };
+    }
+
+    this.state.energy -= cost;
+    this.setBlocking(false);
+    const adrMult = this._adrenalineActive ? 0.75 : 1;
+    this._dashThrustCooldown = 0.65 * (armor?.dashCdMult ?? 1) * adrMult;
+    this._meleeTimer = Math.max(this._meleeTimer, 0.34);
+    const variety = this._lastAttackType !== 'slam' ? STYLE_VARIETY_MULT : 1;
+    this.addStylePoints(18 * variety);
+    this._lastAttackType = 'slam';
+    return { ok: true, cost };
+  }
+
+  /** RMB + LMB Extra Combo — ONLY for Dual Sword (2x Dual Damage), costs Energy */
+  triggerDualCrossCombo(): {
+    ok: boolean;
+    reason?: 'not_allowed' | 'cooldown' | 'no_energy';
+    cost?: number;
+  } {
+    if (!canWeaponDualCombo(this.state.meleeWeapon.defId)) {
+      return { ok: false, reason: 'not_allowed' };
+    }
+    if (this._dashThrustCooldown > 0) return { ok: false, reason: 'cooldown' };
+    const armor = ARMORS[this.state.armorId];
+    const cost = Math.round(DUAL_CROSS_COMBO_ENERGY_COST * (armor?.energyCostMult ?? 1));
+    if (this.state.energy < cost) {
+      return { ok: false, reason: 'no_energy', cost };
+    }
+
+    this.state.energy -= cost;
+    this.setBlocking(false);
+    const adrMult = this._adrenalineActive ? 0.72 : 1;
+    this._dashThrustCooldown = 0.56 * (armor?.dashCdMult ?? 1) * adrMult;
+    this._meleeTimer = Math.max(this._meleeTimer, 0.28);
+    this._iFrames = Math.max(this._iFrames, 0.12);
+    const variety = this._lastAttackType !== 'dash_attack' ? STYLE_VARIETY_MULT : 1;
+    this.addStylePoints(20 * variety);
+    this._lastAttackType = 'dash_attack';
+    return { ok: true, cost };
   }
 
   /** Jump-Hit Tap (Spin Vertical) — allowed anytime airborne off melee cooldown */
@@ -558,8 +635,9 @@ export class Player {
     return true;
   }
 
-  /** Jump-Hit Hold (Aerial Slam) */
+  /** Jump-Hit Hold (Aerial Slam) — disabled for short Dagger */
   triggerAerialSlam(): boolean {
+    if (!canWeaponAirSlam(this.state.meleeWeapon.defId)) return false;
     this.setBlocking(false);
     this._meleeTimer = 0.28;
     const variety = this._lastAttackType !== 'slam' ? STYLE_VARIETY_MULT : 1;

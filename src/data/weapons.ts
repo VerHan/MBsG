@@ -50,7 +50,7 @@ export function getWeaponLevel(inst: WeaponInstance): number {
 }
 
 export const WEAPONS: Record<string, WeaponDef> = {
-  // ── MELEE WEAPONS (Mode Melee Murni — Klik Kanan: Dash Thrust) ─
+  // ── MELEE WEAPONS (Mode Melee Murni — Skill Khusus per Tipe Senjata) ─
   needle: {
     id: 'needle',
     name: 'Crimson Silk-Needle',
@@ -63,9 +63,9 @@ export const WEAPONS: Record<string, WeaponDef> = {
     critChance: 0.16,
     reachRating: 4,
     energyCost: 0,
-    specialTrait: 'Melee Murni · Kombo Sutra cepat (Slash -> Spin H -> Thrust), Spin Vertikal udara & Dash Thrust jauh.',
+    specialTrait: 'Melee Murni · Kombo Sutra cepat (Slash -> Spin H -> Thrust), Spin Vertikal & Aerial Slam.',
     description:
-      'Jarum tempur panjang berbenang sutra merah. Lincah di udara, Dash Thrust menembus perisai, tanpa senjata api.',
+      'Jarum tempur panjang berbenang sutra merah. Lincah di udara & pogo akurat, tanpa senjata api.',
   },
 
   dagger: {
@@ -80,9 +80,9 @@ export const WEAPONS: Record<string, WeaponDef> = {
     critChance: 0.22,
     reachRating: 1,
     energyCost: 0,
-    specialTrait: 'Khusus Pendamping Gun · Bilah sangat pendek (jarak super dekat) +6 EN/hit.',
+    specialTrait: 'Khusus Pendamping Gun · Jarak super dekat, tidak bisa Slam, +6 EN/hit.',
     description:
-      'Belati tempur mini khusus pengguna Gun untuk pertahanan jarak rapat dan mengisi Energy.',
+      'Belati tempur mini khusus pengguna Range untuk pertahanan jarak rapat dan mengisi Energy.',
   },
 
   sword: {
@@ -97,9 +97,9 @@ export const WEAPONS: Record<string, WeaponDef> = {
     critChance: 0.14,
     reachRating: 3,
     energyCost: 0,
-    specialTrait: 'Melee Murni · Seimbang di semua jurus: Slash lebar, Spin Horizontal 360°, Jump Slam solid.',
+    specialTrait: 'Melee Murni · Klik Kanan = Dash Thrust (18 EN) · Kombo 3-hit & Jump Slam seimbang.',
     description:
-      'Pedang duelist seimbang dengan tebasan bersih dan Dash Thrust stabil.',
+      'Pedang duelist seimbang dengan tebasan bersih dan Dash Thrust bertenaga Energy.',
   },
 
   spear: {
@@ -114,9 +114,9 @@ export const WEAPONS: Record<string, WeaponDef> = {
     critChance: 0.12,
     reachRating: 5,
     energyCost: 0,
-    specialTrait: 'Melee Murni · Jangkauan Thrust & Dash Thrust terjauh, menembus 40% perisai.',
+    specialTrait: 'Melee Murni · Klik Kanan = Dash Thrust (18 EN) terjauh, menembus 40% perisai.',
     description:
-      'Tombak jangkauan paling jauh untuk menusuk barisan musuh dengan aman.',
+      'Tombak jangkauan paling jauh untuk menusuk barisan musuh dengan Dash Thrust piercing.',
   },
 
   katana: {
@@ -131,9 +131,9 @@ export const WEAPONS: Record<string, WeaponDef> = {
     critChance: 0.24,
     reachRating: 4,
     energyCost: 0,
-    specialTrait: 'Melee Murni · Tarikan Iaido kilat, peluang Critical tertinggi di Dash Thrust & Slash.',
+    specialTrait: 'Melee Murni · Klik Kanan = Dash Thrust Iaido (18 EN) dengan Crit tertinggi.',
     description:
-      'Katana Iaijutsu berkecepatan tinggi dengan tebasan kritikal tajam.',
+      'Katana Iaijutsu berkecepatan tinggi dengan tusukan kilat kritikal tajam.',
   },
 
   axe: {
@@ -148,9 +148,9 @@ export const WEAPONS: Record<string, WeaponDef> = {
     critChance: 0.1,
     reachRating: 4,
     energyCost: 0,
-    specialTrait: 'Melee Murni · Penghancur perisai di Spin Horizontal & Aerial Slam berdaya hancur besar.',
+    specialTrait: 'Melee Murni · Tahan Klik Kanan = Ground Slam (22 EN) penghancur perisai di tanah!',
     description:
-      'Kapak tempur berat dengan stagger tinggi dan hantaman tanah yang meremukkan perisai.',
+      'Kapak tempur berat dengan stagger tinggi dan Ground Slam langsung yang meremukkan perisai.',
   },
 
   hammer: {
@@ -165,9 +165,9 @@ export const WEAPONS: Record<string, WeaponDef> = {
     critChance: 0.08,
     reachRating: 3,
     energyCost: 0,
-    specialTrait: 'Melee Murni · Aerial Slam memicu gelombang kejut seismik kiri-kanan!',
+    specialTrait: 'Melee Murni · Tahan Klik Kanan = Ground Slam Seismik (22 EN) memicu gelombang kiri-kanan!',
     description:
-      'Palu gravitasi raksasa: menghancurkan perisai seketika dengan Slam seismik.',
+      'Palu gravitasi raksasa: menghancurkan perisai seketika dengan Ground Slam & Aerial Slam seismik.',
   },
 
   dual_sword: {
@@ -182,9 +182,9 @@ export const WEAPONS: Record<string, WeaponDef> = {
     critChance: 0.22,
     reachRating: 3,
     energyCost: 0,
-    specialTrait: 'Melee Murni · Pedang kembar 2x hit cepat pada Slash, Spin Vertikal & Dash Thrust.',
+    specialTrait: 'Melee Murni · Klik Kanan + Kiri = Dual X-Combo (20 EN, 2x Dual Damage!).',
     description:
-      'Sepasang pedang cyber asimetris untuk kombo agresif berkecepatan tinggi.',
+      'Sepasang pedang baja tajam (gaya pegang depan + reverse-grip) dengan kombo silang 2x damage.',
   },
 
   // ── RANGED WEAPONS (Mode Gun — Melee otomatis Short Combat Dagger) ──

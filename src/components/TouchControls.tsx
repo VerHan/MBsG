@@ -11,6 +11,7 @@ interface TouchControlsProps {
   hasInteractPrompt: boolean;
   canAdrenaline: boolean;
   canRanged?: boolean;
+  rightSkillLabel?: string;
 }
 
 interface TouchBtnProps {
@@ -46,6 +47,7 @@ export function TouchControls({
   hasInteractPrompt,
   canAdrenaline,
   canRanged = true,
+  rightSkillLabel = 'SKILL',
 }: TouchControlsProps) {
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-14 z-30 flex items-end justify-between px-3 sm:bottom-12 sm:px-5">
@@ -141,7 +143,7 @@ export function TouchControls({
           ) : (
             <>
               <Zap className="h-3.5 w-3.5" />
-              <span className="text-[7px] font-bold leading-none mt-0.5">THRUST</span>
+              <span className="text-[7px] font-bold leading-none mt-0.5">{rightSkillLabel}</span>
             </>
           )}
         </TouchBtn>

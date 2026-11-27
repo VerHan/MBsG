@@ -328,6 +328,7 @@ export function GameCanvas({
             hasInteractPrompt={Boolean(hud.interactPrompt)}
             canAdrenaline={hud.adrenaline >= 100 && !hud.adrenalineActive}
             canRanged={Boolean(hud.rangedWeapon)}
+            rightSkillLabel={hud.rightSkillShortLabel}
           />
         )}
 

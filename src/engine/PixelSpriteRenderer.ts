@@ -10,6 +10,7 @@ import type { ArmorId, BossId, EnemyId, RangedWeaponId, WeaponId } from '../type
 import {
   getWeaponMoveProfile,
   resolveDisplayedWeapon,
+  sampleOffhandBladeTrail,
   sampleRangedAimPose,
   sampleStickmanCombatPose,
   sampleWeaponBladeTrail,
@@ -446,42 +447,6 @@ export function drawComplexSlayerAvatar(
   const bottomY = s.y + s.height;
   const pal = s.palette;
 
-  // ── 1. Multi-layer Flowing Silksong Cloak Behind Hero ────
-  if (s.scarfPoints.length >= 2) {
-    ctx.save();
-    const cloakPrimary = pal.cloak ?? pal.primary;
-    const cloakShade = pal.secondary;
-    ctx.lineCap = 'round';
-    for (let i = 0; i < s.scarfPoints.length - 1; i++) {
-      const p0 = s.scarfPoints[i];
-      const p1 = s.scarfPoints[i + 1];
-      const w = Math.max(2.5, 7.5 - i * 0.9);
-      ctx.strokeStyle = '#0B0D14';
-      ctx.lineWidth = w + 1.8;
-      ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.lineTo(p1.x, p1.y);
-      ctx.stroke();
-
-      ctx.strokeStyle = i % 2 === 0 ? cloakPrimary : cloakShade;
-      ctx.lineWidth = w;
-      ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.lineTo(p1.x, p1.y);
-      ctx.stroke();
-    }
-    // Luminous woven trim line along hem of cloak
-    ctx.strokeStyle = pal.glow;
-    ctx.lineWidth = 1.25;
-    ctx.beginPath();
-    ctx.moveTo(s.scarfPoints[0].x, s.scarfPoints[0].y + 1);
-    for (let i = 1; i < s.scarfPoints.length; i++) {
-      ctx.lineTo(s.scarfPoints[i].x, s.scarfPoints[i].y + 1.6);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
   // Compute kinematic pose angles & offsets in local character space (facing right = +X)
   const speedRatio = Math.min(1, Math.abs(s.vx) / 165);
   const moving = speedRatio > 0.08 && s.onGround;
@@ -506,37 +471,83 @@ export function drawComplexSlayerAvatar(
   const rangedRecoilProg = s.rangedTimer > 0 ? Math.max(0, Math.min(1, 1 - s.rangedTimer / 0.14)) : 0;
   const rangedPose = activeRangedId && !s.isBlocking ? sampleRangedAimPose(activeRangedId, rangedRecoilProg) : null;
 
+  // ── 1. Compact Sleek Draped Cloak/Scarf Anchored to Live Collar ──────
+  if (s.scarfPoints.length >= 2) {
+    const dir = s.facingRight ? 1 : -1;
+    const liveOffsetX = (activePose ? activePose.bodyOffsetX : 0) * dir;
+    const liveCrouchY = activePose ? activePose.crouchY : 0;
+    const liveBobY = activePose ? 0 : idleBob - runBob;
+    const liveNeckX = cx + liveOffsetX - 2.2 * dir;
+    const liveNeckY = bottomY - 19 + liveCrouchY + liveBobY;
+    const baseDx = liveNeckX - s.scarfPoints[0].x;
+    const baseDy = liveNeckY - s.scarfPoints[0].y;
+    const capePts = s.scarfPoints.map((pt, idx) => {
+      const attachWeight = Math.max(0.45, 1 - idx * 0.16);
+      return {
+        x: pt.x + baseDx * attachWeight,
+        y: pt.y + baseDy * attachWeight,
+      };
+    });
+
+    ctx.save();
+    const cloakPrimary = pal.cloak ?? pal.primary;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Slim continuous tapered cape silhouette pinned to collar (no detached gap or snake stripes!)
+    for (let i = 0; i < capePts.length - 1; i++) {
+      const p0 = capePts[i];
+      const p1 = capePts[i + 1];
+      const w = Math.max(1.2, 3.6 - i * 0.72);
+      ctx.strokeStyle = '#0B0D14';
+      ctx.lineWidth = w + 1.2;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+
+      ctx.strokeStyle = cloakPrimary;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+    }
+
+    // Subtle crisp woven highlight along bottom hem
+    ctx.strokeStyle = pal.glow;
+    ctx.globalAlpha = 0.65;
+    ctx.lineWidth = 0.85;
+    ctx.beginPath();
+    ctx.moveTo(capePts[0].x, capePts[0].y + 0.8);
+    for (let i = 1; i < capePts.length; i++) {
+      ctx.lineTo(capePts[i].x, capePts[i].y + 1.0);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // ── 1B. Live Physical Blade-Swept Motion Ribbon (world space, attached directly to moving blade!) ──
   if (
     activePose &&
     s.combatMove &&
     s.combatMove !== 'air_slam_windup' &&
-    s.combatMove !== 'air_slam_impact'
+    s.combatMove !== 'air_slam_impact' &&
+    s.combatMove !== 'ground_slam_charge'
   ) {
-    const trail = sampleWeaponBladeTrail(
-      s.combatMove,
-      s.combatMoveProgress ?? 0,
-      s.meleeWeaponId,
-      s.facingRight,
-      cx,
-      bottomY,
-      7
-    );
-    if (trail.length >= 2) {
-      const wProfile = getWeaponMoveProfile(s.meleeWeaponId);
-      const ribbonColor =
-        s.meleeWeaponLevel >= 3
-          ? '#FACC15'
-          : s.meleeWeaponLevel === 2
-            ? '#00F0FF'
-            : wProfile.trailColor;
+    const drawBladeRibbon = (
+      trail: ReturnType<typeof sampleWeaponBladeTrail>,
+      ribbonColor: string,
+      accentColor: string,
+      heavy: boolean
+    ) => {
+      if (trail.length < 2) return;
       ctx.save();
-      // Tapered physical blade-sweep polygon connecting moving blade base -> blade tip
       for (let i = 1; i < trail.length; i++) {
         const a = trail[i - 1];
         const b = trail[i];
         const frac = i / (trail.length - 1);
-        ctx.globalAlpha = frac * 0.42;
+        ctx.globalAlpha = frac * 0.44;
         ctx.fillStyle = ribbonColor;
         ctx.beginPath();
         ctx.moveTo(a.baseX, a.baseY);
@@ -546,10 +557,9 @@ export function drawComplexSlayerAvatar(
         ctx.closePath();
         ctx.fill();
       }
-      // Razor-sharp gleaming blade-tip wake line
-      ctx.globalAlpha = 0.85;
+      ctx.globalAlpha = 0.88;
       ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = wProfile.heavy ? 2.1 : 1.3;
+      ctx.lineWidth = heavy ? 2.1 : 1.35;
       ctx.beginPath();
       for (let i = 0; i < trail.length; i++) {
         if (i === 0) ctx.moveTo(trail[i].tipX, trail[i].tipY);
@@ -557,9 +567,8 @@ export function drawComplexSlayerAvatar(
       }
       ctx.stroke();
 
-      // Secondary metallic core gleam along mid-blade
-      ctx.globalAlpha = 0.45;
-      ctx.strokeStyle = wProfile.accentColor;
+      ctx.globalAlpha = 0.48;
+      ctx.strokeStyle = accentColor;
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (let i = 0; i < trail.length; i++) {
@@ -570,6 +579,40 @@ export function drawComplexSlayerAvatar(
       }
       ctx.stroke();
       ctx.restore();
+    };
+
+    const wProfile = getWeaponMoveProfile(s.meleeWeaponId);
+    const mainRibbonColor =
+      s.meleeWeaponId === 'dual_sword'
+        ? '#00F0FF'
+        : s.meleeWeaponLevel >= 3
+          ? '#FACC15'
+          : s.meleeWeaponLevel === 2
+            ? '#00F0FF'
+            : wProfile.trailColor;
+
+    const trail = sampleWeaponBladeTrail(
+      s.combatMove,
+      s.combatMoveProgress ?? 0,
+      s.meleeWeaponId,
+      s.facingRight,
+      cx,
+      bottomY,
+      7
+    );
+    drawBladeRibbon(trail, mainRibbonColor, wProfile.accentColor, wProfile.heavy);
+
+    // Second intersecting crimson-magenta ribbon for Dual Sword X-Combo!
+    if (s.meleeWeaponId === 'dual_sword' && s.combatMove === 'dual_cross_combo') {
+      const offTrail = sampleOffhandBladeTrail(
+        s.combatMove,
+        s.combatMoveProgress ?? 0,
+        s.facingRight,
+        cx,
+        bottomY,
+        7
+      );
+      drawBladeRibbon(offTrail, '#F43F5E', '#FDA4AF', false);
     }
   }
 
@@ -864,11 +907,13 @@ export function drawComplexSlayerAvatar(
     }
 
     if (s.meleeWeaponId === 'dual_sword') {
-      const offAng = Math.atan2(oHy - oEy, oHx - oEx);
+      const offAng =
+        activePose.offWeaponAngle ??
+        Math.atan2(oHy - oEy, oHx - oEx) + 0.35;
       ctx.save();
       ctx.translate(oHx, oHy);
       ctx.rotate(offAng);
-      drawOffhandTwinBlade(ctx, s.meleeWeaponLevel);
+      drawOffhandTwinBlade(ctx, s.meleeWeaponLevel, s.combatMove !== 'dual_cross_combo');
       ctx.restore();
     }
     // Back half of horizontal spin draws main weapon behind torso for crisp 3D depth!
@@ -900,6 +945,29 @@ export function drawComplexSlayerAvatar(
       }
       ctx.restore();
     }
+  } else if (displayWeapon.mode === 'melee_primary' && s.meleeWeaponId === 'dual_sword') {
+    // Iconic Dual-Assassin Stance: Left arm bent cleanly back holding off-hand sword in REVERSE GRIP!
+    const idleSway = Math.sin(s.animTime * 4.2 + (moving ? s.walkPhase : 0)) * (moving ? 0.16 : 0.05);
+    const oHandLocal = { x: -5.2, y: 2.8 + Math.sin(s.animTime * 4) * 0.4 };
+    const oElLocal = solveTwoBoneElbow(oHandLocal.x, oHandLocal.y, 4.8, 4.6, -1);
+    const oEx = offShoulderX + oElLocal.x;
+    const oEy = offShoulderY + oElLocal.y;
+    const oHx = offShoulderX + oHandLocal.x;
+    const oHy = offShoulderY + oHandLocal.y;
+
+    drawLimbSegment(ctx, offShoulderX, offShoulderY, oEx, oEy, 2.4, '#0B0D14', pal.secondary);
+    drawLimbSegment(ctx, oEx, oEy, oHx, oHy, 2.2, '#0B0D14', pal.primary);
+    ctx.fillStyle = '#0B0D14';
+    ctx.fillRect(Math.round(oHx - 2), Math.round(oHy - 2), 4, 4);
+    ctx.fillStyle = pal.glow;
+    ctx.fillRect(Math.round(oHx - 1), Math.round(oHy - 1), 2, 2);
+
+    ctx.save();
+    ctx.translate(oHx, oHy);
+    // Reverse-grip blade angled cleanly backward-downward, 100% separated from main forward sword!
+    ctx.rotate(2.42 - idleSway);
+    drawOffhandTwinBlade(ctx, s.meleeWeaponLevel, false);
+    ctx.restore();
   } else {
     ctx.save();
     ctx.translate(2, -17 + crouchY);
@@ -911,12 +979,7 @@ export function drawComplexSlayerAvatar(
     ctx.fillStyle = pal.glow;
     ctx.fillRect(4, 0, 2, 2);
 
-    if (displayWeapon.mode === 'melee_primary' && s.meleeWeaponId === 'dual_sword') {
-      ctx.save();
-      ctx.translate(5, 0);
-      drawOffhandTwinBlade(ctx, s.meleeWeaponLevel);
-      ctx.restore();
-    } else if (displayWeapon.mode === 'melee_primary' && s.hasOffhandShield) {
+    if (displayWeapon.mode === 'melee_primary' && s.hasOffhandShield) {
       ctx.fillStyle = '#0B0D14';
       ctx.fillRect(4, -5, 4, 10);
       ctx.fillStyle = pal.primary;
@@ -1097,14 +1160,21 @@ export function drawComplexSlayerAvatar(
         true
       );
     } else {
-      const idleHandX = wProfile.heavy ? 5.2 : 6.4;
-      const idleHandY = wProfile.heavy ? 2.2 : 1.0 + Math.sin(s.animTime * 4) * 0.5;
-      const idleAngle =
-        s.meleeWeaponId === 'spear'
-          ? -0.22 + sway
+      const idleHandX = s.meleeWeaponId === 'dual_sword' ? 7.4 : wProfile.heavy ? 5.2 : 6.4;
+      const idleHandY =
+        s.meleeWeaponId === 'dual_sword'
+          ? 0.2 + Math.sin(s.animTime * 4) * 0.4
           : wProfile.heavy
-            ? -0.58 + sway
-            : -0.34 + sway;
+            ? 2.2
+            : 1.0 + Math.sin(s.animTime * 4) * 0.5;
+      const idleAngle =
+        s.meleeWeaponId === 'dual_sword'
+          ? -0.54 + sway
+          : s.meleeWeaponId === 'spear'
+            ? -0.22 + sway
+            : wProfile.heavy
+              ? -0.58 + sway
+              : -0.34 + sway;
       const el = solveTwoBoneElbow(idleHandX, idleHandY, 5.2, 5.0, 1);
       const ex = handShoulderX + el.x;
       const ey = handShoulderY + el.y;
@@ -1370,21 +1440,96 @@ export function drawWeaponInHand(
   ctx.restore();
 }
 
-function drawOffhandTwinBlade(ctx: CanvasRenderingContext2D, weaponLevel: number) {
-  if (weaponLevel >= 2) {
-    ctx.shadowColor = '#A855F7';
-    ctx.shadowBlur = weaponLevel === 3 ? 9 : 5;
-  }
-  ctx.fillStyle = '#FACC15';
-  ctx.fillRect(0, -3, 2, 6);
-  ctx.fillStyle = '#1E1B4B';
-  ctx.fillRect(2, -2, 11, 3);
-  ctx.fillStyle = '#A855F7';
-  ctx.fillRect(3, -3, 9, 1);
-  ctx.fillStyle = '#00F0FF';
-  ctx.fillRect(3, 0, 12, 1);
+/**
+ * Shared razor-sharp tapered twin-sword pixel renderer used for BOTH Dual Swords
+ * so every blade has an unmistakable pommel, wrapped hilt, winged crossguard,
+ * polished steel fuller, colored energy edge, and razor-pointed tip (NO blocky stubs!).
+ */
+function drawTwinSwordGeometry(
+  ctx: CanvasRenderingContext2D,
+  edgeColor: string,
+  guardAccent: string,
+  bladeLength: number,
+  weaponLevel: number
+) {
+  ctx.save();
+  // Crisp pixel-art rendering without fuzzy shadowBlur halo
+  ctx.shadowBlur = 0;
+
+  // 1. Pommel & wrapped hilt behind the gripping gauntlet
+  ctx.fillStyle = '#0B0D14';
+  ctx.fillRect(-4, -1.5, 4, 3);
+  ctx.fillStyle = '#334155';
+  ctx.fillRect(-3, -0.5, 3, 1.4);
+  ctx.fillStyle = guardAccent;
+  ctx.fillRect(-4, -1, 1.5, 2);
+
+  // 2. Crisp dark-outlined tapered steel blade polygon coming to a needle-sharp point
+  const tipX = 2 + bladeLength;
+  ctx.fillStyle = '#0B0D14';
+  ctx.beginPath();
+  ctx.moveTo(1, -2.6);
+  ctx.lineTo(tipX - 3, -2.0);
+  ctx.lineTo(tipX + 1.5, 0);
+  ctx.lineTo(tipX - 3, 2.0);
+  ctx.lineTo(1, 2.4);
+  ctx.closePath();
+  ctx.fill();
+
+  // Bright polished steel upper blade body
+  ctx.fillStyle = '#E2E8F0';
+  ctx.beginPath();
+  ctx.moveTo(2, -1.5);
+  ctx.lineTo(tipX - 3.5, -1.2);
+  ctx.lineTo(tipX, 0);
+  ctx.lineTo(2, 0.2);
+  ctx.closePath();
+  ctx.fill();
+
+  // Shaded steel lower bevel
+  ctx.fillStyle = '#64748B';
+  ctx.beginPath();
+  ctx.moveTo(2, 0.1);
+  ctx.lineTo(tipX - 1, 0);
+  ctx.lineTo(tipX - 3.5, 1.1);
+  ctx.lineTo(2, 1.3);
+  ctx.closePath();
+  ctx.fill();
+
+  // Razor-sharp gleaming white top edge & tip glint
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(10, -2, 4, 2);
+  ctx.fillRect(3, -1.4, Math.max(4, bladeLength - 5), 0.8);
+  ctx.fillRect(tipX - 3, -0.5, 3, 1);
+
+  // Crisp colored energy cutting edge along lower bevel (brighter fuller rune at Lv.2+)
+  ctx.fillStyle = edgeColor;
+  ctx.fillRect(3, 0.7, Math.max(4, bladeLength - 5), 0.9);
+  if (weaponLevel >= 2) {
+    ctx.fillStyle = weaponLevel === 3 ? '#FFFFFF' : edgeColor;
+    ctx.fillRect(4, -0.3, Math.max(3, bladeLength - 7), 0.65);
+  }
+
+  // 3. Unmistakable winged metallic crossguard separating hilt from blade
+  ctx.fillStyle = '#0B0D14';
+  ctx.fillRect(-0.5, -4.2, 3, 8.4);
+  ctx.fillStyle = '#CBD5E1';
+  ctx.fillRect(0, -3.5, 2, 7);
+  ctx.fillStyle = guardAccent;
+  ctx.fillRect(0.4, -1.5, 1.2, 3);
+  ctx.restore();
+}
+
+function drawOffhandTwinBlade(
+  ctx: CanvasRenderingContext2D,
+  weaponLevel: number,
+  reverseGrip = false
+) {
+  ctx.save();
+  if (reverseGrip) {
+    ctx.rotate(Math.PI);
+  }
+  drawTwinSwordGeometry(ctx, '#F43F5E', '#FACC15', 13.5, weaponLevel);
+  ctx.restore();
 }
 
 /** Shared pixel-art renderer for all 13 weapons anchored at the hand grip (0, 0) */
@@ -1396,7 +1541,7 @@ export function drawWeaponPixelArt(
   bowDraw = 0.6
 ) {
   const glowColor = WEAPON_GLOW_COLOR[weaponId] ?? '#00F0FF';
-  if (weaponLevel >= 2) {
+  if (weaponLevel >= 2 && weaponId !== 'dual_sword') {
     const pulse = 0.65 + 0.35 * Math.sin(animTime * 9);
     ctx.shadowColor = glowColor;
     ctx.shadowBlur = weaponLevel === 3 ? 11 : 6;
@@ -1506,20 +1651,13 @@ export function drawWeaponPixelArt(
       break;
 
     case 'dual_sword':
-      ctx.fillStyle = '#0B0D14';
-      ctx.fillRect(-1, -4, 3, 8);
-      ctx.fillStyle = '#FACC15';
-      ctx.fillRect(0, -3, 2, 6);
-      ctx.fillStyle = '#1E1B4B';
-      ctx.fillRect(2, -2, 13, 3);
-      ctx.fillStyle = '#A855F7';
-      ctx.fillRect(3, 1, 9, 1);
-      ctx.fillStyle = weaponLevel >= 2 ? '#FFFFFF' : '#00F0FF';
-      ctx.fillRect(2, -2, 14, 1);
-      ctx.fillStyle = '#00F0FF';
-      ctx.fillRect(11, -3, 4, 2);
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(14, -3, 2, 2);
+      drawTwinSwordGeometry(
+        ctx,
+        weaponLevel >= 3 ? '#FACC15' : '#00F0FF',
+        '#FACC15',
+        15,
+        weaponLevel
+      );
       break;
 
     case 'axe':

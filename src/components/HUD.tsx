@@ -355,12 +355,19 @@ export function HUD({
           <div className="border border-slayer-orange/60 bg-abyss-950/90 px-2 py-1">
             <div className="flex items-center justify-between gap-2 text-[9px] font-bold text-slayer-orange">
               <span className="flex items-center gap-1">
-                <Sword className="h-3 w-3" /> [LMB/J] COMBO 3 · JUMP SPIN/SLAM
+                <Sword className="h-3 w-3" /> [LMB/J] COMBO 3 · JUMP SPIN
+                {hud.canAirSlam ? '/SLAM' : ''}
               </span>
               {hud.isBlocking ? (
                 <span className="text-mana-cyan animate-pulse">BLOCK!</span>
               ) : hud.activeMove === 'dash_thrust' ? (
                 <span className="text-loot-gold">DASH THRUST</span>
+              ) : hud.activeMove === 'dual_cross_combo' ? (
+                <span className="text-mana-cyan">DUAL X 2x!</span>
+              ) : hud.activeMove === 'ground_slam_charge' ? (
+                <span className="text-loot-gold animate-pulse">CHARGE SLAM</span>
+              ) : hud.activeMove === 'ground_slam_impact' ? (
+                <span className="text-loot-gold">GROUND SLAM!</span>
               ) : hud.activeMove === 'spin_vertical' ? (
                 <span className="text-mana-cyan">SPIN V</span>
               ) : hud.activeMove === 'air_slam_windup' ||
@@ -398,8 +405,11 @@ export function HUD({
           <div className="border border-mana-cyan/60 bg-abyss-950/90 px-2 py-1">
             {hud.rangedWeapon && rangedDef ? (
               <>
-                <div className="flex items-center gap-1 text-[9px] font-bold text-mana-cyan">
-                  <Crosshair className="h-3 w-3" /> [RMB/K] GUN · SHORT DAGGER
+                <div className="flex items-center justify-between gap-2 text-[9px] font-bold text-mana-cyan">
+                  <span className="flex items-center gap-1">
+                    <Crosshair className="h-3 w-3" /> [RMB/K] RANGE · {hud.rightSkillCost} EN
+                  </span>
+                  <span className="text-slate-400">DAGGER NO SLAM</span>
                 </div>
                 <div className="text-[10px] font-semibold text-white">
                   {rangedDef.name}{' '}
@@ -408,18 +418,39 @@ export function HUD({
                   </span>
                 </div>
               </>
-            ) : (
+            ) : hud.rightSkillKind !== 'none' ? (
               <>
                 <div className="flex items-center justify-between gap-2 text-[9px] font-bold text-slayer-orange">
                   <span className="flex items-center gap-1">
-                    <Zap className="h-3 w-3" /> [RMB/K] DASH THRUST
+                    <Zap className="h-3 w-3" /> [{hud.rightSkillInputHint}] {hud.rightSkillLabel.toUpperCase()}
                   </span>
-                  <span className={hud.dashThrustReady ? 'text-loot-green' : 'text-slate-500'}>
-                    {hud.dashThrustReady ? 'READY' : 'CD'}
+                  <span
+                    className={
+                      !hud.dashThrustReady
+                        ? 'text-slate-500'
+                        : hud.energy >= hud.rightSkillCost
+                          ? 'text-loot-green'
+                          : 'text-slayer-red'
+                    }
+                  >
+                    {!hud.dashThrustReady
+                      ? 'CD'
+                      : hud.energy >= hud.rightSkillCost
+                        ? `${hud.rightSkillCost} EN`
+                        : `LOW EN (${hud.rightSkillCost})`}
                   </span>
                 </div>
                 <div className="text-[10px] font-semibold text-mana-cyan">
                   Mode Melee Murni (Tanpa Gun)
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-1 text-[9px] font-bold text-slayer-orange">
+                  <Sword className="h-3 w-3" /> MODE MELEE MURNI
+                </div>
+                <div className="text-[10px] font-semibold text-mana-cyan">
+                  Kombo 3-Hit · Jump Spin &amp; Slam
                 </div>
               </>
             )}
@@ -434,9 +465,14 @@ export function HUD({
         )}
 
         <div className="hidden border border-ancient-stone bg-abyss-950/90 px-2.5 py-1 text-[10px] text-slate-400 lg:block">
-          <span className="text-slate-200">LMB/J</span> Combo 3 / Jump Spin / Hold Slam ·{' '}
-          <span className="text-slate-200">RMB/K</span>{' '}
-          {hud.rangedWeapon ? 'Tembak Gun' : 'Dash Thrust'} ·{' '}
+          <span className="text-slate-200">LMB/J</span> Combo 3 / Jump Spin
+          {hud.canAirSlam ? ' / Hold Slam' : ''} ·{' '}
+          {hud.rightSkillKind !== 'none' && (
+            <>
+              <span className="text-slate-200">{hud.rightSkillInputHint}</span>{' '}
+              {hud.rightSkillLabel} ({hud.rightSkillCost} EN) ·{' '}
+            </>
+          )}
           <span className="text-slate-200">Hold J</span> Blok ·{' '}
           <span className="text-slate-200">E</span> Aksi
         </div>

@@ -39,13 +39,18 @@ import {
   type PlayableModeKey,
 } from './LevelBuilder';
 import {
+  canWeaponAirSlam,
+  canWeaponDualCombo,
+  canWeaponGroundSlam,
   computeWeaponBladeSegment,
   computeWeaponSweepHitbox,
+  getRightClickSkillMeta,
   getWeaponMoveProfile,
   resolveCombatAction,
   sampleStickmanCombatPose,
   segmentIntersectsAABB,
   type CombatMoveType,
+  type RightClickSkillKind,
 } from './combatRules';
 import { Player } from '../entities/Player';
 import {
@@ -236,6 +241,12 @@ export interface HudSnapshot {
   activeMove: CombatMoveType | null;
   isMeleeMode: boolean;
   dashThrustReady: boolean;
+  rightSkillKind: RightClickSkillKind;
+  rightSkillLabel: string;
+  rightSkillShortLabel: string;
+  rightSkillInputHint: string;
+  rightSkillCost: number;
+  canAirSlam: boolean;
   boss?: {
     name: string;
     title: string;
@@ -321,6 +332,9 @@ export class GameEngine {
   private _meleePressHeld = false;
   private _meleeHoldTime = 0;
   private _meleeBufferTimer = 0;
+  private _rangedPressHeld = false;
+  private _rangedHoldTime = 0;
+  private _dualChordWindow = 0;
   private _spinAttackTimer = 0;
   private _spinAttackDuration = 0.24;
   private _spinMode: 'vertical' | 'horizontal' = 'vertical';
@@ -446,6 +460,9 @@ export class GameEngine {
     this._meleePressHeld = false;
     this._meleeHoldTime = 0;
     this._meleeBufferTimer = 0;
+    this._rangedPressHeld = false;
+    this._rangedHoldTime = 0;
+    this._dualChordWindow = 0;
     this._activeCombatMove = null;
     this._airSlamState = 'none';
     this._airSlamTimer = 0;
@@ -476,9 +493,9 @@ export class GameEngine {
     this.player.state.styleRank = 'D';
     this.player.state.stylePoints = 0;
 
-    this._scarfPoints = Array.from({ length: 6 }, () => ({
-      x: this.player.x + 7,
-      y: this.player.y + 10,
+    this._scarfPoints = Array.from({ length: 4 }, (_, i) => ({
+      x: this.player.x + 6 - i * 1.4,
+      y: this.player.y + 9 + i * 2.2,
     }));
 
     this.parallax.setTheme(built.parallaxTheme);
@@ -557,12 +574,17 @@ export class GameEngine {
     if (this._bossFlashTimer > 0) this._bossFlashTimer -= dt;
     if (this._meleeAnimTimer > 0) {
       this._meleeAnimTimer = Math.max(0, this._meleeAnimTimer - dt);
-      if (this._meleeAnimTimer <= 0 && this._airSlamState === 'none') {
+      if (
+        this._meleeAnimTimer <= 0 &&
+        this._airSlamState === 'none' &&
+        this._activeCombatMove !== 'ground_slam_charge'
+      ) {
         this._activeCombatMove = null;
       }
     }
     if (this._rangedAnimTimer > 0) this._rangedAnimTimer = Math.max(0, this._rangedAnimTimer - dt);
     if (this._meleeBufferTimer > 0) this._meleeBufferTimer = Math.max(0, this._meleeBufferTimer - dt);
+    if (this._dualChordWindow > 0) this._dualChordWindow = Math.max(0, this._dualChordWindow - dt);
     if (this._spinAttackTimer > 0) this._spinAttackTimer = Math.max(0, this._spinAttackTimer - dt);
     if (this._iaidoWindupTimer > 0) {
       this._iaidoWindupTimer = Math.max(0, this._iaidoWindupTimer - dt);
@@ -713,21 +735,24 @@ export class GameEngine {
   private _updateScarf(dt: number) {
     if (this._scarfPoints.length === 0) return;
     const p = this.player;
-    const anchorX = p.x + p.width / 2 + (p.facingRight ? -4 : 4);
-    const anchorY = p.y + (p.isBlocking ? 12 : 9);
+    const anchorX = p.x + p.width / 2 + (p.facingRight ? -3 : 3);
+    const anchorY = p.y + (p.isBlocking ? 11 : 9);
     this._scarfPoints[0].x = anchorX;
     this._scarfPoints[0].y = anchorY;
 
-    const moveBiasX = -Math.max(-6, Math.min(6, p.vx * 0.032)) + (p.facingRight ? -3.2 : 3.2);
-    const fallLiftY = Math.max(-3.5, Math.min(3.5, -p.vy * 0.015));
+    // Compact draped cloak physics: hangs neatly down the back with gentle wind trail on run
+    const speedLagX = -Math.max(-3.4, Math.min(3.4, p.vx * 0.02));
+    const idleBackX = p.facingRight ? -1.4 : 1.4;
+    const stepX = speedLagX + idleBackX;
+    const fallLiftY = Math.max(-2.2, Math.min(2.0, -p.vy * 0.01));
     for (let i = 1; i < this._scarfPoints.length; i++) {
       const prev = this._scarfPoints[i - 1];
       const curr = this._scarfPoints[i];
-      const wave = Math.sin(this._animTime * 11 + i * 0.9) * (Math.abs(p.vx) > 20 ? 1.5 : 0.8);
-      const targetX = prev.x + moveBiasX * 0.72;
-      const targetY = prev.y + 1.0 + fallLiftY + wave;
-      curr.x += (targetX - curr.x) * Math.min(1, dt * 20);
-      curr.y += (targetY - curr.y) * Math.min(1, dt * 20);
+      const wave = Math.sin(this._animTime * 9 + i * 0.85) * (Math.abs(p.vx) > 20 ? 0.9 : 0.35);
+      const targetX = prev.x + stepX * 0.82;
+      const targetY = prev.y + 2.2 + fallLiftY + wave;
+      curr.x += (targetX - curr.x) * Math.min(1, dt * 22);
+      curr.y += (targetY - curr.y) * Math.min(1, dt * 22);
     }
   }
 
@@ -810,39 +835,83 @@ export class GameEngine {
       }
     }
 
-    // Unified Stickman Combat Controls:
+    // Unified Weapon-Balanced Stickman Combat Controls:
     // - Ground Tap LMB/[J] 3x: Hit 1 Standard Slash -> Hit 2 Spin Horizontal -> Hit 3 Mini Thrust
     // - Ground Hold LMB/[J] (>=0.20s): Block Guard & Parry
-    // - Airborne Tap LMB/[J]: Spin Vertical (ONLY on Jump Hit!)
-    // - Airborne Hold LMB/[J] (>=0.16s): Aerial Slam (Windup -> Dive -> Impact!)
-    // - RMB/[K]: Dash Thrust (Melee Mode) OR Fire Gun (Gun + Short Dagger Mode)
+    // - Airborne Tap LMB/[J]: Spin Vertical
+    // - Airborne Hold LMB/[J] (>=0.16s): Aerial Slam (DISABLED on Dagger!)
+    // - RMB/[K]:
+    //     * Gun Mode: Fire Ranged Weapon (Energy Cost)
+    //     * Sword / Katana / Spear: Dash Thrust (Energy Cost)
+    //     * Axe / Hammer: Hold RMB/[K] on Ground = Ground Slam (Energy Cost)
+    //     * Dual Sword: RMB + LMB Chord = Dual X-Combo 2x Damage (Energy Cost)
     const inAirSlam = this._airSlamState === 'windup' || this._airSlamState === 'dive';
+    const meleeId = p.state.meleeWeapon.defId;
+    const hasGun = p.state.rangedWeapon !== null;
+
+    let triggeredDualComboThisFrame = false;
+
+    const tryTriggerDualCrossCombo = (): boolean => {
+      if (hasGun || !canWeaponDualCombo(meleeId)) return false;
+      const dualAction = resolveCombatAction({
+        onGround: p.onGround,
+        isHold: false,
+        isRightClick: false,
+        hasGun: false,
+        comboStep: 1,
+        weaponId: meleeId,
+        isDualChord: true,
+      });
+      if (dualAction !== 'dual_cross_combo') return false;
+      const res = p.triggerDualCrossCombo();
+      this._dualChordWindow = 0;
+      this._meleePressHeld = false;
+      this._meleeHoldTime = 0;
+      this._meleeBufferTimer = 0;
+      if (res.ok) {
+        this._performCombatMove('dual_cross_combo');
+        return true;
+      }
+      if (res.reason === 'no_energy') {
+        this.onToast?.(`Energy tidak cukup untuk Dual X-Combo (${res.cost} EN)!`);
+      }
+      return true;
+    };
 
     if (this.input.isJustPressed('melee') && !inAirSlam) {
-      this._meleePressHeld = true;
-      this._meleeHoldTime = 0;
-      if (p.onGround && this._meleeAnimTimer > 0) {
-        this._meleeBufferTimer = 0.22;
+      // Check Dual Sword RMB + LMB chord (either holding RMB or pressed RMB within 0.32s)
+      if (!hasGun && canWeaponDualCombo(meleeId) && (this.input.isHeld('ranged') || this._dualChordWindow > 0)) {
+        triggeredDualComboThisFrame = tryTriggerDualCrossCombo();
+      } else {
+        this._meleePressHeld = true;
+        this._meleeHoldTime = 0;
+        if (p.onGround && this._meleeAnimTimer > 0) {
+          this._meleeBufferTimer = 0.22;
+        }
       }
     }
 
     if (this._meleePressHeld && this.input.isHeld('melee') && !inAirSlam) {
       this._meleeHoldTime += dt;
       if (!p.onGround) {
-        // Jump-Hit Hold -> Aerial Slam!
+        // Jump-Hit Hold -> Aerial Slam (disabled on short Dagger!)
         if (this._meleeHoldTime >= 0.16 && this._airSlamState === 'none') {
           const action = resolveCombatAction({
             onGround: false,
             isHold: true,
             isRightClick: false,
-            hasGun: !p.isMeleeOnlyMode,
+            hasGun,
             comboStep: 1,
+            weaponId: meleeId,
           });
           this._meleePressHeld = false;
           this._meleeHoldTime = 0;
           this._meleeBufferTimer = 0;
           if (action === 'air_slam_windup' && p.triggerAerialSlam()) {
             this._startAirSlam();
+          } else if (action === 'spin_vertical' && p.triggerAirSpin()) {
+            // Dagger fallback: airborne hold stays agile Spin Vertical, never Slam
+            this._performCombatMove('spin_vertical');
           }
         }
       } else {
@@ -872,8 +941,9 @@ export class GameEngine {
             onGround: false,
             isHold: false,
             isRightClick: false,
-            hasGun: !p.isMeleeOnlyMode,
+            hasGun,
             comboStep: 1,
+            weaponId: meleeId,
           });
           if (action === 'spin_vertical' && p.triggerAirSpin()) {
             this._meleeBufferTimer = 0;
@@ -886,10 +956,11 @@ export class GameEngine {
               onGround: true,
               isHold: false,
               isRightClick: false,
-              hasGun: !p.isMeleeOnlyMode,
+              hasGun,
               comboStep: p.meleeCombo,
+              weaponId: meleeId,
             });
-            if (action !== 'ranged_fire') {
+            if (action !== 'ranged_fire' && action !== 'none') {
               this._performCombatMove(action);
             }
           } else {
@@ -910,34 +981,92 @@ export class GameEngine {
           onGround: true,
           isHold: false,
           isRightClick: false,
-          hasGun: !p.isMeleeOnlyMode,
+          hasGun,
           comboStep: p.meleeCombo,
+          weaponId: meleeId,
         });
-        if (action !== 'ranged_fire') {
+        if (action !== 'ranged_fire' && action !== 'none') {
           this._performCombatMove(action);
         }
       }
     }
 
-    if (this.input.isJustPressed('ranged') && !inAirSlam) {
-      const rightAction = resolveCombatAction({
-        onGround: p.onGround,
-        isHold: false,
-        isRightClick: true,
-        hasGun: p.state.rangedWeapon !== null,
-        comboStep: 1,
-      });
-
-      if (rightAction === 'ranged_fire') {
-        const rRes = p.rangedAttack();
-        if (rRes.fired) {
-          this._performRanged();
-        } else if (rRes.reason === 'no_energy') {
-          this.onToast?.('Energy habis! Tekan [R] pakai Ammo Pack atau serang Dagger!');
+    // ── RIGHT-CLICK / [K] WEAPON-SPECIFIC SKILLS ────────────
+    if (this.input.isJustPressed('ranged') && !inAirSlam && !triggeredDualComboThisFrame) {
+      if (!hasGun && canWeaponDualCombo(meleeId)) {
+        // Open Dual X-Combo chord window; if LMB is already held/pressed, fire immediately!
+        if (this.input.isHeld('melee') || this._meleePressHeld) {
+          tryTriggerDualCrossCombo();
+        } else {
+          this._dualChordWindow = 0.34;
+          this.sound.play('menu_select');
         }
-      } else if (rightAction === 'dash_thrust') {
-        if (p.triggerDashThrust()) {
-          this._performCombatMove('dash_thrust');
+      } else if (!hasGun && canWeaponGroundSlam(meleeId)) {
+        if (p.onGround) {
+          this._rangedPressHeld = true;
+          this._rangedHoldTime = 0;
+          this._activeCombatMove = 'ground_slam_charge';
+          this._meleeAnimDuration = 0.24;
+          this._meleeAnimTimer = 0.24;
+          this.sound.play('menu_select');
+        }
+      } else {
+        const rightAction = resolveCombatAction({
+          onGround: p.onGround,
+          isHold: false,
+          isRightClick: true,
+          hasGun,
+          comboStep: 1,
+          weaponId: meleeId,
+        });
+
+        if (rightAction === 'ranged_fire') {
+          const rRes = p.rangedAttack();
+          if (rRes.fired) {
+            this._performRanged();
+          } else if (rRes.reason === 'no_energy') {
+            this.onToast?.('Energy habis! Tekan [R] pakai Ammo Pack atau serang Dagger!');
+          }
+        } else if (rightAction === 'dash_thrust') {
+          const dRes = p.triggerDashThrust();
+          if (dRes.ok) {
+            this._performCombatMove('dash_thrust');
+          } else if (dRes.reason === 'no_energy') {
+            this.onToast?.(`Energy tidak cukup untuk Dash Thrust (${dRes.cost} EN)!`);
+          }
+        }
+      }
+    }
+
+    // Hold Right-Click / [K] Ground Slam charge tracker for Axe & Hammer
+    if (this._rangedPressHeld) {
+      if (!hasGun && canWeaponGroundSlam(meleeId) && p.onGround && this.input.isHeld('ranged') && !inAirSlam) {
+        this._rangedHoldTime += dt;
+        this._activeCombatMove = 'ground_slam_charge';
+        this._meleeAnimDuration = 0.24;
+        this._meleeAnimTimer = Math.max(0.02, 0.24 - Math.min(0.22, this._rangedHoldTime));
+        p.vx *= 0.84;
+
+        if (this._rangedHoldTime >= 0.22) {
+          this._rangedPressHeld = false;
+          this._rangedHoldTime = 0;
+          const gRes = p.triggerGroundSlam();
+          if (gRes.ok) {
+            this._triggerGroundSlamImpact();
+          } else {
+            this._activeCombatMove = null;
+            this._meleeAnimTimer = 0;
+            if (gRes.reason === 'no_energy') {
+              this.onToast?.(`Energy tidak cukup untuk Ground Slam (${gRes.cost} EN)!`);
+            }
+          }
+        }
+      } else {
+        this._rangedPressHeld = false;
+        this._rangedHoldTime = 0;
+        if (this._activeCombatMove === 'ground_slam_charge') {
+          this._activeCombatMove = null;
+          this._meleeAnimTimer = 0;
         }
       }
     }
@@ -1046,6 +1175,66 @@ export class GameEngine {
           color: '#A855F7',
           trailColor: '#00F0FF',
           life: 0.7,
+          size: 5,
+        })
+      );
+    }
+  }
+
+  /** Hold Right-Click / [K] Ground Slam Impact for Axe & Hammer */
+  private _triggerGroundSlamImpact() {
+    const p = this.player;
+    const weaponId = p.state.meleeWeapon.defId;
+    const weaponLv = getWeaponLevel(p.state.meleeWeapon);
+    const profile = getWeaponMoveProfile(weaponId);
+
+    this._activeCombatMove = 'ground_slam_impact';
+    this._meleeAnimDuration = 0.36;
+    this._meleeAnimTimer = 0.36;
+    this._meleeAnimIsPogo = false;
+    this._pendingComboStrikes = [];
+    this._scaleX = 1.34;
+    this._scaleY = 0.72;
+
+    const color = weaponLv >= 3 ? '#FACC15' : weaponLv === 2 ? '#00F0FF' : profile.trailColor;
+    const slamRangeW = Math.round(52 * Math.max(0.95, profile.reachScale));
+
+    this._spawnFloatingText(p.x + 7, p.y - 14, 'GROUND SLAM!', '#FACC15', true);
+    this._executeMeleeStrike({
+      delay: 0,
+      rangeW: slamRangeW,
+      rangeH: 42,
+      radius: Math.round(44 * Math.max(0.95, profile.reachScale)),
+      damageRatio: 1.72,
+      shape: 'slam_impact',
+      color,
+      comboStep: 3,
+      isPogo: false,
+      bidirectional: true,
+      armorBreak: true,
+      knockbackX: 205,
+      liftVy: -180,
+      shake: 5.2,
+      sound: 'hammer_slam',
+    });
+
+    this.particles.emit('mana_dust', p.x + p.width / 2 - 14, p.y + p.height, -Math.PI * 0.75);
+    this.particles.emit('mana_dust', p.x + p.width / 2 + 14, p.y + p.height, -Math.PI * 0.25);
+
+    if (weaponId === 'hammer') {
+      const dmgWave = Math.round(p.getMeleeDamage() * 0.72);
+      const floorY = p.y + p.height - 6;
+      this.projectiles.push(
+        createProjectile('player', p.x - 4, floorY, Math.PI, 240, dmgWave, {
+          color: '#A855F7',
+          trailColor: '#00F0FF',
+          life: 0.78,
+          size: 5,
+        }),
+        createProjectile('player', p.x + p.width + 4, floorY, 0, 240, dmgWave, {
+          color: '#A855F7',
+          trailColor: '#00F0FF',
+          life: 0.78,
           size: 5,
         })
       );
@@ -1219,6 +1408,55 @@ export class GameEngine {
         break;
       }
 
+      case 'dual_cross_combo': {
+        // Dual Sword Exclusive RMB + LMB Extra Combo: Twin Intersecting X-Scissor Cuts (2x Dual Damage!)
+        const dur = 0.34;
+        this._meleeAnimDuration = dur;
+        this._meleeAnimTimer = dur;
+        this._scaleX = 1.24;
+        this._scaleY = 0.82;
+        this._spawnFloatingText(p.x + 7, p.y - 14, 'DUAL X-COMBO!', '#00F0FF', true);
+        this.particles.emit('dash_afterimage', p.x + p.width / 2, p.y + p.height / 2);
+
+        // Twin Blade Strike 1 (Main Cyan Sword)
+        this._executeMeleeStrike({
+          delay: 0,
+          rangeW: 40,
+          rangeH: 32,
+          radius: 30,
+          damageRatio: 1.05,
+          shape: 'x_cut',
+          color: '#00F0FF',
+          comboStep: 3,
+          isPogo: false,
+          bidirectional: false,
+          armorBreak: true,
+          lungeVx: 215,
+          knockbackX: 95,
+          shake: 2.4,
+          sound: 'dual_slash',
+        });
+
+        // Twin Blade Strike 2 (Off-hand Crimson Sword — 2x Total Dual Damage!)
+        this._pendingComboStrikes.push({
+          delay: 0.07,
+          rangeW: 42,
+          rangeH: 32,
+          radius: 32,
+          damageRatio: 1.05,
+          shape: 'x_cut',
+          color: '#F43F5E',
+          comboStep: 3,
+          isPogo: false,
+          bidirectional: false,
+          armorBreak: true,
+          knockbackX: 155,
+          shake: 2.8,
+          sound: 'dual_slash',
+        });
+        break;
+      }
+
       default:
         break;
     }
@@ -1317,7 +1555,8 @@ export class GameEngine {
       strike.shape === 'thrust' ||
       strike.shape === 'needle_thread' ||
       strike.shape === 'spin_horizontal' ||
-      strike.shape === 'vertical_spin'
+      strike.shape === 'vertical_spin' ||
+      strike.shape === 'x_cut'
     ) {
       this._slashes.push({
         x:
@@ -4032,6 +4271,30 @@ export class GameEngine {
       activeMove: this._activeCombatMove,
       isMeleeMode: this.player.isMeleeOnlyMode,
       dashThrustReady: this.player.dashThrustCooldown <= 0,
+      ...(() => {
+        const meleeId = this.player.state.meleeWeapon.defId;
+        const rangedDef = this.player.state.rangedWeapon
+          ? WEAPONS[this.player.state.rangedWeapon.defId]
+          : undefined;
+        const armor = ARMORS[this.player.state.armorId];
+        const skill = getRightClickSkillMeta(
+          meleeId,
+          this.player.state.rangedWeapon !== null,
+          rangedDef?.energyCost ?? 8
+        );
+        const scaledCost =
+          skill.energyCost > 0
+            ? Math.round(skill.energyCost * (armor?.energyCostMult ?? 1))
+            : 0;
+        return {
+          rightSkillKind: skill.kind,
+          rightSkillLabel: skill.label,
+          rightSkillShortLabel: skill.shortLabel,
+          rightSkillInputHint: skill.inputHint,
+          rightSkillCost: scaledCost,
+          canAirSlam: canWeaponAirSlam(meleeId),
+        };
+      })(),
       boss:
         this.boss && this.boss.hp > 0
           ? {

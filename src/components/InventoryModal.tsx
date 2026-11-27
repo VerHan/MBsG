@@ -18,7 +18,12 @@ import {
   isLightRangedCompatibleMelee,
 } from '../data/weapons';
 import { PixelSpriteRenderer, drawComplexSlayerAvatar } from '../engine/PixelSpriteRenderer';
-import { getWeaponMoveProfile, type CombatMoveType } from '../engine/combatRules';
+import {
+  canWeaponAirSlam,
+  getRightClickSkillMeta,
+  getWeaponMoveProfile,
+  type CombatMoveType,
+} from '../engine/combatRules';
 
 interface InventoryModalProps {
   playerState: PlayerState;
@@ -60,6 +65,9 @@ const MOVE_PREVIEW_DURATION: Record<CombatMoveType, number> = {
   air_slam_dive: 0.3,
   air_slam_impact: 0.4,
   dash_thrust: 0.38,
+  ground_slam_charge: 0.34,
+  ground_slam_impact: 0.44,
+  dual_cross_combo: 0.42,
 };
 
 function SlayerPreviewCanvas({
@@ -113,7 +121,10 @@ function SlayerPreviewCanvas({
     let rafId = 0;
     let last = performance.now();
     let animTime = 0;
-    const scarfPoints = Array.from({ length: 6 }, (_, i) => ({ x: 40 - i * 3, y: 46 + i * 1.5 }));
+    const scarfPoints = Array.from({ length: 4 }, (_, i) => ({
+      x: 42 - i * 1.4,
+      y: 47 + i * 2.1,
+    }));
 
     const renderFrame = (now: number) => {
       rafId = requestAnimationFrame(renderFrame);
@@ -148,14 +159,14 @@ function SlayerPreviewCanvas({
           : 0;
       const airLiftY = activeMove === 'spin_vertical' ? -Math.sin(prog * Math.PI) * 14 : 0;
 
-      scarfPoints[0].x = 41;
-      scarfPoints[0].y = 47 + airLiftY;
+      scarfPoints[0].x = 44;
+      scarfPoints[0].y = 48 + airLiftY;
       for (let i = 1; i < scarfPoints.length; i++) {
         const prev = scarfPoints[i - 1];
         const curr = scarfPoints[i];
-        const wave = Math.sin(animTime * 6 + i * 0.9) * 1.4;
-        curr.x += (prev.x - 2.6 - curr.x) * Math.min(1, dt * 16);
-        curr.y += (prev.y + 1.1 + wave - curr.y) * Math.min(1, dt * 16);
+        const wave = Math.sin(animTime * 5.5 + i * 0.85) * 0.45;
+        curr.x += (prev.x - 1.3 - curr.x) * Math.min(1, dt * 18);
+        curr.y += (prev.y + 2.1 + wave - curr.y) * Math.min(1, dt * 18);
       }
 
       ctx.imageSmoothingEnabled = false;
@@ -184,12 +195,12 @@ function SlayerPreviewCanvas({
 
       // Ground shockwave for Slam or projectile streak for Ranged fire preview
       // (Melee slashes use the real live blade-swept ribbon inside drawComplexSlayerAvatar!)
-      if (activeMove === 'air_slam_impact') {
+      if (activeMove === 'air_slam_impact' || activeMove === 'ground_slam_impact') {
         const alpha = Math.max(0, 1 - prog * 0.72);
         const arcColor =
           meleeLv >= 3 ? '#FACC15' : meleeLv === 2 ? '#00F0FF' : profile.trailColor;
-        const r = Math.round(20 * Math.max(0.65, profile.reachScale));
-        const spread = (r + 10) * (0.4 + prog * 0.7);
+        const r = Math.round(22 * Math.max(0.65, profile.reachScale));
+        const spread = (r + 12) * (0.4 + prog * 0.7);
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.translate(48, 72);
@@ -204,6 +215,32 @@ function SlayerPreviewCanvas({
         ctx.lineWidth = 1.6;
         ctx.beginPath();
         ctx.ellipse(0, 0, spread, 5, 0, Math.PI, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      } else if (activeMove === 'dual_cross_combo' && prog > 0.2) {
+        const alpha = Math.max(0, 1 - (prog - 0.2) * 1.25);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(64, 54);
+        ctx.strokeStyle = '#00F0FF';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(-12, -12);
+        ctx.lineTo(12, 12);
+        ctx.stroke();
+        ctx.strokeStyle = '#F43F5E';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(-12, 12);
+        ctx.lineTo(12, -12);
+        ctx.stroke();
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(-9, -9);
+        ctx.lineTo(9, 9);
+        ctx.moveTo(-9, 9);
+        ctx.lineTo(9, -9);
         ctx.stroke();
         ctx.restore();
       } else if (swingRef.current.rangedTimer > 0 && ps.rangedWeapon) {
@@ -338,11 +375,14 @@ export function InventoryModal({
       ? playerState.meleeWeapon.defId === inst.defId
       : playerState.rangedWeapon?.defId === inst.defId;
 
+    const cardSkill = isMelee ? getRightClickSkillMeta(inst.defId, false) : null;
     const handedText = !isMelee
       ? `${def.energyCost} EN · +Dagger`
       : isLightRangedCompatibleMelee(inst.defId)
-        ? 'Sidearm Gun (Pendek)'
-        : 'Melee Murni (Dash Thrust)';
+        ? 'Sidearm Gun (No Slam)'
+        : cardSkill && cardSkill.kind !== 'none'
+          ? `${cardSkill.shortLabel} (${cardSkill.energyCost} EN)`
+          : 'Melee Murni';
 
     const dmgPct = Math.min(100, Math.round((scaledDmg / 60) * 100));
     const spdPct = Math.max(18, Math.min(100, Math.round(((42 - def.attackCooldown) / 30) * 100)));
@@ -451,8 +491,8 @@ export function InventoryModal({
           <div>
             <h2 className="font-pixel text-sm text-loot-gold">SLAYER ARSENAL &amp; FORGE</h2>
             <p className="mt-1 text-[11px] text-slate-400">
-              Pilih salah satu: <strong className="text-slayer-orange">Mode Melee Murni</strong> (Klik Kanan = Dash Thrust) ATAU{' '}
-              <strong className="text-mana-cyan">Mode Gun + Short Dagger</strong> jarak dekat.
+              Pilih salah satu: <strong className="text-slayer-orange">Mode Melee Murni</strong> (Skill Klik Kanan sesuai senjata + Energy) ATAU{' '}
+              <strong className="text-mana-cyan">Mode Range + Short Dagger</strong> (Dagger tanpa Slam).
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -477,96 +517,145 @@ export function InventoryModal({
         </div>
 
         {/* Live Animated Stickman Slayer Loadout Preview */}
-        <div className="mb-4 flex flex-col sm:flex-row items-center gap-4 border border-ancient-stone bg-abyss-950/90 p-3">
-          <div className="flex flex-col items-center gap-1.5 shrink-0 w-44">
-            <SlayerPreviewCanvas
-              playerState={playerState}
-              moveTrigger={moveTrigger}
-              rangedTriggerSeq={rangedTriggerSeq}
-            />
-            <div className="grid w-full grid-cols-2 gap-1">
-              <button
-                type="button"
-                onClick={handleTestCombo}
-                className="inline-flex items-center justify-center gap-1 border border-slayer-orange/70 bg-slayer-orange/15 px-1.5 py-1 text-[9px] font-bold text-slayer-orange hover:bg-slayer-orange/25"
-              >
-                <Play className="h-2.5 w-2.5" /> {isMeleeOnlyMode ? `Combo ${comboStep}` : `Dagger ${comboStep}`}
-              </button>
-              <button
-                type="button"
-                onClick={() => triggerPreviewMove('spin_vertical')}
-                className="border border-mana-cyan/60 bg-mana-cyan/10 px-1.5 py-1 text-[9px] font-bold text-mana-cyan hover:bg-mana-cyan/20"
-              >
-                Spin V
-              </button>
-              {isMeleeOnlyMode ? (
-                <button
-                  type="button"
-                  onClick={() => triggerPreviewMove('dash_thrust')}
-                  className="border border-rose-400/70 bg-rose-500/15 px-1.5 py-1 text-[9px] font-bold text-rose-300 hover:bg-rose-500/25"
-                >
-                  Dash Thrust
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setRangedTriggerSeq((s) => s + 1)}
-                  className="border border-emerald-400/70 bg-emerald-500/15 px-1.5 py-1 text-[9px] font-bold text-emerald-300 hover:bg-emerald-500/25"
-                >
-                  {playerState.rangedWeapon?.defId === 'bow' ? 'Tarik Busur' : 'Tembak Range'}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => triggerPreviewMove('air_slam_impact')}
-                className="border border-loot-gold/70 bg-loot-gold/15 px-1.5 py-1 text-[9px] font-bold text-loot-gold hover:bg-loot-gold/25"
-              >
-                Slam
-              </button>
-            </div>
-          </div>
+        {(() => {
+          const activeRangedDef = playerState.rangedWeapon
+            ? WEAPONS[playerState.rangedWeapon.defId]
+            : undefined;
+          const activeSkill = getRightClickSkillMeta(
+            playerState.meleeWeapon.defId,
+            playerState.rangedWeapon !== null,
+            activeRangedDef?.energyCost ?? 8
+          );
+          const allowAirSlam = canWeaponAirSlam(playerState.meleeWeapon.defId);
 
-          <div className="flex-1 w-full text-xs">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-slate-400">
-                  {activeArmor.archetype}
+          return (
+            <div className="mb-4 flex flex-col sm:flex-row items-center gap-4 border border-ancient-stone bg-abyss-950/90 p-3">
+              <div className="flex flex-col items-center gap-1.5 shrink-0 w-44">
+                <SlayerPreviewCanvas
+                  playerState={playerState}
+                  moveTrigger={moveTrigger}
+                  rangedTriggerSeq={rangedTriggerSeq}
+                />
+                <div className="grid w-full grid-cols-2 gap-1">
+                  <button
+                    type="button"
+                    onClick={handleTestCombo}
+                    className="inline-flex items-center justify-center gap-1 border border-slayer-orange/70 bg-slayer-orange/15 px-1.5 py-1 text-[9px] font-bold text-slayer-orange hover:bg-slayer-orange/25"
+                  >
+                    <Play className="h-2.5 w-2.5" /> {isMeleeOnlyMode ? `Combo ${comboStep}` : `Dagger ${comboStep}`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => triggerPreviewMove('spin_vertical')}
+                    className="border border-mana-cyan/60 bg-mana-cyan/10 px-1.5 py-1 text-[9px] font-bold text-mana-cyan hover:bg-mana-cyan/20"
+                  >
+                    Spin V
+                  </button>
+                  {activeSkill.kind === 'ranged' ? (
+                    <button
+                      type="button"
+                      onClick={() => setRangedTriggerSeq((s) => s + 1)}
+                      className="border border-emerald-400/70 bg-emerald-500/15 px-1.5 py-1 text-[9px] font-bold text-emerald-300 hover:bg-emerald-500/25"
+                    >
+                      {playerState.rangedWeapon?.defId === 'bow' ? 'Tarik Busur' : 'Tembak Range'}
+                    </button>
+                  ) : activeSkill.kind === 'dash_thrust' ? (
+                    <button
+                      type="button"
+                      onClick={() => triggerPreviewMove('dash_thrust')}
+                      className="border border-rose-400/70 bg-rose-500/15 px-1.5 py-1 text-[9px] font-bold text-rose-300 hover:bg-rose-500/25"
+                    >
+                      Thrust ({activeSkill.energyCost} EN)
+                    </button>
+                  ) : activeSkill.kind === 'ground_slam' ? (
+                    <button
+                      type="button"
+                      onClick={() => triggerPreviewMove('ground_slam_impact')}
+                      className="border border-amber-400/70 bg-amber-500/15 px-1.5 py-1 text-[9px] font-bold text-amber-300 hover:bg-amber-500/25"
+                    >
+                      G-Slam ({activeSkill.energyCost} EN)
+                    </button>
+                  ) : activeSkill.kind === 'dual_combo' ? (
+                    <button
+                      type="button"
+                      onClick={() => triggerPreviewMove('dual_cross_combo')}
+                      className="border border-fuchsia-400/70 bg-fuchsia-500/15 px-1.5 py-1 text-[9px] font-bold text-fuchsia-300 hover:bg-fuchsia-500/25"
+                    >
+                      Dual X ({activeSkill.energyCost} EN)
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => triggerPreviewMove('mini_thrust')}
+                      className="border border-rose-400/60 bg-rose-500/10 px-1.5 py-1 text-[9px] font-bold text-rose-300 hover:bg-rose-500/20"
+                    >
+                      Thrust
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!allowAirSlam}
+                    onClick={() => allowAirSlam && triggerPreviewMove('air_slam_impact')}
+                    className={`border px-1.5 py-1 text-[9px] font-bold ${
+                      allowAirSlam
+                        ? 'border-loot-gold/70 bg-loot-gold/15 text-loot-gold hover:bg-loot-gold/25'
+                        : 'cursor-not-allowed border-ancient-stone/50 bg-abyss-900 text-slate-500'
+                    }`}
+                  >
+                    {allowAirSlam ? 'Air Slam' : 'No Slam'}
+                  </button>
                 </div>
-                <div className="font-bold text-sm text-white">{activeArmor.name}</div>
               </div>
-              <div className="text-[11px] text-slate-300 tabular-nums">
-                HP <strong className="text-loot-green">{playerState.maxHp}</strong> · DEF{' '}
-                <strong className="text-mana-cyan">{activeArmor.defPercent}%</strong> · SPD{' '}
-                <strong className="text-loot-gold">{Math.round(activeArmor.speedMult * 100)}%</strong>
-              </div>
-            </div>
 
-            <p className="mt-1 text-[11px] text-slate-400">{activeArmor.passiveDesc}</p>
+              <div className="flex-1 w-full text-xs">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400">
+                      {activeArmor.archetype}
+                    </div>
+                    <div className="font-bold text-sm text-white">{activeArmor.name}</div>
+                  </div>
+                  <div className="text-[11px] text-slate-300 tabular-nums">
+                    HP <strong className="text-loot-green">{playerState.maxHp}</strong> · DEF{' '}
+                    <strong className="text-mana-cyan">{activeArmor.defPercent}%</strong> · SPD{' '}
+                    <strong className="text-loot-gold">{Math.round(activeArmor.speedMult * 100)}%</strong>
+                  </div>
+                </div>
 
-            <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2 border-t border-ancient-stone/60 pt-2 text-[11px] tabular-nums">
-              <div>
-                <span className="text-slate-400">Melee Aktif: </span>
-                <strong className="text-white">{activeMeleeDef?.name}</strong>{' '}
-                <span className={DMG_TYPE_TEXT_COLOR[activeMeleeDef?.damageType ?? 'slash']}>
-                  ({DAMAGE_TYPE_LABEL[activeMeleeDef?.damageType ?? 'slash'].label} · {activeMeleeDamage} DMG)
-                </span>
-              </div>
-              <div>
-                <span className="text-slate-400">Klik Kanan / [K]: </span>
-                <strong className={playerState.rangedWeapon ? 'text-mana-cyan' : 'text-slayer-orange'}>
-                  {playerState.rangedWeapon
-                    ? `${WEAPONS[playerState.rangedWeapon.defId]?.name} (Gun)`
-                    : 'Dash Thrust (Mode Melee)'}
-                </strong>
+                <p className="mt-1 text-[11px] text-slate-400">{activeArmor.passiveDesc}</p>
+
+                <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2 border-t border-ancient-stone/60 pt-2 text-[11px] tabular-nums">
+                  <div>
+                    <span className="text-slate-400">Melee Aktif: </span>
+                    <strong className="text-white">{activeMeleeDef?.name}</strong>{' '}
+                    <span className={DMG_TYPE_TEXT_COLOR[activeMeleeDef?.damageType ?? 'slash']}>
+                      ({DAMAGE_TYPE_LABEL[activeMeleeDef?.damageType ?? 'slash'].label} · {activeMeleeDamage} DMG)
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">Skill Khusus ({activeSkill.inputHint}): </span>
+                    <strong className={playerState.rangedWeapon ? 'text-mana-cyan' : 'text-slayer-orange'}>
+                      {playerState.rangedWeapon
+                        ? `${activeRangedDef?.name} (${activeSkill.energyCost} EN)`
+                        : activeSkill.kind === 'none'
+                          ? 'Kombo 3-Hit & Aerial Slam'
+                          : `${activeSkill.label} (${activeSkill.energyCost} EN)`}
+                    </strong>
+                  </div>
+                </div>
+                <div className="mt-1.5 text-[10px] text-slate-400">
+                  Combo 3-Hit: <strong className="text-slate-200">Slash → Spin Horizontal → Thrust Kecil</strong> · Udara:{' '}
+                  <strong className="text-mana-cyan">Tap = Spin Vertical</strong> ·{' '}
+                  {allowAirSlam ? (
+                    <strong className="text-loot-gold">Hold = Air Slam</strong>
+                  ) : (
+                    <strong className="text-slate-500">Dagger tidak bisa Slam</strong>
+                  )}
+                </div>
               </div>
             </div>
-            <div className="mt-1.5 text-[10px] text-slate-400">
-              Combo 3-Hit: <strong className="text-slate-200">Slash → Spin Horizontal → Thrust Kecil</strong> · Udara:{' '}
-              <strong className="text-mana-cyan">Tap = Spin Vertical</strong> ·{' '}
-              <strong className="text-loot-gold">Hold = Slam</strong>
-            </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Weapons Grid */}
         <div className="grid gap-4 md:grid-cols-2">

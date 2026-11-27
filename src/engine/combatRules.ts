@@ -16,9 +16,97 @@ export type CombatMoveType =
   | 'air_slam_windup'
   | 'air_slam_dive'
   | 'air_slam_impact'
-  | 'dash_thrust';
+  | 'dash_thrust'
+  | 'ground_slam_charge'
+  | 'ground_slam_impact'
+  | 'dual_cross_combo';
 
-export type ResolvedAction = CombatMoveType | 'ranged_fire';
+export type ResolvedAction = CombatMoveType | 'ranged_fire' | 'none';
+
+export const DASH_THRUST_ENERGY_COST = 18;
+export const GROUND_SLAM_ENERGY_COST = 22;
+export const DUAL_CROSS_COMBO_ENERGY_COST = 20;
+
+export function canWeaponAirSlam(weaponId: WeaponId): boolean {
+  return weaponId !== 'dagger';
+}
+
+export function canWeaponDashThrust(weaponId: WeaponId): boolean {
+  return weaponId === 'sword' || weaponId === 'katana' || weaponId === 'spear';
+}
+
+export function canWeaponGroundSlam(weaponId: WeaponId): boolean {
+  return weaponId === 'axe' || weaponId === 'hammer';
+}
+
+export function canWeaponDualCombo(weaponId: WeaponId): boolean {
+  return weaponId === 'dual_sword';
+}
+
+export type RightClickSkillKind =
+  | 'ranged'
+  | 'dash_thrust'
+  | 'ground_slam'
+  | 'dual_combo'
+  | 'none';
+
+export interface RightClickSkillMeta {
+  kind: RightClickSkillKind;
+  label: string;
+  shortLabel: string;
+  inputHint: string;
+  energyCost: number;
+}
+
+export function getRightClickSkillMeta(
+  weaponId: WeaponId,
+  hasGun: boolean,
+  rangedEnergyCost = 8
+): RightClickSkillMeta {
+  if (hasGun) {
+    return {
+      kind: 'ranged',
+      label: 'Tembak Range',
+      shortLabel: 'GUN',
+      inputHint: 'RMB/K',
+      energyCost: rangedEnergyCost,
+    };
+  }
+  if (canWeaponDashThrust(weaponId)) {
+    return {
+      kind: 'dash_thrust',
+      label: 'Dash Thrust',
+      shortLabel: 'THRUST',
+      inputHint: 'RMB/K',
+      energyCost: DASH_THRUST_ENERGY_COST,
+    };
+  }
+  if (canWeaponGroundSlam(weaponId)) {
+    return {
+      kind: 'ground_slam',
+      label: 'Ground Slam',
+      shortLabel: 'G-SLAM',
+      inputHint: 'HOLD RMB/K',
+      energyCost: GROUND_SLAM_ENERGY_COST,
+    };
+  }
+  if (canWeaponDualCombo(weaponId)) {
+    return {
+      kind: 'dual_combo',
+      label: 'Dual X-Combo (2x DMG)',
+      shortLabel: 'DUAL X',
+      inputHint: 'RMB+LMB',
+      energyCost: DUAL_CROSS_COMBO_ENERGY_COST,
+    };
+  }
+  return {
+    kind: 'none',
+    label: 'Kombo Melee Murni',
+    shortLabel: 'MELEE',
+    inputHint: 'LMB/J',
+    energyCost: 0,
+  };
+}
 
 export interface MoveResolveContext {
   onGround: boolean;
@@ -26,19 +114,38 @@ export interface MoveResolveContext {
   isRightClick: boolean;
   hasGun: boolean;
   comboStep: number; // 1, 2, or 3
+  weaponId?: WeaponId;
+  /** True when RMB + LMB (or K + J) are chorded/chained together */
+  isDualChord?: boolean;
 }
 
 /**
  * Resolve which combat action executes given player groundedness, input button,
- * hold state, and loadout mode (Melee-only vs Ranged+Short-Dagger).
+ * hold state, weapon capabilities, and loadout mode (Melee-only vs Ranged+Short-Dagger).
  */
 export function resolveCombatAction(ctx: MoveResolveContext): ResolvedAction {
+  const wId: WeaponId = ctx.weaponId ?? 'sword';
+
+  // Dual Sword exclusive RMB + LMB extra combo (2x Dual Damage, Energy Cost)
+  if (ctx.isDualChord && !ctx.hasGun && canWeaponDualCombo(wId)) {
+    return 'dual_cross_combo';
+  }
+
   if (ctx.isRightClick) {
-    return ctx.hasGun ? 'ranged_fire' : 'dash_thrust';
+    if (ctx.hasGun) return 'ranged_fire';
+    if (canWeaponDashThrust(wId)) return 'dash_thrust';
+    if (canWeaponGroundSlam(wId)) {
+      if (!ctx.onGround) return 'none';
+      return ctx.isHold ? 'ground_slam_impact' : 'ground_slam_charge';
+    }
+    return 'none';
   }
 
   if (!ctx.onGround) {
-    return ctx.isHold ? 'air_slam_windup' : 'spin_vertical';
+    if (ctx.isHold && canWeaponAirSlam(wId)) {
+      return 'air_slam_windup';
+    }
+    return 'spin_vertical';
   }
 
   if (ctx.comboStep === 2) return 'spin_horizontal';
@@ -138,12 +245,17 @@ export function applyLoadoutEquipRule(
   if (def.slot === 'melee') {
     if (!isLightRangedCompatibleMelee(normalized.defId)) {
       const hadGun = current.rangedWeapon !== null;
+      const rSkill = getRightClickSkillMeta(normalized.defId, false);
+      const skillHint =
+        rSkill.kind === 'none'
+          ? 'Mode Melee Murni aktif.'
+          : `${rSkill.inputHint} menjadi ${rSkill.label} (${rSkill.energyCost} EN)!`;
       return {
         meleeWeapon: normalized,
         rangedWeapon: null,
         weaponInventory: nextInv,
         notice: hadGun
-          ? `Mode Melee (${def.name}): Senjata Range dilepas — Klik Kanan / [K] menjadi Dash Thrust!`
+          ? `Mode Melee (${def.name}): Senjata Range dilepas — ${skillHint}`
           : undefined,
       };
     }
@@ -345,6 +457,8 @@ export interface StickmanCombatPose {
   /** Off-hand arm 2-bone joints relative to off-shoulder */
   offElbow: Vec2;
   offHand: Vec2;
+  /** Optional explicit off-hand weapon angle (used for Dual Sword twin-blade choreography) */
+  offWeaponAngle?: number;
   /** True when off-hand is physically gripping the weapon handle/shaft */
   offHandOnWeapon: boolean;
   /** Leg joint targets (hip is at y = -11 + crouchY) */
@@ -860,7 +974,7 @@ export function sampleStickmanCombatPose(
       );
     }
 
-    // ── 6. DASH THRUST (Right-Click in Melee Mode — Explosive Horizontal Bullet Lunge) ──
+    // ── 6. DASH THRUST (Right-Click on Sword/Katana/Spear — Explosive Horizontal Bullet Lunge) ──
     case 'dash_thrust': {
       const isCharge = p < 0.14;
       const k = isCharge ? p / 0.14 : easeOutExpo((p - 0.14) / 0.86);
@@ -893,6 +1007,168 @@ export function sampleStickmanCombatPose(
         3,
         profile.gripStyle === 'polearm'
       );
+    }
+
+    // ── 7A. GROUND SLAM CHARGE (Axe / Hammer — Hold Right-Click Overhead Coil) ──
+    case 'ground_slam_charge': {
+      const k = easeOutExpo(p);
+      const tremble = Math.sin(p * Math.PI * 8) * 0.6;
+      const hand = { x: lerp(2, -3.8, k) + tremble, y: lerp(-3, -13.2, k) };
+      const crouchY = lerp(0.5, 3.8, k);
+      return attachOffhandToWeapon(
+        {
+          torsoTilt: lerp(0, -0.36, k),
+          headTilt: 0.22,
+          bodyOffsetX: lerp(0, -3.2, k),
+          crouchY,
+          bodyRotation: 0,
+          elbow: solveTwoBoneElbow(hand.x, hand.y, 6.0, 5.8, -1),
+          hand,
+          weaponAngle: lerp(-1.1, -Math.PI * 0.76 - wLag * 0.2, k),
+          weaponBehindTorso: false,
+          offElbow: { x: 1.5, y: -6 },
+          offHand: { x: 0, y: -11 },
+          offHandOnWeapon: false,
+          frontKnee: { x: 6.5, y: -4.5 + crouchY },
+          frontFoot: { x: 8.5, y: -1 },
+          backKnee: { x: -5.5, y: -4.5 + crouchY },
+          backFoot: { x: -8.5, y: -1 },
+          squashX: lerp(1, 0.9, k),
+          squashY: lerp(1, 1.12, k),
+        },
+        3,
+        true
+      );
+    }
+
+    // ── 7B. GROUND SLAM IMPACT (Axe / Hammer — Explosive Two-Handed Earth-Shattering Smash) ──
+    case 'ground_slam_impact': {
+      let armAngle: number;
+      let torsoTilt: number;
+      let crouchY: number;
+      let squashX = 1;
+      let squashY = 1;
+
+      if (p < 0.24) {
+        // Blistering overhead crash downward into ground
+        const k = easeOutExpo(p / 0.24);
+        armAngle = lerp(-2.2, 0.96, k);
+        torsoTilt = lerp(-0.34, 0.62, k);
+        crouchY = lerp(2.5, 6.2, k);
+        squashX = lerp(0.92, 1.34, k);
+        squashY = lerp(1.12, 0.72, k);
+      } else {
+        // Weapon embedded in cracked earth, pulling back with heavy recoil
+        const k = easeInOutQuad((p - 0.24) / 0.76);
+        armAngle = lerp(0.96, 0.72, k);
+        torsoTilt = lerp(0.62, 0.22, k);
+        crouchY = lerp(6.2, 1.8, k);
+        squashX = lerp(1.34, 1.0, k);
+        squashY = lerp(0.72, 1.0, k);
+      }
+
+      const hand = {
+        x: Math.cos(armAngle) * 11.4,
+        y: Math.sin(armAngle) * 11.4 + 1.5,
+      };
+      return attachOffhandToWeapon(
+        {
+          torsoTilt,
+          headTilt: -torsoTilt * 0.45,
+          bodyOffsetX: lerp(4.5, 1.5, p),
+          crouchY,
+          bodyRotation: 0,
+          elbow: solveTwoBoneElbow(hand.x, hand.y, 6.2, 6.2, -1),
+          hand,
+          weaponAngle: armAngle + 0.16,
+          weaponBehindTorso: false,
+          offElbow: { x: 2, y: 4 },
+          offHand: { x: 6, y: 8 },
+          offHandOnWeapon: false,
+          frontKnee: { x: 8.5, y: -3.5 + crouchY * 0.45 },
+          frontFoot: { x: 10.5, y: -1 },
+          backKnee: { x: -6.5, y: -3 + crouchY * 0.4 },
+          backFoot: { x: -9.5, y: -1 },
+          squashX,
+          squashY,
+        },
+        3,
+        true
+      );
+    }
+
+    // ── 8. DUAL CROSS COMBO (Dual Sword — RMB + LMB Twin X-Scissor Dual Damage!) ──
+    case 'dual_cross_combo': {
+      let mainArmAngle: number;
+      let offArmAngle: number;
+      let torsoTilt: number;
+      let bodyOffsetX: number;
+      let crouchY: number;
+      let squashX = 1;
+      let squashY = 1;
+
+      if (p < 0.2) {
+        // Deep assassin coil: right sword draws high-back, left sword draws low-back
+        const k = easeInOutQuad(p / 0.2);
+        mainArmAngle = lerp(-0.45, -2.35, k);
+        offArmAngle = lerp(1.65, 2.45, k);
+        torsoTilt = lerp(0, -0.32, k);
+        bodyOffsetX = lerp(0, -4.5, k);
+        crouchY = lerp(0, 3.2, k);
+        squashX = lerp(1, 0.88, k);
+        squashY = lerp(1, 1.14, k);
+      } else if (p < 0.62) {
+        // Explosive X-Scissor twin-blade cross slash! Main cuts down-forward, Off-hand rips up-forward!
+        const k = easeOutExpo((p - 0.2) / 0.42);
+        mainArmAngle = lerp(-2.35, 1.08, k);
+        offArmAngle = lerp(2.45, -1.02, k);
+        torsoTilt = lerp(-0.32, 0.56, k);
+        bodyOffsetX = lerp(-4.5, 8.2, k);
+        crouchY = lerp(3.2, 3.6, k);
+        squashX = lerp(1.24, 1.04, k);
+        squashY = lerp(0.82, 0.96, k);
+      } else {
+        // Stylish flared twin-blade finish
+        const k = easeInOutQuad((p - 0.62) / 0.38);
+        mainArmAngle = lerp(1.08, 0.62, k);
+        offArmAngle = lerp(-1.02, -0.68, k);
+        torsoTilt = lerp(0.56, 0.18, k);
+        bodyOffsetX = lerp(8.2, 2.0, k);
+        crouchY = lerp(3.6, 1.2, k);
+      }
+
+      const mainHand = {
+        x: Math.cos(mainArmAngle) * 10.2,
+        y: Math.sin(mainArmAngle) * 10.2,
+      };
+      const offHand = {
+        x: Math.cos(offArmAngle) * 10.0 + 1.5,
+        y: Math.sin(offArmAngle) * 10.0,
+      };
+      const mainWeaponAngle = mainArmAngle + (p >= 0.2 && p < 0.62 ? 0.32 : -0.15);
+      const offWeaponAngle = offArmAngle + (p >= 0.2 && p < 0.62 ? -0.32 : 0.15);
+
+      return {
+        torsoTilt,
+        headTilt: -torsoTilt * 0.42,
+        bodyOffsetX,
+        crouchY,
+        bodyRotation: 0,
+        elbow: solveTwoBoneElbow(mainHand.x, mainHand.y, 5.6, 5.4, -1),
+        hand: mainHand,
+        weaponAngle: mainWeaponAngle,
+        weaponBehindTorso: false,
+        offElbow: solveTwoBoneElbow(offHand.x, offHand.y, 5.4, 5.2, 1),
+        offHand,
+        offWeaponAngle,
+        offHandOnWeapon: false,
+        frontKnee: { x: 8 + bodyOffsetX * 0.25, y: -4.5 + crouchY },
+        frontFoot: { x: 10 + bodyOffsetX * 0.3, y: -1 },
+        backKnee: { x: -6, y: -4.5 + crouchY },
+        backFoot: { x: -10.5, y: -1.4 },
+        squashX,
+        squashY,
+      };
     }
   }
 }
@@ -986,8 +1262,8 @@ export function sampleWeaponBladeTrail(
   const trailSpan =
     move === 'spin_horizontal' || move === 'spin_vertical'
       ? 0.24
-      : move === 'dash_thrust'
-        ? 0.2
+      : move === 'dash_thrust' || move === 'dual_cross_combo'
+        ? 0.22
         : 0.16;
   const startP = Math.max(0.05, progress - trailSpan);
   if (progress <= startP + 0.01) return [];
@@ -997,6 +1273,59 @@ export function sampleWeaponBladeTrail(
     const t = samples <= 1 ? progress : lerp(startP, progress, i / (samples - 1));
     const pose = sampleStickmanCombatPose(move, t, weaponId);
     result.push(computeWeaponBladeSegment(pose, weaponId, facingRight, charCenterX, charBottomY));
+  }
+  return result;
+}
+
+/**
+ * Sample N trailing segments for the off-hand twin sword during Dual Sword X-Combo.
+ */
+export function sampleOffhandBladeTrail(
+  move: CombatMoveType,
+  progress: number,
+  facingRight: boolean,
+  charCenterX: number,
+  charBottomY: number,
+  samples = 6
+): WeaponBladeSegment[] {
+  const startP = Math.max(0.05, progress - 0.22);
+  if (progress <= startP + 0.01) return [];
+
+  const result: WeaponBladeSegment[] = [];
+  for (let i = 0; i < samples; i++) {
+    const t = samples <= 1 ? progress : lerp(startP, progress, i / (samples - 1));
+    const pose = sampleStickmanCombatPose(move, t, 'dual_sword');
+    const offShoulderX = -1 + Math.sin(pose.torsoTilt) * 4;
+    const offShoulderY = -17 + pose.crouchY;
+    const localHiltX = offShoulderX + pose.offHand.x;
+    const localHiltY = offShoulderY + pose.offHand.y;
+    const offAng =
+      pose.offWeaponAngle ??
+      Math.atan2(pose.offHand.y - pose.offElbow.y, pose.offHand.x - pose.offElbow.x);
+    const cosW = Math.cos(offAng);
+    const sinW = Math.sin(offAng);
+
+    const toWorld = (lx: number, ly: number): Vec2 => {
+      const px = lx + pose.bodyOffsetX;
+      const dir = facingRight ? 1 : -1;
+      return {
+        x: charCenterX + px * dir * pose.squashX,
+        y: charBottomY + ly * pose.squashY,
+      };
+    };
+
+    const hilt = toWorld(localHiltX, localHiltY);
+    const base = toWorld(localHiltX + cosW * 2, localHiltY + sinW * 2);
+    const tip = toWorld(localHiltX + cosW * 15, localHiltY + sinW * 15);
+    result.push({
+      hiltX: hilt.x,
+      hiltY: hilt.y,
+      baseX: base.x,
+      baseY: base.y,
+      tipX: tip.x,
+      tipY: tip.y,
+      behindTorso: false,
+    });
   }
   return result;
 }
@@ -1027,8 +1356,13 @@ export function computeWeaponSweepHitbox(
   const dir = facingRight ? 1 : -1;
 
   // Sample active strike frames along the move
-  const startT = move === 'spin_vertical' || move === 'air_slam_dive' ? 0.08 : 0.22;
-  const endT = move === 'spin_horizontal' || move === 'spin_vertical' ? 0.88 : 0.66;
+  const startT = move === 'spin_vertical' || move === 'air_slam_dive' ? 0.08 : 0.2;
+  const endT =
+    move === 'spin_horizontal' || move === 'spin_vertical'
+      ? 0.88
+      : move === 'dual_cross_combo'
+        ? 0.72
+        : 0.66;
   const steps = 7;
 
   let minX = Infinity;
@@ -1046,11 +1380,14 @@ export function computeWeaponSweepHitbox(
     maxY = Math.max(maxY, seg.baseY, seg.tipY);
   }
 
-  // Account for lunge forward displacement on thrusts
+  // Account for lunge forward displacement on thrusts & dual cross combo
   if (move === 'dash_thrust') {
     const lungeExtra = weaponId === 'dagger' ? 14 : 26;
     if (dir > 0) maxX += lungeExtra;
     else minX -= lungeExtra;
+  } else if (move === 'dual_cross_combo') {
+    if (dir > 0) maxX += 18;
+    else minX -= 18;
   } else if (move === 'mini_thrust') {
     const lungeExtra = weaponId === 'dagger' ? 5 : 10;
     if (dir > 0) maxX += lungeExtra;
