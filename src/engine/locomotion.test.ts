@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeAnalogStickVector, sampleWalkGait } from './locomotion';
+import { computeAnalogStickVector, computeArrowPadState, sampleWalkGait } from './locomotion';
 
 test('Virtual analog stick applies deadzone, clamps radius, and resolves left/right/down directions', () => {
   const neutral = computeAnalogStickVector(4, 3, 44, 0.16);
@@ -24,6 +24,38 @@ test('Virtual analog stick applies deadzone, clamps radius, and resolves left/ri
   assert.equal(down.active, true);
   assert.equal(down.dropDown, true);
   assert.equal(down.direction, 'neutral');
+});
+
+test('4-way Arrow D-Pad resolves Left, Right, Up (Jump), Down (Drop), and Up-Left/Up-Right diagonals cleanly', () => {
+  const r = 64;
+  assert.equal(computeArrowPadState(2, -2, r).active, false);
+
+  const right = computeArrowPadState(48, -4, r);
+  assert.equal(right.right, true);
+  assert.equal(right.up, false);
+  assert.equal(right.down, false);
+  assert.equal(right.direction, 'right');
+
+  const left = computeArrowPadState(-48, 4, r);
+  assert.equal(left.left, true);
+  assert.equal(left.up, false);
+  assert.equal(left.direction, 'left');
+
+  const up = computeArrowPadState(0, -48, r);
+  assert.equal(up.up, true);
+  assert.equal(up.left, false);
+  assert.equal(up.right, false);
+  assert.equal(up.direction, 'up');
+
+  const upRight = computeArrowPadState(38, -38, r);
+  assert.equal(upRight.up, true);
+  assert.equal(upRight.right, true);
+  assert.equal(upRight.direction, 'up-right');
+
+  const down = computeArrowPadState(4, 48, r);
+  assert.equal(down.down, true);
+  assert.equal(down.up, false);
+  assert.equal(down.direction, 'down');
 });
 
 test('Walk gait lifts foot ONLY during forward swing phase and plants foot during backward push-off (no moonwalk)', () => {

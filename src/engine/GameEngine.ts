@@ -812,16 +812,18 @@ export class GameEngine {
       if (p.heal()) {
         this.sound.play('player_heal');
         this._spawnFloatingText(p.x + 7, p.y - 8, '+35 HP', '#22C55E');
+      } else {
+        this.onToast?.('HP sudah penuh atau Vial habis!');
       }
     }
 
     if (this.input.isJustPressed('use_ammo')) {
       if (p.useAmmoPack()) {
         this.sound.play('pylon_repair');
-        this._spawnFloatingText(p.x + 7, p.y - 10, '+60 AMMO!', '#00F0FF');
+        this._spawnFloatingText(p.x + 7, p.y - 10, '+60 EN!', '#00F0FF');
         this.saveGear();
       } else {
-        this.onToast?.('Energy penuh atau Ammo Pack habis!');
+        this.onToast?.('Energy penuh atau Pack Reload habis!');
       }
     }
 
@@ -1030,8 +1032,10 @@ export class GameEngine {
           if (dRes.ok) {
             this._performCombatMove('dash_thrust');
           } else if (dRes.reason === 'no_energy') {
-            this.onToast?.(`Energy tidak cukup untuk Dash Thrust (${dRes.cost} EN)!`);
+            this.onToast?.(`Energy tidak cukup untuk Long Thrust (${dRes.cost} EN)!`);
           }
+        } else {
+          this.onToast?.('Long Thrust aktif di Sword/Katana/Spear · G-Slam di Axe/Hammer · Dual X di Dual Sword!');
         }
       }
     }

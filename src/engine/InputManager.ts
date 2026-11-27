@@ -48,7 +48,9 @@ export class InputManager {
   private _keysDown = new Set<string>();
   private _mouseDown = new Set<number>();
   private _virtualDown = new Set<InputAction>();
+  private _virtualSources = new Map<InputAction, Set<string>>();
   private _latchedActions = new Set<InputAction>();
+  private _forceJustPressed = new Set<InputAction>();
 
   private _bindings: KeyBinding[];
   private _enabled = true;
@@ -111,20 +113,39 @@ export class InputManager {
       this._keysDown.clear();
       this._mouseDown.clear();
       this._virtualDown.clear();
+      this._virtualSources.clear();
       this._latchedActions.clear();
+      this._forceJustPressed.clear();
       this._analogX = 0;
       this._analogY = 0;
     });
   }
 
-  /** Set virtual button state from mobile TouchControls */
-  setVirtualAction(action: InputAction, down: boolean) {
+  /** Set virtual button state from mobile TouchControls (supports multiple independent sources like D-pad Up + Right Jump) */
+  setVirtualAction(action: InputAction, down: boolean, sourceId = 'default') {
     if (!this._enabled && down) return;
+    let sources = this._virtualSources.get(action);
+    if (!sources) {
+      sources = new Set<string>();
+      this._virtualSources.set(action, sources);
+    }
+
     if (down) {
-      if (!this._virtualDown.has(action)) this._latchedActions.add(action);
+      const wasSourceDown = sources.has(sourceId);
+      sources.add(sourceId);
+      if (!wasSourceDown) {
+        this._latchedActions.add(action);
+        // If another source already held this action (e.g. Arrow Up held + Right Jump tapped), still trigger a fresh press edge for double jump!
+        if (this._virtualDown.has(action)) {
+          this._forceJustPressed.add(action);
+        }
+      }
       this._virtualDown.add(action);
     } else {
-      this._virtualDown.delete(action);
+      sources.delete(sourceId);
+      if (sources.size === 0) {
+        this._virtualDown.delete(action);
+      }
     }
   }
 
@@ -212,8 +233,13 @@ export class InputManager {
         }
       }
 
+      const forced = this._forceJustPressed.has(binding.action);
+      if (forced) {
+        this._forceJustPressed.delete(binding.action);
+      }
+
       this._held.set(binding.action, isHeld);
-      this._justPressed.set(binding.action, (isHeld && !wasHeld) || (latched && !wasHeld));
+      this._justPressed.set(binding.action, (isHeld && !wasHeld) || (latched && !wasHeld) || forced);
       this._justReleased.set(binding.action, !isHeld && wasHeld);
     }
   }
@@ -236,7 +262,9 @@ export class InputManager {
       this._keysDown.clear();
       this._mouseDown.clear();
       this._virtualDown.clear();
+      this._virtualSources.clear();
       this._latchedActions.clear();
+      this._forceJustPressed.clear();
       this._analogX = 0;
       this._analogY = 0;
     }

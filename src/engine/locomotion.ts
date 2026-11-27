@@ -92,6 +92,77 @@ export function computeAnalogStickVector(
   };
 }
 
+export interface ArrowPadSample {
+  left: boolean;
+  right: boolean;
+  up: boolean;
+  down: boolean;
+  /** Primary horizontal movement axis (-1, 0, +1) */
+  x: number;
+  /** Primary visual readout direction */
+  direction: 'left' | 'right' | 'up' | 'down' | 'up-left' | 'up-right' | 'neutral';
+  active: boolean;
+}
+
+/**
+ * Compute crisp 4-way Arrow D-Pad state from thumb offset (dx, dy) relative to pad center.
+ * Supports direct key taps (◄ ► ▲ ▼), seamless thumb slide across arrows, and
+ * natural run+jump diagonals (↖ Up-Left / ↗ Up-Right) while preventing accidental
+ * jumps or platform drops when running purely left or right.
+ */
+export function computeArrowPadState(
+  dx: number,
+  dy: number,
+  radius: number
+): ArrowPadSample {
+  const safeR = Math.max(1, radius);
+  const dist = Math.hypot(dx, dy);
+  if (dist < safeR * 0.16) {
+    return {
+      left: false,
+      right: false,
+      up: false,
+      down: false,
+      x: 0,
+      direction: 'neutral',
+      active: false,
+    };
+  }
+
+  const nx = dx / safeR;
+  const ny = dy / safeR;
+  const absX = Math.abs(nx);
+  const absY = Math.abs(ny);
+
+  // Horizontal activates cleanly on left/right arms and diagonals
+  const left = nx <= -0.22 && absX >= absY * 0.35;
+  const right = nx >= 0.22 && absX >= absY * 0.35;
+
+  // Up (Jump) activates on top arm and crisp upper diagonals (not pure horizontal)
+  const up = ny <= -0.28 && absY >= absX * 0.52;
+
+  // Down (Drop through thin platform) requires clear downward intent
+  const down = !up && ny >= 0.34 && absY >= absX * 0.72;
+
+  let direction: ArrowPadSample['direction'] = 'neutral';
+  if (up && left) direction = 'up-left';
+  else if (up && right) direction = 'up-right';
+  else if (up) direction = 'up';
+  else if (down) direction = 'down';
+  else if (left) direction = 'left';
+  else if (right) direction = 'right';
+
+  return {
+    left,
+    right,
+    up,
+    down,
+    x: left ? -1 : right ? 1 : 0,
+    direction,
+    active: left || right || up || down,
+  };
+}
+
 export interface LegJointPose {
   kneeX: number;
   kneeY: number;

@@ -226,8 +226,8 @@ export function GameCanvas({
     };
   }, [initialMode, showToast, showAreaBanner, onRecordModeClear]);
 
-  const handleTouchAction = useCallback((action: InputAction, down: boolean) => {
-    engineRef.current?.input.setVirtualAction(action, down);
+  const handleTouchAction = useCallback((action: InputAction, down: boolean, sourceId?: string) => {
+    engineRef.current?.input.setVirtualAction(action, down, sourceId);
   }, []);
 
   const handleAnalogChange = useCallback((x: number, y: number, dropDown: boolean) => {

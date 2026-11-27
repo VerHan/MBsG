@@ -111,14 +111,14 @@ export function PauseMenu({
         <div className="mb-4 border border-ancient-stone bg-abyss-950/80 p-3 text-[11px]">
           <div className="mb-2 font-bold text-slate-300">KONTROL MOBILE &amp; DESKTOP</div>
           <div className="grid grid-cols-1 gap-x-4 gap-y-1 text-slate-400 sm:grid-cols-2">
-            <div><span className="text-white">Analog / A-D</span> : Gerak Kiri &amp; Kanan</div>
-            <div><span className="text-white">Tarik Bawah / S</span> : Turun Platform</div>
-            <div><span className="text-white">JUMP / Space</span> : Jump &amp; Double Flip</div>
+            <div><span className="text-white">Arrow ◄ ► / A-D</span> : Gerak Kiri &amp; Kanan</div>
+            <div><span className="text-white">Arrow ▼ / S</span> : Turun Platform</div>
+            <div><span className="text-white">Arrow ▲ / JUMP</span> : Jump &amp; Double Jump (2x Flip)</div>
             <div><span className="text-white">DASH / Shift</span> : Dash (i-frame)</div>
             <div><span className="text-white">Tap ATK / J</span> : 3-Hit Combo &amp; Air Spin</div>
             <div><span className="text-white">Hold ATK / J</span> : Block &amp; Air Slam</div>
-            <div><span className="text-white">SKILL / K</span> : Gun / Thrust / Ground Slam / Dual X</div>
-            <div><span className="text-white">HEAL / EN+</span> : Nano Vial &amp; Isi Energi</div>
+            <div><span className="text-white">THRUST / K</span> : Long Thrust / Ground Slam / Dual X / Gun</div>
+            <div><span className="text-white">VIAL / RELOAD</span> : Nano Vial Heal &amp; Isi Energi</div>
           </div>
         </div>
 
