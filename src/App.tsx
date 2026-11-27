@@ -13,13 +13,13 @@ import { TitleScreen } from './components/TitleScreen';
 import { LoreIntro } from './components/LoreIntro';
 import { GameCanvas } from './components/GameCanvas';
 import { LearningReportModal } from './components/LearningReportModal';
+import type { PlayableModeKey } from './engine/LevelBuilder';
 
 type Screen = 'title' | 'lore' | 'playing';
-type DemoMode = 'traverse' | 'survival' | 'defense';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('title');
-  const [selectedMode, setSelectedMode] = useState<DemoMode>('traverse');
+  const [selectedMode, setSelectedMode] = useState<PlayableModeKey>('stage_1');
   const [student, setStudent] = useState<StudentProgress | null>(() => getActiveStudentLocal());
   const [showReport, setShowReport] = useState(false);
   const [, setConfigTick] = useState(0);
@@ -53,7 +53,7 @@ export default function App() {
       {screen === 'lore' && (
         <LoreIntro
           onFinish={() => {
-            setSelectedMode('traverse');
+            setSelectedMode('stage_1');
             setScreen('playing');
           }}
         />
