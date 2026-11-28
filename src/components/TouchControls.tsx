@@ -110,6 +110,10 @@ function TouchBtn({
           else if (action && onAction) onAction(action, false, sourceId);
         }
       }}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
       onContextMenu={(e) => e.preventDefault()}
       className={`touch-none select-none flex items-center justify-center border-2 transition-transform duration-75 ${
         pressed ? 'scale-92 brightness-125' : ''

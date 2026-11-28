@@ -360,6 +360,15 @@ export class GameEngine {
   private _dropIdCounter = 0;
   private _laserCooldown = 0;
   private _pendingSpawns: Array<{ enemyId: EnemyInstance['defId']; delay: number }> = [];
+  private _respawnQueue: Array<{
+    defId: EnemyInstance['defId'];
+    x: number;
+    y: number;
+    patrolLeft: number;
+    patrolRight: number;
+    timer: number;
+  }> = [];
+  private _runSeedCounter = 0;
   private _pylonDamageCooldown = 0;
   private _lastStyleRank: StyleRank = 'D';
 
@@ -434,9 +443,12 @@ export class GameEngine {
   loadPlayableMode(
     modeKey: PlayableModeKey,
     keepGear = false,
-    cloudGear?: SavedGearState | null
+    cloudGear?: SavedGearState | null,
+    stageSeed?: number | string
   ) {
-    const built = buildPlayableLevel(modeKey);
+    const resolvedSeed =
+      stageSeed ?? `${this._gearStorageKey}_${modeKey}_${Date.now()}_${++this._runSeedCounter}`;
+    const built = buildPlayableLevel(modeKey, resolvedSeed);
     this.level = built;
     this.currentMode = built.segment.mode;
     this.enemies = built.enemies;
@@ -456,6 +468,7 @@ export class GameEngine {
     this._groundDrops = [];
     this._laserCooldown = 0;
     this._pendingSpawns = [];
+    this._respawnQueue = [];
     this._manaShieldTimer = 0;
     this._meleePressHeld = false;
     this._meleeHoldTime = 0;
@@ -553,6 +566,7 @@ export class GameEngine {
 
     this.mode.update(dt);
     this._processPendingSpawns(dt);
+    this._updateEnemyRespawns(dt);
 
     // Ambient drifting ash & Mana spores
     if (Math.random() < 0.35) {
@@ -2106,6 +2120,38 @@ export class GameEngine {
     }
   }
 
+  private _updateEnemyRespawns(dt: number) {
+    if (!this.level || this.currentMode !== 'traverse' || this._respawnQueue.length === 0) return;
+    // Stop respawning roamers once the stage boss is defeated
+    if (this.boss && this.boss.hp <= 0) return;
+
+    const maxActive = this.level.maxActiveEnemies ?? 40;
+    const px = this.player.x;
+
+    for (let i = this._respawnQueue.length - 1; i >= 0; i--) {
+      const entry = this._respawnQueue[i];
+      entry.timer -= dt;
+      if (entry.timer > 0) continue;
+
+      const distToPlayer = Math.abs(entry.x - px);
+      // Only respawn off-screen at fair tactical range (never pop on top of player)
+      if (distToPlayer < 340 || distToPlayer > 1650 || this.enemies.length >= maxActive) {
+        entry.timer = 1.6;
+        continue;
+      }
+
+      this._respawnQueue.splice(i, 1);
+      const respawned = createEnemy(entry.defId, entry.x, entry.y, {
+        patrolLeft: entry.patrolLeft,
+        patrolRight: entry.patrolRight,
+        canRespawn: true,
+      });
+      this.enemies.push(respawned);
+      this.particles.emit('mana_dust', entry.x + respawned.width / 2, entry.y + respawned.height / 2);
+      this.particles.emit('hit_spark', entry.x + respawned.width / 2, entry.y + respawned.height / 2);
+    }
+  }
+
   private _updateEnemies(dt: number) {
     if (!this.level) return;
     const p = this.player;
@@ -2118,6 +2164,16 @@ export class GameEngine {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
       if (!e.alive) {
+        if (e.canRespawn && this.currentMode === 'traverse') {
+          this._respawnQueue.push({
+            defId: e.defId,
+            x: e.spawnX,
+            y: e.spawnY,
+            patrolLeft: e.patrolLeft,
+            patrolRight: e.patrolRight,
+            timer: this.level.respawnInterval ?? 18,
+          });
+        }
         this.enemies.splice(i, 1);
         continue;
       }
@@ -2137,7 +2193,12 @@ export class GameEngine {
 
       e.x += e.vx * speedFactor * dt;
 
-      if (e.behavior !== 'flying_ranged' && e.behavior !== 'suicide') {
+      const isFlyer =
+        e.behavior === 'flying_ranged' ||
+        e.behavior === 'suicide' ||
+        e.behavior === 'burst_sniper';
+
+      if (!isFlyer) {
         e.vy += 800 * dt;
         e.y += e.vy * dt;
         for (const plat of this.level.platforms) {
@@ -2149,6 +2210,34 @@ export class GameEngine {
             if (e.vy > 0) {
               e.y = plat.y - e.height;
               e.vy = 0;
+
+              // Void Hopper landing shockwave!
+              if (e.pendingLeapShockwave) {
+                e.pendingLeapShockwave = false;
+                e.attackPhase = 'idle';
+                e.vx = 0;
+                const cx = e.x + e.width / 2;
+                const floorY = plat.y - 6;
+                this.particles.emit('explosion', cx, plat.y - 4);
+                this.particles.emit('hit_spark', cx, floorY);
+                if (Math.abs(cx - p.x) < 340) {
+                  this.triggerShake(2.6, 0.14);
+                }
+                this.projectiles.push(
+                  createProjectile('enemy', cx - 6, floorY, Math.PI, 165, Math.max(8, Math.round(e.damage * 0.85)), {
+                    color: '#FACC15',
+                    trailColor: '#F97316',
+                    life: 1.35,
+                    size: 4,
+                  }),
+                  createProjectile('enemy', cx + 6, floorY, 0, 165, Math.max(8, Math.round(e.damage * 0.85)), {
+                    color: '#FACC15',
+                    trailColor: '#F97316',
+                    life: 1.35,
+                    size: 4,
+                  })
+                );
+              }
             }
           }
         }
@@ -2158,12 +2247,80 @@ export class GameEngine {
 
       e.x = Math.max(4, Math.min(this.level.worldWidth - e.width - 4, e.x));
 
-      if (e.behavior === 'flying_ranged' && e.attackTimer <= 0) {
+      const distToPlayer = Math.hypot(p.x - e.x, p.y - e.y);
+
+      // Flying Ranged (Rift Drone) single aimed bolt when within range
+      if (e.behavior === 'flying_ranged' && e.attackTimer <= 0 && (distToPlayer < 380 || e.targetingPylon)) {
         const tx = e.targetingPylon && pylonPos ? pylonPos.x : p.x + p.width / 2;
         const ty = e.targetingPylon && pylonPos ? pylonPos.y : p.y + p.height / 2;
         const angle = Math.atan2(ty - (e.y + 6), tx - (e.x + 6));
         this.projectiles.push(createEnemyOrb(e.x + 6, e.y + 6, angle, e.damage));
         e.attackTimer = 2.4;
+      }
+
+      // Stationary Void Spitter turret aimed shot
+      if (e.behavior === 'turret' && e.attackTimer <= 0 && distToPlayer < 350) {
+        const cx = e.x + e.width / 2;
+        const cy = e.y + 5;
+        const angle = Math.atan2(p.y + p.height / 2 - cy, p.x + p.width / 2 - cx);
+        this.projectiles.push(
+          createProjectile('enemy', cx, cy, angle, 155, e.damage, {
+            color: '#22C55E',
+            trailColor: '#A855F7',
+            life: 2.5,
+            size: 4,
+          })
+        );
+        e.attackTimer = 2.15;
+      }
+
+      // Pulse Acolyte (burst_sniper) 3-bolt arcane fan spread volley
+      if (e.behavior === 'burst_sniper' && e.attackPhase === 'executing' && e.activeAttackTimer > 0.12) {
+        e.activeAttackTimer = 0.08; // ensure single volley per burst window
+        const cx = e.x + e.width / 2;
+        const cy = e.y + e.height / 2;
+        const tx = e.targetingPylon && pylonPos ? pylonPos.x : p.x + p.width / 2;
+        const ty = e.targetingPylon && pylonPos ? pylonPos.y : p.y + p.height / 2;
+        const baseAngle = Math.atan2(ty - cy, tx - cx);
+        for (const spread of [-0.22, 0, 0.22]) {
+          this.projectiles.push(
+            createProjectile('enemy', cx, cy, baseAngle + spread, 175, e.damage, {
+              color: '#00F0FF',
+              trailColor: '#38BDF8',
+              life: 2.4,
+              size: 4,
+            })
+          );
+        }
+        this.particles.emit('mana_dust', cx, cy);
+      }
+
+      // Rift Brute (heavy) ground stomp twin shockwave
+      if (e.behavior === 'heavy' && e.attackPhase === 'executing' && e.activeAttackTimer > 0.18) {
+        e.activeAttackTimer = 0.12;
+        const cx = e.x + e.width / 2;
+        const floorY = e.y + e.height - 6;
+        if (distToPlayer < 340) this.triggerShake(3.2, 0.16);
+        this.particles.emit('explosion', cx, e.y + e.height - 4);
+        this.projectiles.push(
+          createProjectile('enemy', cx - 8, floorY, Math.PI, 155, Math.round(e.damage * 0.8), {
+            color: '#EF4444',
+            trailColor: '#F97316',
+            life: 1.5,
+            size: 5,
+          }),
+          createProjectile('enemy', cx + 8, floorY, 0, 155, Math.round(e.damage * 0.8), {
+            color: '#EF4444',
+            trailColor: '#F97316',
+            life: 1.5,
+            size: 5,
+          })
+        );
+      }
+
+      // Rift Lancer (dash_lancer) crimson afterimage sparks during charge
+      if (e.behavior === 'dash_lancer' && e.attackPhase === 'executing' && Math.random() < 0.45) {
+        this.particles.emit('hit_spark', e.x + e.width / 2, e.y + e.height / 2);
       }
 
       if (_aabb(e.x, e.y, e.width, e.height, p.x, p.y, p.width, p.height)) {
@@ -2835,6 +2992,13 @@ export class GameEngine {
       this.player.state.shards += loot.shards;
       const unlockedNames: string[] = [`+${loot.shards} Shards`];
 
+      if (loot.hpRestore) {
+        this.player.state.hp = Math.min(
+          this.player.state.maxHp,
+          this.player.state.hp + loot.hpRestore
+        );
+        unlockedNames.push(`+${loot.hpRestore} HP`);
+      }
       if (loot.energyRestore) {
         this.player.state.energy = Math.min(
           this.player.state.maxEnergy,
@@ -3586,13 +3750,65 @@ export class GameEngine {
 
   private _renderEnemies(ctx: CanvasRenderingContext2D) {
     const walkToggle = Math.floor(this._animTime * 8) % 2 === 1;
+    const pulse = 0.55 + 0.45 * Math.sin(this._animTime * 22);
     for (const e of this.enemies) {
       if (!e.alive) continue;
       const flash = e.hitFlashTimer > 0;
       const pal = ENEMY_PALETTES[e.defId] ?? ENEMY_PALETTES.mana_husk;
       const moving = Math.abs(e.vx) > 5;
       const mat = getEnemyMatrix(e.defId, moving && walkToggle);
-      const scale = e.defId === 'rift_brute' ? 1.45 : e.defId === 'corrupted_sentinel' ? 1.15 : 1;
+      const baseScale =
+        e.defId === 'rift_brute'
+          ? 1.45
+          : e.defId === 'corrupted_sentinel' || e.defId === 'rift_lancer'
+            ? 1.15
+            : 1;
+      const crouchSquash = e.behavior === 'leap_slammer' && e.attackPhase === 'telegraph';
+      const scaleX = crouchSquash ? baseScale * 1.18 : baseScale;
+      const scaleY = crouchSquash ? baseScale * 0.82 : baseScale;
+
+      // Readable attack telegraphs BEFORE attack unleashes
+      if (e.attackPhase === 'telegraph') {
+        const cx = e.x + e.width / 2;
+        const cy = e.y + e.height / 2;
+        ctx.save();
+        if (e.behavior === 'dash_lancer') {
+          const dir = e.facingRight ? 1 : -1;
+          ctx.strokeStyle = `rgba(244, 63, 94, ${0.45 + pulse * 0.5})`;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([6, 4]);
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + dir * 185, cy);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else if (e.behavior === 'burst_sniper') {
+          ctx.strokeStyle = `rgba(0, 240, 255, ${0.4 + pulse * 0.5})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 10 + pulse * 4, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(this.player.x + this.player.width / 2, this.player.y + this.player.height / 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else if (e.behavior === 'leap_slammer') {
+          ctx.strokeStyle = `rgba(250, 204, 21, ${0.5 + pulse * 0.45})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.ellipse(cx, e.y + e.height - 1, 13 + pulse * 4, 4, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (e.behavior === 'heavy') {
+          ctx.strokeStyle = `rgba(239, 68, 68, ${0.45 + pulse * 0.5})`;
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.ellipse(cx, e.y + e.height - 1, 18 + pulse * 6, 5, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
 
       const frame = this.sprites.render(
         `enemy_${e.defId}_${moving && walkToggle ? 'w' : 'i'}`,
@@ -3607,8 +3823,8 @@ export class GameEngine {
         e.x + e.width / 2,
         e.y + e.height,
         !e.facingRight,
-        scale,
-        scale
+        scaleX,
+        scaleY
       );
 
       if (e.shieldHp > 0) {

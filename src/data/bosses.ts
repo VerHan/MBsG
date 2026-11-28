@@ -13,13 +13,8 @@ export const BOSSES: Record<string, BossDef> = {
     contactDamage: 15,
     hasRunicPillar: true,
     drops: {
-      dropPool: [
-        { weaponId: 'sword', weaponTier: 'rare', level: 1 },
-        { weaponId: 'spear', weaponTier: 'rare', level: 2 },
-        { weaponId: 'katana', weaponTier: 'rare', level: 1 },
-      ],
       armorId: 'vanguard',
-      shards: 150,
+      shards: 180,
       ammoPacks: 2,
     },
     phases: [
@@ -47,16 +42,9 @@ export const BOSSES: Record<string, BossDef> = {
     contactDamage: 20,
     hasRunicPillar: true,
     drops: {
-      dropPool: [
-        { weaponId: 'axe', weaponTier: 'epic', level: 1 },
-        { weaponId: 'hammer', weaponTier: 'epic', level: 1 },
-        { weaponId: 'spear', weaponTier: 'epic', level: 2 },
-      ],
-      secondaryWeaponId: 'shotgun',
-      secondaryWeaponTier: 'rare',
       armorId: 'rift_stalker',
-      shards: 250,
-      ammoPacks: 2,
+      shards: 280,
+      ammoPacks: 3,
     },
     phases: [
       {
@@ -87,13 +75,6 @@ export const BOSSES: Record<string, BossDef> = {
     contactDamage: 25,
     hasRunicPillar: true,
     drops: {
-      dropPool: [
-        { weaponId: 'dual_sword', weaponTier: 'epic', level: 2 },
-        { weaponId: 'katana', weaponTier: 'epic', level: 2 },
-        { weaponId: 'hammer', weaponTier: 'epic', level: 2 },
-      ],
-      secondaryWeaponId: 'rifle',
-      secondaryWeaponTier: 'epic',
       armorId: 'aether_praetor',
       shards: 500,
       ammoPacks: 3,

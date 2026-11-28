@@ -1995,6 +1995,51 @@ export const WISP_SPRITE: PixelKey[][] = [
   [null,null,null, 'G', 'G',null,null,null],
 ];
 
+// Void Hopper — coiled leaping stalker with glowing amber crest & spring legs
+export const HOPPER_SPRITE: PixelKey[][] = [
+  [null,null,null, 'G',null,null, 'G',null,null,null,null,null],
+  [null,null, 'B', 'P', 'G', 'G', 'P', 'B',null,null,null,null],
+  [null, 'B', 'P', 'P', 'P', 'P', 'P', 'P', 'B',null,null,null],
+  [null, 'B', 'P', 'V', 'V', 'P', 'V', 'V', 'B',null,null,null],
+  [null, 'B', 'S', 'P', 'P', 'P', 'P', 'S', 'B',null,null,null],
+  [ 'B', 'S', 'S', 'B', 'G', 'G', 'B', 'S', 'S', 'B',null,null],
+  [ 'B', 'P', 'S', 'B', 'P', 'P', 'B', 'S', 'P', 'B',null,null],
+  [ 'B', 'P', 'B',null, 'B', 'B',null, 'B', 'P', 'B',null,null],
+  [ 'B', 'G', 'B',null,null,null,null, 'B', 'G', 'B',null,null],
+  [ 'B', 'S', 'S', 'B',null,null, 'B', 'S', 'S', 'B',null,null],
+  [null, 'B', 'B', 'B',null,null, 'B', 'B', 'B',null,null,null],
+];
+
+// Pulse Acolyte — hovering arcane sniper with cyan prism halo
+export const ACOLYTE_SPRITE: PixelKey[][] = [
+  [null,null,null, 'G', 'G', 'G', 'G',null,null,null],
+  [null,null, 'G', 'B', 'P', 'P', 'B', 'G',null,null],
+  [null,null, 'B', 'P', 'V', 'V', 'P', 'B',null,null],
+  [null, 'B', 'P', 'V', 'G', 'G', 'V', 'P', 'B',null],
+  [null, 'B', 'S', 'P', 'P', 'P', 'P', 'S', 'B',null],
+  [ 'G', 'B', 'S', 'B', 'V', 'V', 'B', 'S', 'B', 'G'],
+  [null, 'B', 'P', 'S', 'V', 'V', 'S', 'P', 'B',null],
+  [null,null, 'B', 'P', 'S', 'S', 'P', 'B',null,null],
+  [null,null, 'B', 'S', 'B', 'B', 'S', 'B',null,null],
+  [null,null,null, 'G',null,null, 'G',null,null,null],
+];
+
+// Rift Lancer — armored dash knight carrying an extended crimson energy lance
+export const LANCER_SPRITE: PixelKey[][] = [
+  [null,null,null, 'B', 'B', 'B',null,null,null,null,null,null,null,null],
+  [null,null, 'B', 'P', 'P', 'P', 'B',null,null,null,null,null,null,null],
+  [null,null, 'B', 'P', 'V', 'V', 'B',null,null,null,null,null,null,null],
+  [null, 'B', 'S', 'P', 'P', 'P', 'S', 'B',null,null,null,null,null,null],
+  [null, 'B', 'P', 'P', 'G', 'P', 'P', 'B', 'G', 'G', 'V', 'V', 'G',null],
+  [ 'B', 'S', 'P', 'B', 'P', 'B', 'S', 'B', 'V', 'V', 'G', 'V', 'V', 'G'],
+  [ 'B', 'S', 'S', 'B', 'S', 'B', 'P', 'B', 'G', 'G', 'V', 'V', 'G',null],
+  [null, 'B', 'B', 'B', 'P', 'B', 'B',null,null,null,null,null,null,null],
+  [null,null, 'B', 'P', 'B', 'P', 'B',null,null,null,null,null,null,null],
+  [null,null, 'B', 'S', 'B', 'S', 'B',null,null,null,null,null,null,null],
+  [null, 'B', 'S', 'S', 'B', 'S', 'S', 'B',null,null,null,null,null,null],
+  [null, 'B', 'B', 'B',null, 'B', 'B', 'B',null,null,null,null,null,null],
+];
+
 export function getEnemyMatrix(defId: EnemyId, walkingFrame: boolean): PixelKey[][] {
   switch (defId) {
     case 'rift_drone':
@@ -2009,6 +2054,12 @@ export function getEnemyMatrix(defId: EnemyId, walkingFrame: boolean): PixelKey[
       return BRUTE_SPRITE;
     case 'mana_wisp':
       return WISP_SPRITE;
+    case 'void_hopper':
+      return HOPPER_SPRITE;
+    case 'pulse_acolyte':
+      return ACOLYTE_SPRITE;
+    case 'rift_lancer':
+      return LANCER_SPRITE;
     case 'mana_husk':
     default:
       return walkingFrame ? MANA_HUSK_WALK : MANA_HUSK_SPRITE;
@@ -2057,6 +2108,24 @@ export const ENEMY_PALETTES: Record<string, SpritePalette> = {
     secondary: '#1E1B4B',
     visor: '#00F0FF',
     glow: '#FFFFFF',
+  },
+  void_hopper: {
+    primary: '#4C1D3D',
+    secondary: '#2A0F24',
+    visor: '#FACC15',
+    glow: '#F97316',
+  },
+  pulse_acolyte: {
+    primary: '#1E3A5F',
+    secondary: '#0F1E36',
+    visor: '#38BDF8',
+    glow: '#00F0FF',
+  },
+  rift_lancer: {
+    primary: '#3B1829',
+    secondary: '#1F0B16',
+    visor: '#F43F5E',
+    glow: '#FB7185',
   },
   pylon: {
     primary: '#2B2F3A',

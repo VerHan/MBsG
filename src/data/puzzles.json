@@ -1,9 +1,9 @@
 {
-  "_README": "=== RIFTBOUND: SLAYER CORPS — BANK SOAL PER STAGE (27 SOAL) ===",
+  "_README": "=== RIFTBOUND: SLAYER CORPS — BANK SOAL PER STAGE (90 SOAL: 30 PER STAGE) ===",
   "_THEMES": {
-    "stage_1": "Berpikir Komputasional (s1_01 - s1_09)",
-    "stage_2": "Gerbang Logika (s2_01 - s2_09)",
-    "stage_3": "Sistem Biner (s3_01 - s3_09)"
+    "stage_1": "Berpikir Komputasional (s1_01 - s1_30)",
+    "stage_2": "Gerbang Logika & Aljabar Boolean (s2_01 - s2_30)",
+    "stage_3": "Sistem Biner, Heksadesimal & Arsitektur Data (s3_01 - s3_30)"
   },
   "questions": [
     {
@@ -58,77 +58,309 @@
       "question": "Pada diagram alir (flowchart), simbol Belah Ketupat (Diamond) digunakan untuk menyatakan...",
       "options": [
         "Proses perhitungan data",
-        "Input dan Output data",
-        "Keputusan atau percabangan kondisi",
-        "Awal dan akhir program"
+        "Input atau Output",
+        "Keputusan / Percabangan (Decision)",
+        "Titik Mulai atau Selesai"
       ],
       "correctIndex": 2,
-      "explanation": "Simbol belah ketupat (Decision) dipakai untuk menguji kondisi Ya/Tidak (True/False).",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+      "explanation": "Simbol belah ketupat (diamond) menyatakan kondisi percabangan Ya/Tidak pada flowchart.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s1_06",
       "stage": 1,
       "difficulty": "medium",
       "category": "Berpikir Komputasional",
-      "question": "Simbol Jajar Genjang (Parallelogram) pada flowchart berfungsi untuk menunjukkan proses...",
+      "question": "Simbol Oval (Terminator) pada sebuah flowchart berfungsi untuk menunjukkan...",
       "options": [
-        "Input atau Output data",
-        "Pengolahan nilai variabel",
-        "Mulai dan Selesai (Terminator)",
-        "Penghubung antar halaman"
+        "Awal (Start) dan Akhir (End) program",
+        "Perulangan bersarang",
+        "Proses pengolahan memori",
+        "Masukan data dari pengguna"
       ],
       "correctIndex": 0,
-      "explanation": "Jajar genjang merepresentasikan aktivitas memasukkan data (input) atau menampilkan hasil (output).",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+      "explanation": "Terminator berbentuk oval menandai titik mulai dan berakhirnya alur algoritma.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s1_07",
       "stage": 1,
       "difficulty": "medium",
       "category": "Berpikir Komputasional",
-      "question": "Perhatikan pseudocode: hp = 40; IF hp < 50 THEN status = \"KRITIS\" ELSE status = \"AMAN\". Apa nilai akhir status?",
-      "options": ["AMAN", "KRITIS", "40", "Error"],
+      "question": "Proses menemukan dan memperbaiki kesalahan (error) dalam sebuah algoritma atau kode program disebut...",
+      "options": ["Enkripsi", "Debugging", "Kompilasi", "Routing"],
       "correctIndex": 1,
-      "explanation": "Karena kondisi 40 < 50 bernilai benar (True), program menjalankan blok THEN sehingga status = \"KRITIS\".",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+      "explanation": "Debugging adalah proses melacak, menganalisis, dan memperbaiki bug dalam program.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s1_08",
       "stage": 1,
-      "difficulty": "hard",
+      "difficulty": "medium",
       "category": "Berpikir Komputasional",
-      "question": "Algoritma: total = 0; ulangi untuk i = 1 sampai 4: total = total + i. Berapa nilai akhir variabel total?",
-      "options": ["4", "6", "10", "14"],
-      "correctIndex": 2,
-      "explanation": "Nilai total mengakumulasi 1 + 2 + 3 + 4 secara berurutan sehingga hasil akhirnya adalah 10.",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
+      "question": "Struktur data yang menerapkan prinsip LIFO (Last In, First Out) — data terakhir masuk keluar pertama — adalah...",
+      "options": ["Queue (Antrean)", "Array", "Graph", "Stack (Tumpukan)"],
+      "correctIndex": 3,
+      "explanation": "Stack bekerja seperti tumpukan piring: elemen yang terakhir masuk akan diambil paling dulu (LIFO).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s1_09",
       "stage": 1,
       "difficulty": "hard",
       "category": "Berpikir Komputasional",
-      "question": "Pada Bubble Sort (urutan naik) untuk daftar [25, 10, 30, 5], bagaimana susunannya setelah tepat 1 pass selesai?",
-      "options": [
-        "[5, 10, 25, 30]",
-        "[10, 25, 5, 30]",
-        "[10, 25, 30, 5]",
-        "[10, 5, 25, 30]"
-      ],
+      "question": "Pencarian data pada daftar terurut dengan terus membagi dua ruang pencarian disebut...",
+      "options": ["Linear Search", "Binary Search", "Bubble Sort", "Depth-First Search"],
       "correctIndex": 1,
-      "explanation": "Pass pertama menukar (25,10) -> [10,25,30,5], lalu (25,30) tetap, lalu menukar (30,5) -> [10,25,5,30].",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
+      "explanation": "Binary Search membandingkan elemen tengah dan membagi dua area pencarian sehingga sangat cepat O(log n).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
+    {
+      "id": "s1_10",
+      "stage": 1,
+      "difficulty": "easy",
+      "category": "Berpikir Komputasional",
+      "question": "Struktur data yang menggunakan prinsip FIFO (First In, First Out) seperti antrean loket tiket disebut...",
+      "options": ["Stack", "Queue", "Tree", "Hash Table"],
+      "correctIndex": 1,
+      "explanation": "Queue (Antrean) memproses elemen yang masuk lebih awal terlebih dahulu (First In, First Out).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_11",
+      "stage": 1,
+      "difficulty": "easy",
+      "category": "Berpikir Komputasional",
+      "question": "Penulisan algoritma menggunakan bahasa sehari-hari yang menyerupai kode pemrograman namun bebas aturan sintaks ketat disebut...",
+      "options": ["Pseudocode", "Machine Code", "Binary Tree", "Compiler"],
+      "correctIndex": 0,
+      "explanation": "Pseudocode adalah cara menuliskan logika algoritma secara ringkas agar mudah dibaca manusia sebelum dikodekan.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_12",
+      "stage": 1,
+      "difficulty": "easy",
+      "category": "Berpikir Komputasional",
+      "question": "Pada flowchart, simbol Jajar Genjang (Parallelogram) digunakan untuk menyatakan...",
+      "options": ["Proses aritmatika", "Percabangan", "Input dan Output data", "Mulai dan Selesai"],
+      "correctIndex": 2,
+      "explanation": "Simbol jajar genjang melambangkan kegiatan memasukkan data (input) atau menampilkan hasil (output).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_13",
+      "stage": 1,
+      "difficulty": "easy",
+      "category": "Berpikir Komputasional",
+      "question": "Simbol Persegi Panjang (Rectangle) pada flowchart melambangkan...",
+      "options": ["Proses atau perhitungan", "Keputusan logika", "Konektor halaman", "Terminator"],
+      "correctIndex": 0,
+      "explanation": "Persegi panjang digunakan untuk menunjukkan instruksi proses seperti perhitungan atau pemberian nilai variabel.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_14",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Lanjutkan pola bilangan berikut: 2, 6, 12, 20, 30, ...",
+      "options": ["38", "40", "42", "44"],
+      "correctIndex": 2,
+      "explanation": "Selisih antar suku bertambah +4, +6, +8, +10, maka berikutnya +12 sehingga 30 + 12 = 42.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_15",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Menjalankan satu blok instruksi secara berulang selama kondisi tertentu masih terpenuhi disebut...",
+      "options": ["Sekuensial", "Percabangan", "Iterasi / Perulangan", "Deklarasi"],
+      "correctIndex": 2,
+      "explanation": "Iterasi (looping) mengeksekusi langkah yang sama berulang kali hingga syarat berhenti tercapai.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_16",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Fungsi yang memanggil dirinya sendiri untuk menyelesaikan sub-masalah yang lebih kecil disebut...",
+      "options": ["Rekursi", "Enkapsulasi", "Polimorfisme", "Seleksi"],
+      "correctIndex": 0,
+      "explanation": "Rekursi memecah persoalan secara berulang hingga mencapai kasus dasar (base case).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_17",
+      "stage": 1,
+      "difficulty": "easy",
+      "category": "Berpikir Komputasional",
+      "question": "Manakah yang BUKAN termasuk 4 pilar utama Berpikir Komputasional?",
+      "options": ["Dekomposisi", "Pengenalan Pola", "Abstraksi", "Menghafal Sintaks"],
+      "correctIndex": 3,
+      "explanation": "Empat pilar Berpikir Komputasional adalah Dekomposisi, Pengenalan Pola, Abstraksi, dan Perancangan Algoritma.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_18",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Algoritma pengurutan yang membandingkan dua elemen bersebelahan lalu menukarnya jika urutannya salah adalah...",
+      "options": ["Binary Search", "Bubble Sort", "Dijkstra", "BFS"],
+      "correctIndex": 1,
+      "explanation": "Bubble Sort berulang kali menukar elemen bertetangga hingga seluruh daftar terurut.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_19",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Berapa hasil dari pseudocode berikut? x = 5; ulangi 3 kali: x = x + 2; cetak x.",
+      "options": ["9", "10", "11", "13"],
+      "correctIndex": 2,
+      "explanation": "Nilai x bertambah 2 sebanyak 3 kali: 5 -> 7 -> 9 -> 11.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_20",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Peta jalur transportasi kota yang hanya menampilkan stasiun dan garis lintasan tanpa gedung di sekitarnya adalah contoh...",
+      "options": ["Abstraksi", "Rekursi", "Enkripsi", "Sorting"],
+      "correctIndex": 0,
+      "explanation": "Peta menyederhanakan realitas dengan membuang detail tidak penting agar penumpang fokus pada rute.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_21",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Dalam struktur data Graf (Graph), titik-titik yang mewakili objek (misalnya kota atau persimpangan) disebut...",
+      "options": ["Edge (Sisi)", "Vertex / Node (Simpul)", "Root", "Index"],
+      "correctIndex": 1,
+      "explanation": "Graf tersusun dari himpunan simpul (vertex/node) dan sisi (edge) yang menghubungkannya.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_22",
+      "stage": 1,
+      "difficulty": "hard",
+      "category": "Berpikir Komputasional",
+      "question": "Jika kita mencari satu nama pada daftar acak (belum terurut) berisi 100 nama, metode pencarian yang tepat adalah...",
+      "options": ["Binary Search", "Linear Search", "Merge Sort", "Quick Sort"],
+      "correctIndex": 1,
+      "explanation": "Binary Search mensyaratkan data terurut; untuk data acak kita harus memeriksa satu per satu dengan Linear Search.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_23",
+      "stage": 1,
+      "difficulty": "hard",
+      "category": "Berpikir Komputasional",
+      "question": "Kompleksitas waktu rata-rata dari algoritma Binary Search pada n data terurut adalah...",
+      "options": ["O(1)", "O(log n)", "O(n)", "O(n^2)"],
+      "correctIndex": 1,
+      "explanation": "Karena ruang pencarian selalu dibagi dua tiap langkah, jumlah langkah maksimalnya berskala logaritmik O(log n).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_24",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Sebuah struktur data hierarkis yang memiliki satu simpul puncak bernama Root dan simpul cabang disebut...",
+      "options": ["Queue", "Stack", "Tree (Pohon)", "Array"],
+      "correctIndex": 2,
+      "explanation": "Tree adalah struktur data berbentuk pohon berhierarki mulai dari Root hingga daun (Leaf).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_25",
+      "stage": 1,
+      "difficulty": "easy",
+      "category": "Berpikir Komputasional",
+      "question": "Tempat penyimpanan sementara di memori yang diberi nama untuk menampung nilai yang dapat berubah disebut...",
+      "options": ["Konstanta", "Variabel", "Operator", "Komentar"],
+      "correctIndex": 1,
+      "explanation": "Variabel menyimpan data yang nilainya bisa diperbarui selama program berjalan.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_26",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Strategi algoritma yang selalu memilih keputusan terbaik secara lokal pada tiap langkah disebut...",
+      "options": ["Brute Force", "Greedy", "Backtracking", "Linear"],
+      "correctIndex": 1,
+      "explanation": "Algoritma Greedy mengambil pilihan paling optimal saat itu juga dengan harapan menghasilkan solusi global optimal.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_27",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Dalam barisan Fibonacci: 1, 1, 2, 3, 5, 8, 13, angka selanjutnya adalah...",
+      "options": ["18", "20", "21", "26"],
+      "correctIndex": 2,
+      "explanation": "Setiap suku Fibonacci merupakan penjumlahan dua suku sebelumnya: 8 + 13 = 21.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_28",
+      "stage": 1,
+      "difficulty": "hard",
+      "category": "Berpikir Komputasional",
+      "question": "Kondisi penghenti yang wajib ada pada fungsi rekursif agar tidak terjadi perulangan tak terbatas (stack overflow) disebut...",
+      "options": ["Base Case", "Loop Counter", "Sentinel", "Pivot"],
+      "correctIndex": 0,
+      "explanation": "Base Case menghentikan pemanggilan rekursif sehingga fungsi dapat mengembalikan hasil.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_29",
+      "stage": 1,
+      "difficulty": "medium",
+      "category": "Berpikir Komputasional",
+      "question": "Pada operasi Stack, perintah untuk memasukkan data baru ke puncak tumpukan disebut...",
+      "options": ["Pop", "Push", "Dequeue", "Shift"],
+      "correctIndex": 1,
+      "explanation": "Push menambahkan elemen ke puncak Stack, sedangkan Pop mengeluarkan elemen teratas.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s1_30",
+      "stage": 1,
+      "difficulty": "hard",
+      "category": "Berpikir Komputasional",
+      "question": "Jika algoritma membutuhkan maksimal 4 perbandingan pada Binary Search, berapa jumlah data maksimal yang bisa dicari?",
+      "options": ["4 data", "8 data", "15 data", "32 data"],
+      "correctIndex": 2,
+      "explanation": "Dengan k perbandingan, Binary Search menjangkau hingga (2^k) - 1 elemen: 2^4 - 1 = 15 data.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+
     {
       "id": "s2_01",
       "stage": 2,
       "difficulty": "easy",
       "category": "Gerbang Logika",
-      "question": "Pada sirkuit gerbang logika AND, jika input A = 1 dan input B = 0, maka outputnya adalah...",
-      "options": ["0", "1", "2", "Error"],
-      "correctIndex": 0,
-      "explanation": "Gerbang AND hanya menghasilkan output 1 apabila seluruh inputnya bernilai 1.",
+      "question": "Gerbang logika AND akan menghasilkan output 1 (TRUE) HANYA JIKA...",
+      "options": [
+        "Salah satu input bernilai 1",
+        "Semua input bernilai 1",
+        "Semua input bernilai 0",
+        "Jumlah input bernilai ganjil"
+      ],
+      "correctIndex": 1,
+      "explanation": "Gerbang AND bersifat ketat: output = 1 hanya ketika seluruh input bernilai 1.",
       "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
@@ -136,10 +368,10 @@
       "stage": 2,
       "difficulty": "easy",
       "category": "Gerbang Logika",
-      "question": "Pada sirkuit gerbang logika OR, jika input A = 0 dan input B = 1, maka outputnya adalah...",
-      "options": ["0", "1", "Tidak aktif", "Error"],
+      "question": "Berapakah output gerbang OR jika input A = 0 dan input B = 1?",
+      "options": ["0", "1", "Tidak terdefinisi", "2"],
       "correctIndex": 1,
-      "explanation": "Gerbang OR menghasilkan output 1 selama minimal ada satu input yang bernilai 1.",
+      "explanation": "Gerbang OR menghasilkan 1 apabila minimal satu input bernilai 1 (0 OR 1 = 1).",
       "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
@@ -147,10 +379,10 @@
       "stage": 2,
       "difficulty": "easy",
       "category": "Gerbang Logika",
-      "question": "Jika sinyal 1 dialirkan melewati gerbang logika NOT (Inverter), hasil keluarannya adalah...",
-      "options": ["0", "1", "Tetap 1", "10"],
-      "correctIndex": 0,
-      "explanation": "Gerbang NOT selalu membalikkan nilai logika input: 1 menjadi 0, dan 0 menjadi 1.",
+      "question": "Gerbang logika NOT berfungsi sebagai pembalik (inverter). Jika input = 1, maka output-nya adalah...",
+      "options": ["1", "0", "10", "Null"],
+      "correctIndex": 1,
+      "explanation": "Gerbang NOT selalu membalik nilai logika: NOT 1 = 0, dan NOT 0 = 1.",
       "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
@@ -158,91 +390,328 @@
       "stage": 2,
       "difficulty": "medium",
       "category": "Gerbang Logika",
-      "question": "Gerbang logika XOR (Exclusive OR) akan membuka kunci (output = 1) hanya apabila...",
+      "question": "Gerbang XOR (Exclusive OR) akan menghasilkan output 1 apabila kedua input-nya...",
       "options": [
-        "Kedua input bernilai 1",
-        "Kedua input bernilai 0",
-        "Kedua input memiliki nilai yang berbeda",
-        "Kedua input memiliki nilai yang sama"
+        "Sama-sama 1",
+        "Sama-sama 0",
+        "Berbeda nilai (satu 0 dan satu 1)",
+        "Selalu menghasilkan 1"
       ],
       "correctIndex": 2,
-      "explanation": "XOR menghasilkan 1 hanya ketika inputnya berbeda (1 dan 0, atau 0 dan 1).",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+      "explanation": "XOR menghasilkan 1 jika kedua input berbeda (0 XOR 1 = 1; 1 XOR 0 = 1), dan 0 jika sama.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s2_05",
       "stage": 2,
       "difficulty": "medium",
       "category": "Gerbang Logika",
-      "question": "Berapakah output dari gerbang NAND apabila input A = 1 dan input B = 1?",
-      "options": ["0", "1", "2", "Undefined"],
-      "correctIndex": 0,
-      "explanation": "NAND adalah kebalikan dari AND; karena 1 AND 1 = 1, hasil akhirnya dibalik menjadi 0.",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+      "question": "Berapakah hasil dari gerbang NAND jika input A = 1 dan B = 1?",
+      "options": ["1", "0", "11", "Error"],
+      "correctIndex": 1,
+      "explanation": "NAND adalah kebalikan AND: 1 AND 1 = 1, lalu dibalik oleh NOT menjadi 0.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s2_06",
       "stage": 2,
       "difficulty": "medium",
       "category": "Gerbang Logika",
-      "question": "Gerbang logika NOR akan menghasilkan output 1 HANYA apabila...",
-      "options": [
-        "Semua input bernilai 1",
-        "Salah satu input bernilai 1",
-        "Kedua input berbeda nilai",
-        "Semua input bernilai 0"
-      ],
-      "correctIndex": 3,
-      "explanation": "NOR adalah kebalikan dari OR; output 1 hanya muncul saat 0 OR 0 = 0 lalu dibalik menjadi 1.",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+      "question": "Berapakah hasil dari gerbang NOR jika input A = 0 dan B = 0?",
+      "options": ["0", "1", "-1", "Undefined"],
+      "correctIndex": 1,
+      "explanation": "NOR adalah kebalikan OR: 0 OR 0 = 0, lalu dibalik oleh NOT menjadi 1.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s2_07",
       "stage": 2,
       "difficulty": "medium",
       "category": "Gerbang Logika",
-      "question": "Berapakah output dari gerbang XNOR (kebalikan XOR) jika input A = 0 dan input B = 0?",
-      "options": ["0", "1", "Null", "Error"],
+      "question": "Hitung nilai ekspresi logika: (1 AND 0) OR (NOT 0).",
+      "options": ["0", "1", "False", "Null"],
       "correctIndex": 1,
-      "explanation": "0 XOR 0 menghasilkan 0, sehingga gerbang XNOR membaliknya menjadi 1 (output 1 saat kedua input sama).",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+      "explanation": "(1 AND 0) = 0, (NOT 0) = 1. Maka 0 OR 1 = 1.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s2_08",
       "stage": 2,
       "difficulty": "hard",
       "category": "Gerbang Logika",
-      "question": "Jika A = 1, B = 0, dan C = 1, berapakah hasil ekspresi (A AND B) OR (NOT B AND C)?",
-      "options": ["0", "1", "Null", "Error"],
+      "question": "Gerbang XNOR menghasilkan output 1 ketika kedua input-nya...",
+      "options": [
+        "Berbeda nilai",
+        "Bernilai sama (keduanya 0 atau keduanya 1)",
+        "Hanya ketika keduanya 1",
+        "Hanya ketika A > B"
+      ],
       "correctIndex": 1,
-      "explanation": "(1 AND 0) = 0, sementara (NOT 0 AND 1) = (1 AND 1) = 1. Hasil akhir 0 OR 1 = 1.",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
+      "explanation": "XNOR adalah kebalikan XOR (equivalence gate): output = 1 jika A == B.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s2_09",
       "stage": 2,
       "difficulty": "hard",
       "category": "Gerbang Logika",
-      "question": "Menurut Hukum De Morgan, rangkaian logika NOT (A OR B) ekuivalen dengan...",
+      "question": "Menurut Hukum De Morgan, ekspresi NOT (A AND B) setara dengan...",
+      "options": [
+        "(NOT A) AND (NOT B)",
+        "(NOT A) OR (NOT B)",
+        "A OR B",
+        "A XOR B"
+      ],
+      "correctIndex": 1,
+      "explanation": "Hukum De Morgan: !(A && B) = (!A) || (!B), dan !(A || B) = (!A) && (!B).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_10",
+      "stage": 2,
+      "difficulty": "easy",
+      "category": "Gerbang Logika",
+      "question": "Berapakah output gerbang OR jika kedua input-nya A = 0 dan B = 0?",
+      "options": ["0", "1", "True", "2"],
+      "correctIndex": 0,
+      "explanation": "Gerbang OR hanya menghasilkan 0 apabila seluruh input-nya bernilai 0.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_11",
+      "stage": 2,
+      "difficulty": "easy",
+      "category": "Gerbang Logika",
+      "question": "Tabel yang menampilkan seluruh kemungkinan kombinasi input dan output dari sebuah gerbang logika disebut...",
+      "options": ["Tabel Periodik", "Tabel Kebenaran (Truth Table)", "Tabel Relasi", "Tabel Pivot"],
+      "correctIndex": 1,
+      "explanation": "Tabel Kebenaran memetakan setiap kombinasi nilai biner input ke output logikanya.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_12",
+      "stage": 2,
+      "difficulty": "easy",
+      "category": "Gerbang Logika",
+      "question": "Dalam Aljabar Boolean, berapa banyak nilai logika yang ada?",
+      "options": ["2 nilai (0 dan 1)", "4 nilai", "8 nilai", "10 nilai"],
+      "correctIndex": 0,
+      "explanation": "Aljabar Boolean hanya mengenal dua nilai kebenaran: False (0) dan True (1).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_13",
+      "stage": 2,
+      "difficulty": "medium",
+      "category": "Gerbang Logika",
+      "question": "Berapa jumlah baris kombinasi input pada Tabel Kebenaran yang memiliki 3 variabel input (A, B, C)?",
+      "options": ["3 baris", "6 baris", "8 baris", "16 baris"],
+      "correctIndex": 2,
+      "explanation": "Jumlah kombinasi untuk n input adalah 2^n. Untuk 3 input: 2^3 = 8 baris.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_14",
+      "stage": 2,
+      "difficulty": "medium",
+      "category": "Gerbang Logika",
+      "question": "Hitung hasil ekspresi: (1 XOR 1) OR (1 AND 0).",
+      "options": ["1", "0", "True", "2"],
+      "correctIndex": 1,
+      "explanation": "1 XOR 1 = 0, dan 1 AND 0 = 0. Maka 0 OR 0 = 0.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_15",
+      "stage": 2,
+      "difficulty": "medium",
+      "category": "Gerbang Logika",
+      "question": "Dua gerbang logika yang dikenal sebagai 'Universal Gate' karena bisa membentuk semua gerbang lain adalah...",
+      "options": ["AND dan OR", "XOR dan XNOR", "NAND dan NOR", "NOT dan OR"],
+      "correctIndex": 2,
+      "explanation": "NAND dan NOR disebut gerbang universal karena seluruh rangkaian logika digital dapat dibangun dari salah satunya saja.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_16",
+      "stage": 2,
+      "difficulty": "medium",
+      "category": "Gerbang Logika",
+      "question": "Dalam Aljabar Boolean, berapakah hasil dari A AND 0 untuk sembarang nilai A?",
+      "options": ["A", "1", "0", "NOT A"],
+      "correctIndex": 2,
+      "explanation": "Hukum Dominasi (Annulment): apa pun di-AND dengan 0 akan selalu menghasilkan 0.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_17",
+      "stage": 2,
+      "difficulty": "medium",
+      "category": "Gerbang Logika",
+      "question": "Dalam Aljabar Boolean, berapakah hasil dari A OR 1 untuk sembarang nilai A?",
+      "options": ["0", "1", "A", "NOT A"],
+      "correctIndex": 1,
+      "explanation": "Hukum Dominasi OR: nilai apa pun di-OR dengan 1 selalu menghasilkan 1.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_18",
+      "stage": 2,
+      "difficulty": "medium",
+      "category": "Gerbang Logika",
+      "question": "Berapakah hasil dari A AND 1 dalam hukum identitas Aljabar Boolean?",
+      "options": ["0", "1", "A", "NOT A"],
+      "correctIndex": 2,
+      "explanation": "Hukum Identitas: A AND 1 = A, dan A OR 0 = A.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_19",
+      "stage": 2,
+      "difficulty": "medium",
+      "category": "Gerbang Logika",
+      "question": "Jika input A = 0 dan B = 1 masuk ke gerbang NAND, berapakah output-nya?",
+      "options": ["0", "1", "False", "Null"],
+      "correctIndex": 1,
+      "explanation": "0 AND 1 = 0, kemudian dinegasikan (NOT 0) menghasilkan 1.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_20",
+      "stage": 2,
+      "difficulty": "medium",
+      "category": "Gerbang Logika",
+      "question": "Jika input A = 1 dan B = 0 masuk ke gerbang NOR, berapakah output-nya?",
+      "options": ["0", "1", "True", "Error"],
+      "correctIndex": 0,
+      "explanation": "1 OR 0 = 1, kemudian dinegasikan oleh NOR menjadi 0.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_21",
+      "stage": 2,
+      "difficulty": "hard",
+      "category": "Gerbang Logika",
+      "question": "Menurut Hukum De Morgan kedua, ekspresi NOT (A OR B) ekuivalen dengan...",
       "options": [
         "(NOT A) OR (NOT B)",
-        "A AND B",
         "(NOT A) AND (NOT B)",
-        "NOT (A AND B)"
+        "A AND B",
+        "NOT (A XOR B)"
       ],
-      "correctIndex": 2,
-      "explanation": "Hukum De Morgan menyatakan negasi dari OR berubah menjadi AND dari masing-masing negasinya.",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
+      "correctIndex": 1,
+      "explanation": "Negasi dari disjungsi adalah konjungsi dari masing-masing negasi: !(A || B) = !A && !B.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
+    {
+      "id": "s2_22",
+      "stage": 2,
+      "difficulty": "hard",
+      "category": "Gerbang Logika",
+      "question": "Hitung hasil dari: NOT ((1 OR 0) AND (1 XOR 0)).",
+      "options": ["0", "1", "2", "Undefined"],
+      "correctIndex": 0,
+      "explanation": "(1 OR 0)=1, (1 XOR 0)=1, 1 AND 1 = 1, lalu NOT 1 = 0.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_23",
+      "stage": 2,
+      "difficulty": "medium",
+      "category": "Gerbang Logika",
+      "question": "Berapakah hasil dari A OR (NOT A) dalam Aljabar Boolean?",
+      "options": ["0", "1", "A", "NOT A"],
+      "correctIndex": 1,
+      "explanation": "Hukum Komplemen: salah satu dari A atau NOT A pasti bernilai 1, sehingga A OR (NOT A) = 1.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_24",
+      "stage": 2,
+      "difficulty": "medium",
+      "category": "Gerbang Logika",
+      "question": "Berapakah hasil dari A AND (NOT A) dalam Aljabar Boolean?",
+      "options": ["0", "1", "A", "2A"],
+      "correctIndex": 0,
+      "explanation": "Hukum Komplemen: A dan NOT A tidak mungkin keduanya 1 bersamaan, maka hasilnya selalu 0.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_25",
+      "stage": 2,
+      "difficulty": "hard",
+      "category": "Gerbang Logika",
+      "question": "Rangkaian Half Adder untuk menjumlahkan dua bit biner A dan B menggunakan gerbang apa untuk menghasilkan bit Sum (Jumlah)?",
+      "options": ["Gerbang AND", "Gerbang XOR", "Gerbang NOR", "Gerbang NOT"],
+      "correctIndex": 1,
+      "explanation": "Pada Half Adder, bit Sum dihasilkan oleh gerbang XOR, sedangkan bit Carry dihasilkan oleh gerbang AND.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_26",
+      "stage": 2,
+      "difficulty": "hard",
+      "category": "Gerbang Logika",
+      "question": "Pada rangkaian Half Adder, gerbang apakah yang menghasilkan bit Carry (Simpanan)?",
+      "options": ["OR", "XOR", "AND", "XNOR"],
+      "correctIndex": 2,
+      "explanation": "Carry bernilai 1 hanya saat 1 + 1, yang persis merupakan perilaku gerbang AND.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_27",
+      "stage": 2,
+      "difficulty": "easy",
+      "category": "Gerbang Logika",
+      "question": "Jika sebuah gerbang NOT diberi dua kali berturut-turut pada input A, yakni NOT(NOT A), hasilnya adalah...",
+      "options": ["0", "1", "A", "NOT A"],
+      "correctIndex": 2,
+      "explanation": "Hukum Negasi Ganda (Involusi): membalik nilai dua kali mengembalikan nilai aslinya (A).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_28",
+      "stage": 2,
+      "difficulty": "medium",
+      "category": "Gerbang Logika",
+      "question": "Sebuah pintu brankas terbuka hanya jika Kunci A (1) DAN Kartu B (1) dipakai bersama, ATAU Kode Darurat C (1) aktif. Ekspresinya adalah...",
+      "options": ["(A OR B) AND C", "(A AND B) OR C", "A XOR B XOR C", "NOT (A AND B AND C)"],
+      "correctIndex": 1,
+      "explanation": "Kondisi 'A dan B bersama' adalah (A AND B), lalu 'atau C' menjadi (A AND B) OR C.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_29",
+      "stage": 2,
+      "difficulty": "hard",
+      "category": "Gerbang Logika",
+      "question": "Jika kedua kaki input sebuah gerbang NAND dihubungkan bersama ke satu sinyal A, maka gerbang NAND tersebut berperilaku seperti...",
+      "options": ["Gerbang AND", "Gerbang OR", "Gerbang NOT", "Gerbang XOR"],
+      "correctIndex": 2,
+      "explanation": "A NAND A = NOT(A AND A) = NOT A, sehingga NAND tunggal dapat dijadikan inverter (NOT).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s2_30",
+      "stage": 2,
+      "difficulty": "hard",
+      "category": "Gerbang Logika",
+      "question": "Hitung nilai ekspresi: (0 XNOR 0) AND (1 XOR 0) AND (1 NAND 0).",
+      "options": ["0", "1", "False", "Null"],
+      "correctIndex": 1,
+      "explanation": "0 XNOR 0 = 1; 1 XOR 0 = 1; 1 NAND 0 = 1. Maka 1 AND 1 AND 1 = 1.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+
     {
       "id": "s3_01",
       "stage": 3,
       "difficulty": "easy",
       "category": "Sistem Biner",
-      "question": "Satu Byte pada modul penyimpanan Ancient Tech terdiri dari berapa Bit?",
-      "options": ["4 bit", "8 bit", "16 bit", "32 bit"],
+      "question": "Konversikan bilangan biner 1010 (basis 2) ke bilangan desimal (basis 10):",
+      "options": ["8", "10", "12", "14"],
       "correctIndex": 1,
-      "explanation": "Standar arsitektur komputer menetapkan 1 Byte sama dengan 8 Bit.",
+      "explanation": "1010_2 = (1×8) + (0×4) + (1×2) + (0×1) = 8 + 2 = 10.",
       "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
@@ -250,88 +719,319 @@
       "stage": 3,
       "difficulty": "easy",
       "category": "Sistem Biner",
-      "question": "Dekripsi kode peti: Berapakah nilai desimal dari bilangan biner 1010?",
-      "options": ["8", "9", "10", "12"],
+      "question": "Berapakah bentuk biner (basis 2) dari bilangan desimal 13?",
+      "options": ["1011", "1100", "1101", "1110"],
       "correctIndex": 2,
-      "explanation": "1010 dalam biner dihitung sebagai (1x8) + (0x4) + (1x2) + (0x1) = 10.",
+      "explanation": "13 = 8 + 4 + 0 + 1, sehingga dalam biner 4-bit ditulis 1101.",
       "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s3_03",
       "stage": 3,
-      "difficulty": "medium",
+      "difficulty": "easy",
       "category": "Sistem Biner",
-      "question": "Konversikan angka desimal 25 ke dalam bentuk bilangan biner untuk membuka segel:",
-      "options": ["11001", "10101", "11010", "10011"],
-      "correctIndex": 0,
-      "explanation": "25 = 16 + 8 + 1, sehingga representasi binernya adalah 11001.",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+      "question": "Satu Byte dalam sistem komputer terdiri dari berapa Bit?",
+      "options": ["4 bit", "8 bit", "16 bit", "32 bit"],
+      "correctIndex": 1,
+      "explanation": "1 Byte = 8 Bit (dapat merepresentasikan 256 kombinasi nilai: 0 sampai 255).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s3_04",
       "stage": 3,
       "difficulty": "medium",
       "category": "Sistem Biner",
-      "question": "Berapakah nilai desimal maksimum dari bilangan biner 4-bit 1111?",
-      "options": ["12", "14", "16", "15"],
-      "correctIndex": 3,
-      "explanation": "1111 dalam biner bernilai 8 + 4 + 2 + 1 = 15.",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+      "question": "Konversikan bilangan biner 11111 (5-bit) ke bentuk desimal:",
+      "options": ["15", "30", "31", "32"],
+      "correctIndex": 2,
+      "explanation": "11111_2 = 16 + 8 + 4 + 2 + 1 = 31 (atau 2^5 - 1).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s3_05",
       "stage": 3,
       "difficulty": "medium",
       "category": "Sistem Biner",
-      "question": "Berapakah hasil penjumlahan bilangan biner 0101 + 0011?",
+      "question": "Berapakah hasil penjumlahan biner: 0101 + 0011?",
       "options": ["0111", "1000", "1001", "1010"],
       "correctIndex": 1,
-      "explanation": "0101 (5) + 0011 (3) = 8, yang dalam biner ditulis 1000.",
-      "usedIn": ["chest", "shrine", "terminal", "gate", "merchant"]
+      "explanation": "0101 (5) + 0011 (3) = 8, yang dalam biner adalah 1000.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s3_06",
       "stage": 3,
-      "difficulty": "hard",
+      "difficulty": "medium",
       "category": "Sistem Biner",
-      "question": "Berapakah nilai desimal dari kode segel biner 101101?",
-      "options": ["43", "45", "47", "53"],
-      "correctIndex": 1,
-      "explanation": "101101 = (1x32) + (0x16) + (1x8) + (1x4) + (0x2) + (1x1) = 45.",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
+      "question": "Dalam sistem bilangan Heksadesimal (basis 16), huruf 'F' mewakili angka desimal...",
+      "options": ["10", "12", "15", "16"],
+      "correctIndex": 2,
+      "explanation": "Heksadesimal menggunakan 0–9 lalu A=10, B=11, C=12, D=13, E=14, F=15.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s3_07",
       "stage": 3,
-      "difficulty": "hard",
+      "difficulty": "medium",
       "category": "Sistem Biner",
-      "question": "Hitung hasil penjumlahan biner berikut untuk meruntuhkan perisai Boss: 1011 + 0110 =",
-      "options": ["10000", "11001", "10001", "10011"],
-      "correctIndex": 2,
-      "explanation": "1011 (11) + 0110 (6) = 17, yang dalam biner adalah 16 + 1 = 10001.",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
+      "question": "Bilangan biner 100000 (basis 2) setara dengan bilangan desimal...",
+      "options": ["16", "32", "64", "128"],
+      "correctIndex": 1,
+      "explanation": "100000_2 = 1 × 2^5 = 32.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s3_08",
       "stage": 3,
       "difficulty": "hard",
       "category": "Sistem Biner",
-      "question": "Konversikan angka desimal 52 ke dalam bentuk bilangan biner:",
-      "options": ["110100", "110010", "101100", "111000"],
-      "correctIndex": 0,
-      "explanation": "52 = 32 + 16 + 4, sehingga representasi binernya adalah 110100.",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
+      "question": "Konversikan bilangan Heksadesimal 1A (basis 16) ke desimal:",
+      "options": ["16", "20", "26", "32"],
+      "correctIndex": 2,
+      "explanation": "1A_16 = (1 × 16) + (10 × 1) = 16 + 10 = 26.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     },
     {
       "id": "s3_09",
       "stage": 3,
       "difficulty": "hard",
       "category": "Sistem Biner",
-      "question": "Jika kode ASCII desimal huruf 'A' adalah 65, maka kode biner 8-bit untuk huruf 'C' (desimal 67) adalah...",
-      "options": ["01000001", "01000010", "01000011", "01000100"],
+      "question": "Nilai maksimum bilangan bulat tak bertanda (unsigned integer) yang dapat disimpan oleh 1 Byte (8 bit) adalah...",
+      "options": ["127", "128", "255", "256"],
       "correctIndex": 2,
-      "explanation": "67 = 64 + 2 + 1, sehingga dalam format biner 8-bit ditulis 01000011.",
-      "usedIn": ["chest", "shrine", "gate", "pillar"]
+      "explanation": "8 bit bernilai 1 semua (11111111_2) = 2^8 - 1 = 255.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_10",
+      "stage": 3,
+      "difficulty": "easy",
+      "category": "Sistem Biner",
+      "question": "Konversikan bilangan biner 0110 (basis 2) ke bilangan desimal:",
+      "options": ["4", "6", "7", "9"],
+      "correctIndex": 1,
+      "explanation": "0110_2 = (0×8) + (1×4) + (1×2) + (0×1) = 6.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_11",
+      "stage": 3,
+      "difficulty": "easy",
+      "category": "Sistem Biner",
+      "question": "Berapakah bentuk biner dari angka desimal 9?",
+      "options": ["1000", "1001", "1010", "1100"],
+      "correctIndex": 1,
+      "explanation": "9 = 8 + 1 = (1×8) + (0×4) + (0×2) + (1×1) = 1001_2.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_12",
+      "stage": 3,
+      "difficulty": "easy",
+      "category": "Sistem Biner",
+      "question": "Setengah Byte (4 bit) dalam istilah komputasi sering disebut...",
+      "options": ["Word", "Nibble", "Kilobyte", "Octet"],
+      "correctIndex": 1,
+      "explanation": "1 Nibble terdiri dari 4 bit dan tepat mewakili 1 digit bilangan heksadesimal.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_13",
+      "stage": 3,
+      "difficulty": "easy",
+      "category": "Sistem Biner",
+      "question": "Sistem bilangan Oktal menggunakan basis berapa?",
+      "options": ["Basis 2", "Basis 8", "Basis 10", "Basis 16"],
+      "correctIndex": 1,
+      "explanation": "Sistem bilangan Oktal ber-basis 8 dengan digit 0 sampai 7.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_14",
+      "stage": 3,
+      "difficulty": "medium",
+      "category": "Sistem Biner",
+      "question": "Konversikan bilangan biner 10110 ke desimal:",
+      "options": ["18", "20", "22", "24"],
+      "correctIndex": 2,
+      "explanation": "10110_2 = 16 + 0 + 4 + 2 + 0 = 22.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_15",
+      "stage": 3,
+      "difficulty": "medium",
+      "category": "Sistem Biner",
+      "question": "Berapakah bentuk biner dari bilangan desimal 25?",
+      "options": ["11001", "11010", "10111", "11101"],
+      "correctIndex": 0,
+      "explanation": "25 = 16 + 8 + 1 = 11001_2.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_16",
+      "stage": 3,
+      "difficulty": "medium",
+      "category": "Sistem Biner",
+      "question": "Berapakah hasil penjumlahan biner: 0110 + 0101?",
+      "options": ["1001", "1010", "1011", "1100"],
+      "correctIndex": 2,
+      "explanation": "0110 (6) + 0101 (5) = 11, yang dalam biner adalah 1011.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_17",
+      "stage": 3,
+      "difficulty": "medium",
+      "category": "Sistem Biner",
+      "question": "Dalam heksadesimal, huruf 'C' setara dengan bilangan biner 4-bit...",
+      "options": ["1010", "1011", "1100", "1101"],
+      "correctIndex": 2,
+      "explanation": "C dalam heksadesimal = 12 desimal = 8 + 4 = 1100_2.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_18",
+      "stage": 3,
+      "difficulty": "medium",
+      "category": "Sistem Biner",
+      "question": "Konversikan bilangan biner 1101 0101 ke bentuk Heksadesimal:",
+      "options": ["C5", "D5", "D6", "E5"],
+      "correctIndex": 1,
+      "explanation": "1101_2 = 13 (D) dan 0101_2 = 5, maka hasilnya adalah D5_16.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_19",
+      "stage": 3,
+      "difficulty": "medium",
+      "category": "Sistem Biner",
+      "question": "Menggeser semua bit bilangan biner ke kiri sebanyak 1 posisi (Left Shift << 1) sama artinya dengan...",
+      "options": ["Membagi 2", "Mengalikan 2", "Menambah 1", "Mengurangi 2"],
+      "correctIndex": 1,
+      "explanation": "Left shift 1 bit mengalikan bilangan dengan 2 (misal 0011=3 menjadi 0110=6).",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_20",
+      "stage": 3,
+      "difficulty": "medium",
+      "category": "Sistem Biner",
+      "question": "Bilangan Oktal 17 (basis 8) jika dikonversi ke desimal bernilai...",
+      "options": ["13", "15", "17", "23"],
+      "correctIndex": 1,
+      "explanation": "17_8 = (1 × 8) + (7 × 1) = 8 + 7 = 15.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_21",
+      "stage": 3,
+      "difficulty": "hard",
+      "category": "Sistem Biner",
+      "question": "Konversikan bilangan Heksadesimal 2F (basis 16) ke desimal:",
+      "options": ["39", "45", "47", "51"],
+      "correctIndex": 2,
+      "explanation": "2F_16 = (2 × 16) + 15 = 32 + 15 = 47.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_22",
+      "stage": 3,
+      "difficulty": "hard",
+      "category": "Sistem Biner",
+      "question": "Hasil operasi Bitwise AND antara 1100 dan 1010 adalah...",
+      "options": ["1000", "1110", "0110", "1010"],
+      "correctIndex": 0,
+      "explanation": "Bit demi bit: 1&1=1, 1&0=0, 0&1=0, 0&0=0, menghasilkan 1000.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_23",
+      "stage": 3,
+      "difficulty": "hard",
+      "category": "Sistem Biner",
+      "question": "Hasil operasi Bitwise XOR antara 1101 dan 0111 adalah...",
+      "options": ["1010", "1111", "0101", "1000"],
+      "correctIndex": 0,
+      "explanation": "XOR bernilai 1 jika bit berbeda: 1^0=1, 1^1=0, 0^1=1, 1^1=0 -> 1010.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_24",
+      "stage": 3,
+      "difficulty": "medium",
+      "category": "Sistem Biner",
+      "question": "Dalam standar pengkodean karakter ASCII, huruf kapital 'A' direpresentasikan dengan kode desimal...",
+      "options": ["48", "65", "97", "128"],
+      "correctIndex": 1,
+      "explanation": "Dalam tabel ASCII, angka '0' = 48, huruf besar 'A' = 65, dan huruf kecil 'a' = 97.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_25",
+      "stage": 3,
+      "difficulty": "easy",
+      "category": "Sistem Biner",
+      "question": "Bit paling kanan pada sebuah bilangan biner yang memiliki bobot nilai terkecil (2^0) disebut...",
+      "options": ["MSB (Most Significant Bit)", "LSB (Least Significant Bit)", "Parity Bit", "Sign Bit"],
+      "correctIndex": 1,
+      "explanation": "LSB adalah bit paling kanan (bobot 1) yang juga menentukan apakah bilangan itu ganjil atau genap.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_26",
+      "stage": 3,
+      "difficulty": "medium",
+      "category": "Sistem Biner",
+      "question": "Sebuah alamat IPv4 (misalnya 192.168.1.1) terdiri dari 4 oktet, sehingga total panjangnya adalah...",
+      "options": ["16 bit", "32 bit", "64 bit", "128 bit"],
+      "correctIndex": 1,
+      "explanation": "IPv4 tersusun atas 4 oktet × 8 bit = 32 bit.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_27",
+      "stage": 3,
+      "difficulty": "hard",
+      "category": "Sistem Biner",
+      "question": "Hasil pengurangan biner 10010 (18) - 00111 (7) adalah...",
+      "options": ["01001", "01010", "01011", "01101"],
+      "correctIndex": 2,
+      "explanation": "18 - 7 = 11; bentuk biner 5-bit dari 11 (8 + 2 + 1) adalah 01011.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_28",
+      "stage": 3,
+      "difficulty": "medium",
+      "category": "Sistem Biner",
+      "question": "Berapakah kapasitas 1 Kibibyte (KiB) dalam satuan Byte menurut sistem biner komputer?",
+      "options": ["512 Byte", "1000 Byte", "1024 Byte", "2048 Byte"],
+      "correctIndex": 2,
+      "explanation": "1 KiB = 2^10 Byte = 1024 Byte.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_29",
+      "stage": 3,
+      "difficulty": "hard",
+      "category": "Sistem Biner",
+      "question": "Representasi bilangan negatif yang paling umum digunakan pada CPU modern agar penjumlahan dan pengurangan memakai rangkaian sama adalah...",
+      "options": ["Two's Complement", "Gray Code", "BCD", "Unicode"],
+      "correctIndex": 0,
+      "explanation": "Two's Complement (komplemen dua) memungkinkan bilangan bertanda dijumlahkan langsung tanpa sirkuit khusus.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
+    },
+    {
+      "id": "s3_30",
+      "stage": 3,
+      "difficulty": "hard",
+      "category": "Sistem Biner",
+      "question": "Kode warna RGB heksadesimal #FF0000 pada layar komputer menampilkan warna...",
+      "options": ["Hijau murni", "Biru murni", "Merah murni", "Putih murni"],
+      "correctIndex": 2,
+      "explanation": "Format #RRGGBB: FF (255) pada saluran Merah, 00 pada Hijau dan Biru menghasilkan merah murni.",
+      "usedIn": ["chest", "shrine", "terminal", "merchant"]
     }
   ]
 }

@@ -95,11 +95,70 @@ export const ENEMIES: Record<string, EnemyDef> = {
     weakness: 'Kill from range before it reaches you or the Pylon. 1-shot from any weapon.',
     shardDrop: 3,
   },
+
+  void_hopper: {
+    id: 'void_hopper',
+    name: 'Void Hopper',
+    hp: 36,
+    damage: 13,
+    behavior: 'leap_slammer',
+    speed: 68,
+    targetsPylon: false,
+    ignoresBarricade: true,
+    weakness: 'Lompat tinggi lalu hentak shockwave saat mendarat — dash saat ia menukik!',
+    shardDrop: 11,
+  },
+
+  pulse_acolyte: {
+    id: 'pulse_acolyte',
+    name: 'Pulse Acolyte',
+    hp: 32,
+    damage: 11,
+    behavior: 'burst_sniper',
+    speed: 44,
+    targetsPylon: true,
+    ignoresBarricade: true,
+    weakness: 'Menembak 3 proyektil kipas beruntun — lompat atau dash menembus jeda tembakan.',
+    shardDrop: 14,
+  },
+
+  rift_lancer: {
+    id: 'rift_lancer',
+    name: 'Rift Lancer',
+    hp: 54,
+    damage: 17,
+    behavior: 'dash_lancer',
+    speed: 58,
+    targetsPylon: true,
+    ignoresBarricade: false,
+    weakness: 'Laser merah menandai tusukan kilat horizontal — lompati dan pogo dari atas!',
+    shardDrop: 18,
+  },
 };
 
-/** Enemies available per stage (for spawn validation) */
+/** Enemies available per stage (escalating variety & intensity) */
 export const STAGE_ENEMY_POOL: Record<string, string[]> = {
-  stage_1: ['mana_husk', 'rift_drone'],
-  stage_2: ['mana_husk', 'rift_drone', 'corrupted_sentinel', 'void_spitter', 'mana_stalker'],
-  stage_3: ['mana_husk', 'rift_drone', 'corrupted_sentinel', 'void_spitter', 'mana_stalker', 'rift_brute', 'mana_wisp'],
+  stage_1: ['mana_husk', 'rift_drone', 'void_hopper', 'void_spitter'],
+  stage_2: [
+    'mana_husk',
+    'rift_drone',
+    'corrupted_sentinel',
+    'void_spitter',
+    'mana_stalker',
+    'void_hopper',
+    'pulse_acolyte',
+    'rift_lancer',
+  ],
+  stage_3: [
+    'mana_husk',
+    'rift_drone',
+    'corrupted_sentinel',
+    'void_spitter',
+    'mana_stalker',
+    'rift_brute',
+    'mana_wisp',
+    'void_hopper',
+    'pulse_acolyte',
+    'rift_lancer',
+  ],
 };

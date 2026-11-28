@@ -49,13 +49,27 @@ export function PuzzleModal({
   const [stepIndex, setStepIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [correctCount, setCorrectCount] = useState(0);
+  const [inputReady, setInputReady] = useState(false);
+  const openedAtRef = useRef<number>(performance.now());
   const logsRef = useRef<StudentAnswerLog[]>([]);
+
+  // Guard against mobile ghost-clicks (e.g. lifting finger from AKSI button
+  // right after PuzzleModal mounts over the same coordinates and auto-clicking Option A)
+  useEffect(() => {
+    setInputReady(false);
+    openedAtRef.current = performance.now();
+    const timer = window.setTimeout(() => {
+      setInputReady(true);
+    }, 380);
+    return () => window.clearTimeout(timer);
+  }, [request.interactableId, stepIndex]);
 
   const current = questions[stepIndex];
   const answered = selected !== null;
   const isCorrect = answered && current && selected === current.correctIndex;
 
   const handleSelect = (idx: number) => {
+    if (!inputReady || performance.now() - openedAtRef.current < 360) return;
     if (answered || !current) return;
     setSelected(idx);
     const ok = idx === current.correctIndex;
@@ -94,7 +108,7 @@ export function PuzzleModal({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!answered && ['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code)) {
+      if (!answered && inputReady && ['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code)) {
         const idx = Number(e.code.replace('Digit', '')) - 1;
         if (current && idx >= 0 && idx < current.options.length) handleSelect(idx);
       } else if (answered && (e.code === 'Enter' || e.code === 'Space')) {
@@ -111,8 +125,16 @@ export function PuzzleModal({
   if (!current) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-abyss-950/85 p-3 sm:p-4">
-      <div className="max-h-[92dvh] w-full max-w-xl overflow-y-auto border-2 border-mana-cyan bg-abyss-900 p-4 sm:p-5 shadow-2xl scanlines">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-abyss-950/85 p-3 sm:p-4"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div
+        className={`max-h-[92dvh] w-full max-w-xl overflow-y-auto border-2 border-mana-cyan bg-abyss-900 p-4 sm:p-5 shadow-2xl scanlines ${
+          !inputReady ? 'pointer-events-none' : ''
+        }`}
+      >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-ancient-stone pb-2.5">
           <div className="flex items-center gap-2 text-xs font-bold text-mana-cyan">
             <Cpu className="h-4 w-4 shrink-0" />
@@ -132,7 +154,7 @@ export function PuzzleModal({
           {current.question}
         </p>
 
-        <div className="space-y-2">
+        <div className={`space-y-2 ${!inputReady ? 'pointer-events-none' : ''}`}>
           {current.options.map((opt, idx) => {
             const label = String.fromCharCode(65 + idx);
             let style =
@@ -150,7 +172,7 @@ export function PuzzleModal({
               <button
                 key={idx}
                 type="button"
-                disabled={answered}
+                disabled={answered || !inputReady}
                 onClick={() => handleSelect(idx)}
                 className={`min-h-[44px] flex w-full items-center gap-3 border px-3.5 py-2.5 text-left text-xs transition ${style}`}
               >

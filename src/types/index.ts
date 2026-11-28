@@ -108,9 +108,22 @@ export type EnemyId =
   | 'void_spitter'
   | 'mana_stalker'
   | 'rift_brute'
-  | 'mana_wisp';
+  | 'mana_wisp'
+  | 'void_hopper'
+  | 'pulse_acolyte'
+  | 'rift_lancer';
 
-export type EnemyBehavior = 'patrol' | 'chase' | 'flying_ranged' | 'turret' | 'agile' | 'heavy' | 'suicide';
+export type EnemyBehavior =
+  | 'patrol'
+  | 'chase'
+  | 'flying_ranged'
+  | 'turret'
+  | 'agile'
+  | 'heavy'
+  | 'suicide'
+  | 'leap_slammer'
+  | 'burst_sniper'
+  | 'dash_lancer';
 
 export interface EnemyDef {
   id: EnemyId;
@@ -202,6 +215,7 @@ export interface ChestDef {
     /** Specifically upgrades an existing weapon (e.g. Dagger Lv.1 -> Lv.2 Glowing!) */
     upgradeWeaponId?: WeaponId;
     armorId?: ArmorId;
+    hpRestore?: number;
     energyRestore?: number;
     ammoPacks?: number;
     nanoVials?: number;

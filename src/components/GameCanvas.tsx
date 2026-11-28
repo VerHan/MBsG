@@ -217,7 +217,8 @@ export function GameCanvas({
       setGameOverReason(reason);
     };
 
-    engine.loadPlayableMode(initialMode, false, curStudent?.savedGear ?? null);
+    const initialSeed = `${curStudent?.usernameKey ?? 'guest'}_${initialMode}_${Date.now()}`;
+    engine.loadPlayableMode(initialMode, false, curStudent?.savedGear ?? null, initialSeed);
     engine.start();
 
     return () => {
@@ -244,7 +245,13 @@ export function GameCanvas({
     setPuzzleReq(null);
     setShowInventory(false);
     puzzleStatsRef.current = { attempted: 0, correct: 0 };
-    engine.loadPlayableMode(nextMode, keepGear, keepGear ? null : studentRef.current?.savedGear ?? null);
+    const runSeed = `${studentRef.current?.usernameKey ?? 'guest'}_${nextMode}_${Date.now()}`;
+    engine.loadPlayableMode(
+      nextMode,
+      keepGear,
+      keepGear ? null : studentRef.current?.savedGear ?? null,
+      runSeed
+    );
     engine.resumeFromModal();
   };
 
